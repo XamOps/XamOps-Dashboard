@@ -6,6 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
+import software.amazon.awssdk.services.computeoptimizer.model.InstanceRecommendation;
+import software.amazon.awssdk.services.computeoptimizer.model.GetEc2InstanceRecommendationsRequest;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
 import software.amazon.awssdk.services.costexplorer.model.*;
 import software.amazon.awssdk.services.ec2.Ec2Client;
@@ -21,6 +24,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -37,7 +41,8 @@ public class AwsDataService {
     private final LambdaClient lambdaClient;
     private final CloudWatchClient cloudWatchClient;
     private final CostExplorerClient costExplorerClient;
-    
+    private final ComputeOptimizerClient computeOptimizerClient;
+
     private static final Map<String, double[]> REGION_COORDINATES = Map.ofEntries(
         Map.entry("us-east-1", new double[]{38, 23}), Map.entry("us-east-2", new double[]{40, 20}),
         Map.entry("us-west-1", new double[]{38, 16}), Map.entry("us-west-2", new double[]{44, 15}),
@@ -50,8 +55,9 @@ public class AwsDataService {
         Map.entry("sa-east-1", new double[]{83, 35})
     );
 
-    public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda, CloudWatchClient cw, CostExplorerClient ce) {
+    public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda, CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co) {
         this.ec2Client = ec2; this.iamClient = iam; this.ecsClient = ecs; this.eksClient = eks; this.lambdaClient = lambda; this.cloudWatchClient = cw; this.costExplorerClient = ce;
+        this.computeOptimizerClient = co;
     }
 
     @Cacheable("dashboard")
@@ -59,20 +65,49 @@ public class AwsDataService {
         logger.info("--- FETCHING FRESH DATA FROM AWS --- (This should only appear periodically)");
         DashboardData data = new DashboardData();
         DashboardData.Account mainAccount = new DashboardData.Account(
-            "123456789012", "MachaDalo", 
-            getRegionStatusForAccount(), 
-            getResourceInventory(), 
+            "123456789012", "MachaDalo",
+            getRegionStatusForAccount(),
+            getResourceInventory(),
             getCloudWatchStatus(),
-            getSecurityInsights(), 
-            getCostHistory(), 
-            getBillingSummary(), 
-            getIamResources(), 
-            getSavingsSummary()
+            getSecurityInsights(),
+            getCostHistory(),
+            getBillingSummary(),
+            getIamResources(),
+            getSavingsSummary(),
+            getEc2InstanceRecommendations()
         );
-        data.setAvailableAccounts(List.of(mainAccount, new DashboardData.Account("987654321098", "Xammer", new ArrayList<>(), null, null, null, null, null, null, null)));
+        data.setAvailableAccounts(List.of(mainAccount, new DashboardData.Account("987654321098", "Xammer", new ArrayList<>(), null, null, null, null, null, null, null, null)));
         data.setSelectedAccount(mainAccount);
         return data;
     }
+
+private List<DashboardData.OptimizationRecommendation> getEc2InstanceRecommendations() {
+    try {
+        logger.info("Fetching EC2 instance recommendations from Compute Optimizer.");
+        GetEc2InstanceRecommendationsRequest request = GetEc2InstanceRecommendationsRequest.builder().build();
+
+        List<InstanceRecommendation> recommendations = computeOptimizerClient.getEC2InstanceRecommendations(request).instanceRecommendations();
+
+        return recommendations.stream()
+            .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.recommendationOptions() != null && !r.recommendationOptions().isEmpty())
+            .map(r -> new DashboardData.OptimizationRecommendation(
+                    "EC2",
+                    r.instanceArn().split("/")[1],
+                    r.currentInstanceType(),
+                    r.recommendationOptions().get(0).instanceType(),
+                    r.recommendationOptions().get(0).savingsOpportunity() != null
+                        && r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings() != null
+                        && r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings().value() != null
+                        ? r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings().value()
+                        : 0.0,
+                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", "))
+            ))
+            .collect(Collectors.toList());
+    } catch (Exception e) {
+        logger.error("Could not fetch EC2 instance recommendations. Please ensure AWS Compute Optimizer is enabled and you have the correct IAM permissions (compute-optimizer:GetEC2InstanceRecommendations).", e);
+        return Collections.emptyList();
+    }
+}
 
     private List<DashboardData.RegionStatus> getRegionStatusForAccount() {
         try {
@@ -164,6 +199,4 @@ public class AwsDataService {
         List<DashboardData.SavingsSuggestion> suggestions = List.of(new DashboardData.SavingsSuggestion("Rightsizing", 155.93), new DashboardData.SavingsSuggestion("Spots", 211.78));
         return new DashboardData.SavingsSummary(suggestions.stream().mapToDouble(DashboardData.SavingsSuggestion::getSuggested).sum(), suggestions);
     }
-
-    
 }

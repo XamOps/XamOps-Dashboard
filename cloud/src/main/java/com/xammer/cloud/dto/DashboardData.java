@@ -17,7 +17,6 @@ public class DashboardData {
     public static class Account {
         private String id;
         private String name;
-        // All data is now correctly nested inside the Account class
         private List<RegionStatus> regionStatus;
         private ResourceInventory resourceInventory;
         private CloudWatchStatus cloudWatchStatus;
@@ -26,6 +25,7 @@ public class DashboardData {
         private List<BillingSummary> billingSummary;
         private IamResources iamResources;
         private SavingsSummary savingsSummary;
+        private List<OptimizationRecommendation> ec2Recommendations;
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor
@@ -81,22 +81,27 @@ public class DashboardData {
         private List<String> labels;
         private List<Double> costs;
     }
-    @Data
-public class OptimizationRecommendation {
-    private String service;
-    private String resourceId;
-    private String currentType;
-    private String recommendedType;
-    private double estimatedMonthlySavings;
-    private String recommendationReason;
-}
 
-@Data
-public class CostAnomaly {
-    private String anomalyId;
-    private String service;
-    private double unexpectedSpend;
-    private LocalDate startDate;
-    private LocalDate endDate;
-}
+    // CORRECTED: Added the 'static' keyword to make this a proper nested DTO class.
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class OptimizationRecommendation {
+        private String service;
+        private String resourceId;
+        private String currentType;
+        private String recommendedType;
+        private double estimatedMonthlySavings;
+        private String recommendationReason;
+    }
+
+    // CORRECTED: Added the 'static' keyword to make this a proper nested DTO class.
+    @Data
+    public static class CostAnomaly {
+        private String anomalyId;
+        private String service;
+        private double unexpectedSpend;
+        private LocalDate startDate;
+        private LocalDate endDate;
+    }
 }

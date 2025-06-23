@@ -7,13 +7,13 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ecs.EcsClient;
 import software.amazon.awssdk.services.eks.EksClient;
 import software.amazon.awssdk.services.iam.IamClient;
 import software.amazon.awssdk.services.lambda.LambdaClient;
-// The S3Client import is no longer needed
 
 @Configuration
 public class AwsConfig {
@@ -47,5 +47,16 @@ public class AwsConfig {
     @Bean
     public CostExplorerClient costExplorerClient(StaticCredentialsProvider p) { return CostExplorerClient.builder().credentialsProvider(p).region(Region.US_EAST_1).build(); }
     
-    // The unused S3Client bean has been removed to resolve the error.
+    /**
+     * ADDED: Bean for AWS Compute Optimizer client.
+     * This client is necessary to fetch EC2, EBS, and Lambda recommendations.
+     * Note: Compute Optimizer might not be available in all regions. We'll use the primary region from properties.
+     */
+    @Bean
+    public ComputeOptimizerClient computeOptimizerClient(StaticCredentialsProvider p) {
+        return ComputeOptimizerClient.builder()
+                .credentialsProvider(p)
+                .region(Region.of(region))
+                .build();
+    }
 }

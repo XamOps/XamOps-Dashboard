@@ -20,7 +20,6 @@
         @keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
-        /* Hides elements managed by Alpine.js until it is initialized */
         [x-cloak] { display: none !important; }
         .world-map { width: 100%; height: 100%; object-fit: contain; }
     </style>
@@ -31,19 +30,18 @@
     </div>
 
     <div th:if="${dashboardData != null}" class="flex h-screen bg-white">
-        <!-- UPDATED Sidebar -->
+        <!-- Sidebar -->
         <div class="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
             <div class="h-16 flex items-center justify-center border-b"><span class="text-xl font-bold text-indigo-600">XamOps</span></div>
-             <div class="p-4 border-b">
-                <select class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option th:each="acc : ${dashboardData.availableAccounts}" th:value="${acc.id}" th:text="${acc.name}" th:selected="${acc.id == dashboardData.selectedAccount.id}"></option>
-                </select>
-            </div>
+              <div class="p-4 border-b">
+                  <select class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option th:each="acc : ${dashboardData.availableAccounts}" th:value="${acc.id}" th:text="${acc.name}" th:selected="${acc.id == dashboardData.selectedAccount.id}"></option>
+                  </select>
+              </div>
             <nav class="flex-1 px-2 py-4 space-y-1 text-sm">
                 <a href="#" class="flex items-center gap-3 rounded-md bg-indigo-50 px-3 py-2 text-indigo-600 font-semibold"><i class="fas fa-tachometer-alt fa-fw w-5 text-center"></i><span>Dashboard</span></a>
                 <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-chart-bar fa-fw w-5 text-center"></i><span>Reports</span></a>
                 
-                <!-- Collapsible Cloudview Section using Alpine.js -->
                 <div x-data="{ open: true }">
                     <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
                         <div class="flex items-center gap-3">
@@ -62,8 +60,8 @@
                 <div x-data="{ open: true }">
                     <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
                         <div class="flex items-center gap-3">
-                            <i class="fas fa-cloud fa-fw w-5 text-center"></i>
-                            <span>Cloudcosts</span>
+                            <i class="fas fa-cogs fa-fw w-5 text-center"></i> <!-- UPDATED ICON -->
+                            <span>Optimization</span> <!-- UPDATED NAME -->
                         </div>
                         <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
                     </button>
@@ -74,16 +72,14 @@
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Rightsizing</a>
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Reservation</a>
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Savings</a>
-                        
                     </div>
                 </div>
-
 
                 <div x-data="{ open: true }">
                     <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
                         <div class="flex items-center gap-3">
-                            <i class="fas fa-cloud fa-fw w-5 text-center"></i>
-                            <span>Cloudguard</span>
+                            <i class="fas fa-shield-alt fa-fw w-5 text-center"></i> <!-- UPDATED ICON -->
+                            <span>Security</span> <!-- UPDATED NAME -->
                         </div>
                         <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
                     </button>
@@ -92,7 +88,6 @@
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Performance</a>
                     </div>
                 </div>
-
 
                  <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-users fa-fw w-5 text-center"></i><span>Teams</span></a>
                  <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-code fa-fw w-5 text-center"></i><span>Logs</span></a>
@@ -103,230 +98,168 @@
         </div>
 
         <!-- Main Content -->
-        <div class="flex-1 flex flex-col">
-            <header class="h-16 flex items-center justify-between border-b bg-white px-6">
+        <main class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
+            <header class="h-16 flex items-center justify-between border-b bg-white px-6 sticky top-0 z-10">
                 <div class="flex items-center gap-4 text-sm">
                     <span class="text-gray-500">Updated just now</span>
                 </div>
             </header>
-            <main class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
-                <div class="bg-white p-6 rounded-lg shadow-sm">
-                     <h3 class="font-semibold mb-4 text-gray-700" th:text="|Your regions (${#lists.size(dashboardData.selectedAccount.regionStatus)})|"></h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="md:col-span-2 map-container">
-                            <img src="https://raw.githubusercontent.com/djaiss/mapsicon/master/all/vector/world.svg" class="world-map" alt="World Map"/>
-                            <!-- AWS Region Dots with accurate positions -->
-                            <div class="map-dot-container" style="top: 25%; left: 20%;"><div class="map-dot active" title="US East (N. Virginia)"></div></div>
-                            <div class="map-dot-container" style="top: 30%; left: 15%;"><div class="map-dot active" title="US East (Ohio)"></div></div>
-                            <div class="map-dot-container" style="top: 25%; left: 30%;"><div class="map-dot active" title="US West (N. California)"></div></div>
-                            <div class="map-dot-container" style="top: 30%; left: 25%;"><div class="map-dot active" title="US West (Oregon)"></div></div>
-                            <div class="map-dot-container" style="top: 35%; left: 50%;"><div class="map-dot semi-active" title="Europe (Ireland)"></div></div>
-                            <div class="map-dot-container" style="top: 30%; left: 55%;"><div class="map-dot semi-active" title="Europe (London)"></div></div>
-                            <div class="map-dot-container" style="top: 35%; left: 60%;"><div class="map-dot semi-active" title="Europe (Paris)"></div></div>
-                            <div class="map-dot-container" style="top: 40%; left: 65%;"><div class="map-dot semi-active" title="Europe (Frankfurt)"></div></div>
-                            <div class="map-dot-container" style="top: 60%; left: 75%;"><div class="map-dot sustainable" title="Asia Pacific (Singapore)"></div></div>
-                            <div class="map-dot-container" style="top: 45%; left: 85%;"><div class="map-dot sustainable" title="Asia Pacific (Tokyo)"></div></div>
-                            <div class="map-dot-container" style="top: 55%; left: 80%;"><div class="map-dot sustainable" title="Asia Pacific (Sydney)"></div></div>
-                            <div class="map-dot-container" style="top: 40%; left: 80%;"><div class="map-dot sustainable" title="Asia Pacific (Seoul)"></div></div>
-                            <div class="map-dot-container" style="top: 50%; left: 45%;"><div class="map-dot non-active" title="Middle East (Bahrain)"></div></div>
-                            <div class="map-dot-container" style="top: 70%; left: 50%;"><div class="map-dot non-active" title="Africa (Cape Town)"></div></div>
-                            <div class="map-dot-container" style="top: 50%; left: 30%;"><div class="map-dot non-active" title="South America (São Paulo)"></div></div>
-                        </div>
-                        <div class="space-y-3 overflow-y-auto" style="max-height: 380px;">
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-blue-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">US East (N. Virginia)</p>
-                                    <p class="text-xs text-gray-500">us-east-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-blue-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">US East (Ohio)</p>
-                                    <p class="text-xs text-gray-500">us-east-2</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-blue-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">US West (N. California)</p>
-                                    <p class="text-xs text-gray-500">us-west-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-blue-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">US West (Oregon)</p>
-                                    <p class="text-xs text-gray-500">us-west-2</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-red-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Europe (Ireland)</p>
-                                    <p class="text-xs text-gray-500">eu-west-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-red-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Europe (London)</p>
-                                    <p class="text-xs text-gray-500">eu-west-2</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-red-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Europe (Paris)</p>
-                                    <p class="text-xs text-gray-500">eu-west-3</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-red-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Europe (Frankfurt)</p>
-                                    <p class="text-xs text-gray-500">eu-central-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-green-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Asia Pacific (Singapore)</p>
-                                    <p class="text-xs text-gray-500">ap-southeast-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-green-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Asia Pacific (Tokyo)</p>
-                                    <p class="text-xs text-gray-500">ap-northeast-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-green-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Asia Pacific (Sydney)</p>
-                                    <p class="text-xs text-gray-500">ap-southeast-2</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-green-500"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Asia Pacific (Seoul)</p>
-                                    <p class="text-xs text-gray-500">ap-northeast-2</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-gray-400"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Middle East (Bahrain)</p>
-                                    <p class="text-xs text-gray-500">me-south-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-gray-400"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">Africa (Cape Town)</p>
-                                    <p class="text-xs text-gray-500">af-south-1</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <span class="h-3 w-3 rounded-full mr-3 bg-gray-400"></span>
-                                <div>
-                                    <p class="font-semibold text-sm">South America (São Paulo)</p>
-                                    <p class="text-xs text-gray-500">sa-east-1</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                 <!-- Cloud Usage & CloudWatch -->
-                <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    <div class="lg:col-span-2 card p-6">
-                        <h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3>
-                        <div th:if="${dashboardData.selectedAccount.resourceInventory}" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-network-wired text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.vpc}"></p><p class="text-xs text-gray-500">VPC</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-cubes text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ecs}"></p><p class="text-xs text-gray-500">ECS</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-server text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ec2}"></p><p class="text-xs text-gray-500">EC2</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-dharmachakra text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.kubernetes}"></p><p class="text-xs text-gray-500">Kubernetes</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-bolt text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.lambdas}"></p><p class="text-xs text-gray-500">Lambdas</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-hdd text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ebsVolumes}"></p><p class="text-xs text-gray-500">EBS Volumes</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-compact-disc text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.images}"></p><p class="text-xs text-gray-500">Images</p></div></div>
-                            <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-camera-retro text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.snapshots}"></p><p class="text-xs text-gray-500">Snapshots</p></div></div>
-                        </div>
-                    </div>
-                    <div class="card p-6" th:if="${dashboardData.selectedAccount.cloudWatchStatus}">
-                        <h3 class="font-semibold mb-4 text-gray-700">CloudWatch Global</h3>
-                        <div class="grid grid-cols-3 gap-4 text-center">
-                            <div><p class="font-semibold text-2xl text-green-600" th:text="${dashboardData.selectedAccount.cloudWatchStatus.ok}"></p><p class="text-xs text-gray-500">Ok</p></div>
-                            <div><p class="font-semibold text-2xl text-red-600" th:text="${dashboardData.selectedAccount.cloudWatchStatus.alarm}"></p><p class="text-xs text-gray-500">Alarm</p></div>
-                            <div><p class="font-semibold text-2xl text-yellow-500" th:text="${dashboardData.selectedAccount.cloudWatchStatus.insufficient}"></p><p class="text-xs text-gray-500">Insufficient</p></div>
-                        </div>
-                    </div>
-                </div>
+            
+            <div class="bg-white p-6 rounded-lg shadow-sm">
+                <h3 class="font-semibold mb-4 text-gray-700" th:text="|Your regions (${#lists.size(dashboardData.selectedAccount.regionStatus)})|"></h3>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     <div class="md:col-span-2 map-container">
+                         <img src="https://raw.githubusercontent.com/djaiss/mapsicon/master/all/vector/world.svg" class="world-map" alt="World Map"/>
+                         <div th:each="region : ${dashboardData.selectedAccount.regionStatus}" class="map-dot-container" th:style="|top: ${region.top}%; left: ${region.left}%;|">
+                             <div class="map-dot" th:classappend="${#strings.toLowerCase(region.status)}" th:title="${region.regionName}"></div>
+                         </div>
+                     </div>
+                     <div class="space-y-3 overflow-y-auto" style="max-height: 380px;">
+                         <div th:each="region : ${dashboardData.selectedAccount.regionStatus}" class="flex items-center">
+                            <span class="h-3 w-3 rounded-full mr-3" th:classappend="${region.status == 'ACTIVE' ? 'bg-blue-500' : (region.status == 'SEMI_ACTIVE' ? 'bg-red-500' : (region.status == 'SUSTAINABLE' ? 'bg-green-500' : 'bg-gray-400'))}"></span>
+                             <div>
+                                 <p class="font-semibold text-sm" th:text="${region.regionName}"></p>
+                                 <p class="text-xs text-gray-500" th:text="${region.regionId}"></p>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+            </div>
 
-                <!-- Cost History & Insights -->
-                 <div class="grid gap-6 lg:grid-cols-3">
-                     <div class="lg:col-span-2 card p-6" th:if="${dashboardData.selectedAccount.costHistory}">
-                        <h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3>
-                        <canvas id="costHistoryChart"></canvas>
-                        <script th:inline="javascript">
-                          const costCtx = document.getElementById('costHistoryChart').getContext('2d');
-                          const costHistoryData = /*[[${dashboardData.selectedAccount.costHistory}]]*/ null;
-                          if (costHistoryData) {
-                              new Chart(costCtx, {
-                                  type: 'bar', data: { labels: costHistoryData.labels, datasets: [{ label: 'Monthly Cost', data: costHistoryData.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }] },
-                                  options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } }
-                              });
-                          }
-                        </script>
-                    </div>
-                    <div class="card p-6" th:if="${dashboardData.selectedAccount.securityInsights}">
-                        <h3 class="font-semibold mb-4 text-gray-700">Insights</h3>
-                        <div class="space-y-4">
-                            <div th:each="insight : ${dashboardData.selectedAccount.securityInsights}" class="flex items-start gap-3"><i class="fas fa-exclamation-circle text-red-500 mt-1"></i><div><p class="font-semibold text-sm" th:text="${insight.title}"></p><p class="text-xs text-gray-500" th:text="${insight.description}"></p><span class="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block" th:text="${insight.category + ' x' + insight.count}"></span></div></div>
-                            <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.securityInsights)}"><p class="text-sm text-center text-gray-500">No security issues found.</p></div>
-                        </div>
+            <!-- Cloud Usage & CloudWatch -->
+            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
+                    <h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3>
+                    <div th:if="${dashboardData.selectedAccount.resourceInventory}" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-network-wired text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.vpc}"></p><p class="text-xs text-gray-500">VPC</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-cubes text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ecs}"></p><p class="text-xs text-gray-500">ECS</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-server text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ec2}"></p><p class="text-xs text-gray-500">EC2</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-dharmachakra text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.kubernetes}"></p><p class="text-xs text-gray-500">Kubernetes</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-bolt text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.lambdas}"></p><p class="text-xs text-gray-500">Lambdas</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-hdd text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ebsVolumes}"></p><p class="text-xs text-gray-500">EBS Volumes</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-compact-disc text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.images}"></p><p class="text-xs text-gray-500">Images</p></div></div>
+                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-camera-retro text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.snapshots}"></p><p class="text-xs text-gray-500">Snapshots</p></div></div>
                     </div>
                 </div>
+                <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.cloudWatchStatus}">
+                    <h3 class="font-semibold mb-4 text-gray-700">CloudWatch Global</h3>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div><p class="font-semibold text-2xl text-green-600" th:text="${dashboardData.selectedAccount.cloudWatchStatus.ok}"></p><p class="text-xs text-gray-500">Ok</p></div>
+                        <div><p class="font-semibold text-2xl text-red-600" th:text="${dashboardData.selectedAccount.cloudWatchStatus.alarm}"></p><p class="text-xs text-gray-500">Alarm</p></div>
+                        <div><p class="font-semibold text-2xl text-yellow-500" th:text="${dashboardData.selectedAccount.cloudWatchStatus.insufficient}"></p><p class="text-xs text-gray-500">Insufficient</p></div>
+                    </div>
+                </div>
+            </div>
 
-                <!-- Billing, Savings & IAM -->
-                <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    <div class="lg:col-span-2 card p-6">
-                         <h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3>
-                        <div class="overflow-y-auto max-h-96">
-                            <table class="w-full text-sm text-left text-gray-500">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead>
-                                <tbody>
-                                    <tr th:each="item : ${dashboardData.selectedAccount.billingSummary}" class="border-b"><th class="px-6 py-4 font-medium" th:text="${item.serviceName}"></th><td class="px-6 py-4 text-right font-mono" th:text="${'$' + #numbers.formatDecimal(item.monthToDateCost, 1, 2)}"></td></tr>
-                                    <tr th:if="${#lists.isEmpty(dashboardData.selectedAccount.billingSummary)}"><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+            <!-- ============================================================================== -->
+            <!-- == ADDED: Optimization Hub for EC2 Right-Sizing Recommendations == -->
+            <!-- ============================================================================== -->
+            <div class="bg-white p-6 rounded-lg shadow-sm">
+                <h3 class="font-semibold mb-4 text-gray-700">
+                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub
+                </h3>
+                
+                <!-- EC2 Recommendations Table -->
+                <div th:if="${dashboardData.selectedAccount.ec2Recommendations}">
+                    <h4 class="font-semibold text-sm text-gray-600 mb-2">EC2 Instance Right-Sizing</h4>
+                    
+                    <!-- Case 1: Recommendations are available -->
+                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.ec2Recommendations)}" class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Instance ID</th>
+                                    <th class="px-6 py-3">Current Type</th>
+                                    <th class="px-6 py-3">Recommended Type</th>
+                                    <th class="px-6 py-3">Reason</th>
+                                    <th class="px-6 py-3 text-right">Est. Monthly Savings (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="rec : ${dashboardData.selectedAccount.ec2Recommendations}" class="border-b hover:bg-gray-50">
+                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.resourceId}"></th>
+                                    <td class="px-6 py-4" th:text="${rec.currentType}"></td>
+                                    <td class="px-6 py-4 font-semibold text-green-600" th:text="${rec.recommendedType}"></td>
+                                    <td class="px-6 py-4" th:text="${rec.recommendationReason}"></td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(rec.estimatedMonthlySavings, 1, 2)}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                     <div class="space-y-6">
-                        <div class="card p-6" th:if="${dashboardData.selectedAccount.savingsSummary}">
-                             <h3 class="font-semibold mb-4 text-gray-700">Your Savings</h3>
-                             <div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600" th:text="${'$' + #numbers.formatDecimal(dashboardData.selectedAccount.savingsSummary.potential, 1, 2)}"></p><p class="text-xs text-gray-500">Potential Savings</p></div>
-                             <table class="w-full text-sm mt-4">
-                                <thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead>
-                                <tbody><tr th:each="s : ${dashboardData.selectedAccount.savingsSummary.suggestions}"><td th:text="${s.service}"></td><td class="text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(s.suggested, 1, 2)}"></td></tr></tbody>
-                             </table>
-                        </div>
-                        <div class="card p-6" th:if="${dashboardData.selectedAccount.iamResources}">
-                            <h3 class="font-semibold mb-4 text-gray-700">IAM Resources</h3>
-                            <div class="space-y-3">
-                               <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Users</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.users}"></p></div>
-                               <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Groups</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.groups}"></p></div>
-                               <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Customer Managed Policies</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.customerManagedPolicies}"></p></div>
-                               <div class="flex justify-between items-center"><p class="text-sm">Roles</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.roles}"></p></div>
-                            </div>
-                        </div>
+                    
+                    <!-- Case 2: No recommendations found (list is empty) -->
+                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.ec2Recommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
+                         <div class="mx-auto h-12 w-12 text-green-400">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                         </div>
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">All EC2 instances are optimized!</h3>
+                        <p class="mt-1 text-sm text-gray-500">Compute Optimizer has not found any right-sizing recommendations for your instances.</p>
                     </div>
                 </div>
-            </main>
-        </div>
+            </div>
+
+            <!-- Cost History & Insights -->
+             <div class="grid gap-6 lg:grid-cols-3">
+                 <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.costHistory}">
+                     <h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3>
+                     <canvas id="costHistoryChart"></canvas>
+                     <script th:inline="javascript">
+                      const costCtx = document.getElementById('costHistoryChart').getContext('2d');
+                      const costHistoryData = /*[[${dashboardData.selectedAccount.costHistory}]]*/ null;
+                      if (costHistoryData) {
+                          new Chart(costCtx, {
+                              type: 'bar', data: { labels: costHistoryData.labels, datasets: [{ label: 'Monthly Cost', data: costHistoryData.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }] },
+                              options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } }
+                          });
+                      }
+                     </script>
+                 </div>
+                 <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.securityInsights}">
+                     <h3 class="font-semibold mb-4 text-gray-700">Insights</h3>
+                     <div class="space-y-4">
+                         <div th:each="insight : ${dashboardData.selectedAccount.securityInsights}" class="flex items-start gap-3"><i class="fas fa-exclamation-circle text-red-500 mt-1"></i><div><p class="font-semibold text-sm" th:text="${insight.title}"></p><p class="text-xs text-gray-500" th:text="${insight.description}"></p><span class="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block" th:text="${insight.category + ' x' + insight.count}"></span></div></div>
+                         <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.securityInsights)}"><p class="text-sm text-center text-gray-500">No security issues found.</p></div>
+                     </div>
+                 </div>
+             </div>
+
+            <!-- Billing, Savings & IAM -->
+             <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                 <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
+                      <h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3>
+                     <div class="overflow-y-auto max-h-96">
+                         <table class="w-full text-sm text-left text-gray-500">
+                             <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead>
+                             <tbody>
+                                 <tr th:each="item : ${dashboardData.selectedAccount.billingSummary}" class="border-b"><th class="px-6 py-4 font-medium" th:text="${item.serviceName}"></th><td class="px-6 py-4 text-right font-mono" th:text="${'$' + #numbers.formatDecimal(item.monthToDateCost, 1, 2)}"></td></tr>
+                                 <tr th:if="${#lists.isEmpty(dashboardData.selectedAccount.billingSummary)}"><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>
+                             </tbody>
+                         </table>
+                     </div>
+                 </div>
+                  <div class="space-y-6">
+                      <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.savingsSummary}">
+                           <h3 class="font-semibold mb-4 text-gray-700">Your Savings</h3>
+                           <div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600" th:text="${'$' + #numbers.formatDecimal(dashboardData.selectedAccount.savingsSummary.potential, 1, 2)}"></p><p class="text-xs text-gray-500">Potential Savings</p></div>
+                           <table class="w-full text-sm mt-4">
+                               <thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead>
+                               <tbody><tr th:each="s : ${dashboardData.selectedAccount.savingsSummary.suggestions}"><td th:text="${s.service}"></td><td class="text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(s.suggested, 1, 2)}"></td></tr></tbody>
+                           </table>
+                      </div>
+                      <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.iamResources}">
+                          <h3 class="font-semibold mb-4 text-gray-700">IAM Resources</h3>
+                          <div class="space-y-3">
+                              <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Users</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.users}"></p></div>
+                              <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Groups</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.groups}"></p></div>
+                              <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Customer Managed Policies</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.customerManagedPolicies}"></p></div>
+                              <div class="flex justify-between items-center"><p class="text-sm">Roles</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.roles}"></p></div>
+                          </div>
+                      </div>
+                  </div>
+             </div>
+        </main>
     </div>
 </body>
 </html>
