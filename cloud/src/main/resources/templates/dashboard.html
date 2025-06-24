@@ -22,6 +22,8 @@
         @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
         [x-cloak] { display: none !important; }
         .world-map { width: 100%; height: 100%; object-fit: contain; }
+        .progress-bar { background-color: #e5e7eb; border-radius: 0.25rem; overflow: hidden; width: 100%; height: 1rem; }
+        .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -60,15 +62,15 @@
                 <div x-data="{ open: true }">
                     <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
                         <div class="flex items-center gap-3">
-                            <i class="fas fa-cogs fa-fw w-5 text-center"></i> <!-- UPDATED ICON -->
-                            <span>Optimization</span> <!-- UPDATED NAME -->
+                            <i class="fas fa-cogs fa-fw w-5 text-center"></i>
+                            <span>Optimization</span>
                         </div>
                         <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
                     </button>
                     <div x-show="open" x-cloak class="pl-8 py-1 space-y-1">
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">FinOps Report <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a>
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Costs overview</a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Waste</a>
+                        <a href="waste" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Waste</a>
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Rightsizing</a>
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Reservation</a>
                         <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Savings</a>
@@ -78,8 +80,8 @@
                 <div x-data="{ open: true }">
                     <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
                         <div class="flex items-center gap-3">
-                            <i class="fas fa-shield-alt fa-fw w-5 text-center"></i> <!-- UPDATED ICON -->
-                            <span>Security</span> <!-- UPDATED NAME -->
+                            <i class="fas fa-shield-alt fa-fw w-5 text-center"></i>
+                            <span>Security</span>
                         </div>
                         <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
                     </button>
@@ -126,7 +128,6 @@
                  </div>
             </div>
 
-            <!-- Cloud Usage & CloudWatch -->
             <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
                     <h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3>
@@ -151,19 +152,29 @@
                 </div>
             </div>
 
-            <!-- ============================================================================== -->
-            <!-- == ADDED: Optimization Hub for EC2 Right-Sizing Recommendations == -->
-            <!-- ============================================================================== -->
-            <div class="bg-white p-6 rounded-lg shadow-sm">
-                <h3 class="font-semibold mb-4 text-gray-700">
-                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub
-                </h3>
+            <div class="bg-white p-6 rounded-lg shadow-sm space-y-8">
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-4">
+                        <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub
+                    </h3>
+                    
+                    <!-- ADDED: Summary Stat Cards -->
+                    <div th:if="${dashboardData.selectedAccount.optimizationSummary}" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                        <div class="bg-green-50 border border-green-200 p-4 rounded-lg text-center">
+                            <p class="text-xs text-green-700 font-semibold uppercase">Potential Savings</p>
+                            <p class="text-2xl font-bold text-green-800" th:text="${'$' + #numbers.formatDecimal(dashboardData.selectedAccount.optimizationSummary.totalPotentialSavings, 1, 2)}"></p>
+                            <p class="text-xs text-green-600">per month</p>
+                        </div>
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg text-center">
+                             <p class="text-xs text-red-700 font-semibold uppercase">Critical Alerts</p>
+                            <p class="text-2xl font-bold text-red-800" th:text="${dashboardData.selectedAccount.optimizationSummary.criticalAlertsCount}"></p>
+                            <p class="text-xs text-red-600">items to review</p>
+                        </div>
+                    </div>
+                </div>
                 
-                <!-- EC2 Recommendations Table -->
                 <div th:if="${dashboardData.selectedAccount.ec2Recommendations}">
                     <h4 class="font-semibold text-sm text-gray-600 mb-2">EC2 Instance Right-Sizing</h4>
-                    
-                    <!-- Case 1: Recommendations are available -->
                     <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.ec2Recommendations)}" class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-500">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -186,35 +197,141 @@
                             </tbody>
                         </table>
                     </div>
-                    
-                    <!-- Case 2: No recommendations found (list is empty) -->
                     <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.ec2Recommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-                         <div class="mx-auto h-12 w-12 text-green-400">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                         </div>
                         <h3 class="mt-2 text-sm font-medium text-gray-900">All EC2 instances are optimized!</h3>
-                        <p class="mt-1 text-sm text-gray-500">Compute Optimizer has not found any right-sizing recommendations for your instances.</p>
+                    </div>
+                </div>
+
+                <div th:if="${dashboardData.selectedAccount.costAnomalies}">
+                    <h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>
+                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.costAnomalies)}" class="bg-gray-50 p-4 rounded-lg">
+                        <canvas id="costAnomalyChart"></canvas>
+                    </div>
+                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.costAnomalies)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">No cost anomalies detected.</h3>
+                    </div>
+                </div>
+
+                <div th:if="${dashboardData.selectedAccount.ebsRecommendations}">
+                    <h4 class="font-semibold text-sm text-gray-600 mb-2">EBS Volume Optimization</h4>
+                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.ebsRecommendations)}" class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Volume ID</th>
+                                    <th class="px-6 py-3">Current Config</th>
+                                    <th class="px-6 py-3">Recommended Config</th>
+                                    <th class="px-6 py-3">Reason</th>
+                                    <th class="px-6 py-3 text-right">Est. Monthly Savings (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="rec : ${dashboardData.selectedAccount.ebsRecommendations}" class="border-b hover:bg-gray-50">
+                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.resourceId}"></th>
+                                    <td class="px-6 py-4" th:text="${rec.currentType}"></td>
+                                    <td class="px-6 py-4 font-semibold text-green-600" th:text="${rec.recommendedType}"></td>
+                                    <td class="px-6 py-4" th:text="${rec.recommendationReason}"></td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(rec.estimatedMonthlySavings, 1, 2)}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.ebsRecommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">All EBS volumes are optimized!</h3>
+                    </div>
+                </div>
+
+                <div th:if="${dashboardData.selectedAccount.lambdaRecommendations}">
+                    <h4 class="font-semibold text-sm text-gray-600 mb-2">Lambda Function Optimization</h4>
+                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.lambdaRecommendations)}" class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Function Name</th>
+                                    <th class="px-6 py-3">Current Memory</th>
+                                    <th class="px-6 py-3">Recommended Memory</th>
+                                    <th class="px-6 py-3">Reason</th>
+                                    <th class="px-6 py-3 text-right">Est. Monthly Savings (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="rec : ${dashboardData.selectedAccount.lambdaRecommendations}" class="border-b hover:bg-gray-50">
+                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.resourceId}"></th>
+                                    <td class="px-6 py-4" th:text="${rec.currentType}"></td>
+                                    <td class="px-6 py-4 font-semibold text-green-600" th:text="${rec.recommendedType}"></td>
+                                    <td class="px-6 py-4" th:text="${rec.recommendationReason}"></td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(rec.estimatedMonthlySavings, 1, 2)}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                     <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.lambdaRecommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">All Lambda functions are optimized!</h3>
+                    </div>
+                </div>
+
+                <div th:if="${dashboardData.selectedAccount.reservationAnalysis}">
+                    <h4 class="font-semibold text-sm text-gray-600 mb-2">Reserved Instance Analysis (Last 30 Days)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5>
+                            <p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p>
+                            <div class="flex items-center gap-4">
+                                <p class="text-3xl font-bold text-indigo-600" th:text="${#numbers.formatDecimal(dashboardData.selectedAccount.reservationAnalysis.utilizationPercentage, 1, 1) + '%'}"></p>
+                                <div class="w-full">
+                                    <div class="progress-bar">
+                                        <div class="progress-bar-fill bg-indigo-500" th:style="'width: ' + ${dashboardData.selectedAccount.reservationAnalysis.utilizationPercentage} + '%;'"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5>
+                            <p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p>
+                             <div class="flex items-center gap-4">
+                                <p class="text-3xl font-bold text-green-600" th:text="${#numbers.formatDecimal(dashboardData.selectedAccount.reservationAnalysis.coveragePercentage, 1, 1) + '%'}"></p>
+                                <div class="w-full">
+                                    <div class="progress-bar">
+                                        <div class="progress-bar-fill bg-green-500" th:style="'width: ' + ${dashboardData.selectedAccount.reservationAnalysis.coveragePercentage} + '%;'"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div th:if="${dashboardData.selectedAccount.reservationPurchaseRecommendations}">
+                    <h4 class="font-semibold text-sm text-gray-600 mb-2">RI Purchase Recommendations</h4>
+                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.reservationPurchaseRecommendations)}" class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Instance Family</th>
+                                    <th class="px-6 py-3">Term</th>
+                                    <th class="px-6 py-3 text-right">Recommended #</th>
+                                    <th class="px-6 py-3 text-right">Est. Monthly Savings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="rec : ${dashboardData.selectedAccount.reservationPurchaseRecommendations}" class="border-b hover:bg-gray-50">
+                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.instanceFamily}"></th>
+                                    <td class="px-6 py-4" th:text="${rec.term}"></td>
+                                    <td class="px-6 py-4 text-right" th:text="${rec.recommendedInstances}"></td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="'$' + ${rec.monthlySavings}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.reservationPurchaseRecommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">No RI purchase recommendations.</h3>
                     </div>
                 </div>
             </div>
 
-            <!-- Cost History & Insights -->
              <div class="grid gap-6 lg:grid-cols-3">
                  <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.costHistory}">
                      <h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3>
                      <canvas id="costHistoryChart"></canvas>
-                     <script th:inline="javascript">
-                      const costCtx = document.getElementById('costHistoryChart').getContext('2d');
-                      const costHistoryData = /*[[${dashboardData.selectedAccount.costHistory}]]*/ null;
-                      if (costHistoryData) {
-                          new Chart(costCtx, {
-                              type: 'bar', data: { labels: costHistoryData.labels, datasets: [{ label: 'Monthly Cost', data: costHistoryData.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }] },
-                              options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } }
-                          });
-                      }
-                     </script>
                  </div>
                  <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.securityInsights}">
                      <h3 class="font-semibold mb-4 text-gray-700">Insights</h3>
@@ -225,7 +342,6 @@
                  </div>
              </div>
 
-            <!-- Billing, Savings & IAM -->
              <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                  <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
                       <h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3>
@@ -261,5 +377,67 @@
              </div>
         </main>
     </div>
+
+    <script th:inline="javascript">
+      document.addEventListener('DOMContentLoaded', () => {
+        const costCtx = document.getElementById('costHistoryChart');
+        if (costCtx) {
+            const costHistoryData = /*[[${dashboardData.selectedAccount.costHistory}]]*/ null;
+            if (costHistoryData) {
+                new Chart(costCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: costHistoryData.labels,
+                        datasets: [{ label: 'Monthly Cost', data: costHistoryData.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } }
+                });
+            }
+        }
+    
+        const anomalyCtx = document.getElementById('costAnomalyChart');
+        if (anomalyCtx) {
+            const anomalyData = /*[[${dashboardData.selectedAccount.costAnomalies}]]*/ null;
+            if (anomalyData && anomalyData.length > 0) {
+                const labels = anomalyData.map(a => `${a.service} (${a.startDate})`);
+                const data = anomalyData.map(a => a.unexpectedSpend);
+    
+                new Chart(anomalyCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Unexpected Spend (USD)',
+                            data: data,
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Unexpected Spend: $${context.parsed.x.toFixed(2)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'Cost (USD)' }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+      });
+    </script>
 </body>
 </html>

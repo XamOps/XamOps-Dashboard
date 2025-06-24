@@ -26,6 +26,13 @@ public class DashboardData {
         private IamResources iamResources;
         private SavingsSummary savingsSummary;
         private List<OptimizationRecommendation> ec2Recommendations;
+        private List<CostAnomaly> costAnomalies;
+        private List<OptimizationRecommendation> ebsRecommendations;
+        private List<OptimizationRecommendation> lambdaRecommendations;
+        private ReservationAnalysis reservationAnalysis;
+        private List<ReservationPurchaseRecommendation> reservationPurchaseRecommendations;
+        private OptimizationSummary optimizationSummary;
+        private List<WastedResource> wastedResources;
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor
@@ -82,7 +89,6 @@ public class DashboardData {
         private List<Double> costs;
     }
 
-    // CORRECTED: Added the 'static' keyword to make this a proper nested DTO class.
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -95,13 +101,56 @@ public class DashboardData {
         private String recommendationReason;
     }
 
-    // CORRECTED: Added the 'static' keyword to make this a proper nested DTO class.
     @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
     public static class CostAnomaly {
         private String anomalyId;
         private String service;
         private double unexpectedSpend;
         private LocalDate startDate;
         private LocalDate endDate;
+    }
+    
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ReservationAnalysis {
+        private double utilizationPercentage;
+        private double coveragePercentage;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ReservationPurchaseRecommendation {
+        private String instanceFamily;
+        private String recommendedInstances;
+        private String recommendedUnits;
+        private String minimumUnits;
+        private String monthlySavings;
+        private String onDemandCost;
+        private String estimatedMonthlyCost;
+        private String term;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class OptimizationSummary {
+        private double totalPotentialSavings;
+        private long criticalAlertsCount;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class WastedResource {
+        private String resourceId;
+        private String resourceName;
+        private String resourceType;
+        private String region;
+        private double monthlySavings;
+        private String reason;
     }
 }

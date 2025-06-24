@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
@@ -28,32 +29,33 @@ public class AwsConfig {
     private String region;
 
     @Bean
-    public StaticCredentialsProvider staticCredentialsProvider() {
+    public AwsCredentialsProvider awsCredentialsProvider() {
         return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
     }
 
     @Bean
-    public Ec2Client ec2Client(StaticCredentialsProvider p) { return Ec2Client.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    @Bean
-    public IamClient iamClient(StaticCredentialsProvider p) { return IamClient.builder().credentialsProvider(p).region(Region.AWS_GLOBAL).build(); }
-    @Bean
-    public EcsClient ecsClient(StaticCredentialsProvider p) { return EcsClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    @Bean
-    public EksClient eksClient(StaticCredentialsProvider p) { return EksClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    @Bean
-    public LambdaClient lambdaClient(StaticCredentialsProvider p) { return LambdaClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    @Bean
-    public CloudWatchClient cloudWatchClient(StaticCredentialsProvider p) { return CloudWatchClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    @Bean
-    public CostExplorerClient costExplorerClient(StaticCredentialsProvider p) { return CostExplorerClient.builder().credentialsProvider(p).region(Region.US_EAST_1).build(); }
+    public Ec2Client ec2Client(AwsCredentialsProvider p) { return Ec2Client.builder().credentialsProvider(p).region(Region.of(region)).build(); }
     
-    /**
-     * ADDED: Bean for AWS Compute Optimizer client.
-     * This client is necessary to fetch EC2, EBS, and Lambda recommendations.
-     * Note: Compute Optimizer might not be available in all regions. We'll use the primary region from properties.
-     */
     @Bean
-    public ComputeOptimizerClient computeOptimizerClient(StaticCredentialsProvider p) {
+    public IamClient iamClient(AwsCredentialsProvider p) { return IamClient.builder().credentialsProvider(p).region(Region.AWS_GLOBAL).build(); }
+    
+    @Bean
+    public EcsClient ecsClient(AwsCredentialsProvider p) { return EcsClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
+    
+    @Bean
+    public EksClient eksClient(AwsCredentialsProvider p) { return EksClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
+    
+    @Bean
+    public LambdaClient lambdaClient(AwsCredentialsProvider p) { return LambdaClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
+    
+    @Bean
+    public CloudWatchClient cloudWatchClient(AwsCredentialsProvider p) { return CloudWatchClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
+    
+    @Bean
+    public CostExplorerClient costExplorerClient(AwsCredentialsProvider p) { return CostExplorerClient.builder().credentialsProvider(p).region(Region.US_EAST_1).build(); }
+    
+    @Bean
+    public ComputeOptimizerClient computeOptimizerClient(AwsCredentialsProvider p) {
         return ComputeOptimizerClient.builder()
                 .credentialsProvider(p)
                 .region(Region.of(region))
