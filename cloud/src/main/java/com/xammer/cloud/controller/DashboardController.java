@@ -2,13 +2,20 @@ package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.service.AwsDataService;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
-@Controller
+// CHANGED: This is now a RestController serving JSON data.
+@RestController
+@RequestMapping("/api") // All endpoints are now prefixed with /api
 public class DashboardController {
 
     private final AwsDataService awsDataService;
@@ -17,30 +24,25 @@ public class DashboardController {
         this.awsDataService = awsDataService;
     }
 
-    @GetMapping("/")
-    public String getDashboard(Model model) {
-        try {
-            DashboardData data = awsDataService.getDashboardData();
-            model.addAttribute("dashboardData", data);
-        } catch (Exception e) {
-            model.addAttribute("error", "Failed to load AWS data. Please check backend logs.");
-            e.printStackTrace();
-        }
-        return "dashboard";
+    // This endpoint now fetches the main dashboard data.
+    @GetMapping("/dashboard")
+    public ResponseEntity<DashboardData> getDashboardData() throws ExecutionException, InterruptedException {
+        DashboardData data = awsDataService.getDashboardData();
+        return ResponseEntity.ok(data);
     }
 
+    // This endpoint now specifically fetches wasted resources data.
     @GetMapping("/waste")
-    public String getWasteDashboard(Model model) {
-        try {
-            DashboardData dashboardData = awsDataService.getDashboardData();
-            model.addAttribute("dashboardData", dashboardData);
+    public ResponseEntity<List<DashboardData.WastedResource>> getWastedResources() throws ExecutionException, InterruptedException {
+        // FIXED: Added .get() to resolve the CompletableFuture and get the list.
+        List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources().get();
+        return ResponseEntity.ok(wastedResources);
+    }
 
-            List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources();
-            model.addAttribute("wastedResources", wastedResources);
-        } catch (Exception e) {
-            model.addAttribute("error", "Failed to load wasted resources data.");
-            e.printStackTrace();
-        }
-        return "waste";
+    // A simple exception handler to return a clean error response.
+    @ExceptionHandler({ExecutionException.class, InterruptedException.class})
+    public ResponseEntity<Map<String, String>> handleAsyncException(Exception e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to fetch data from AWS.", "message", e.getMessage()));
     }
 }

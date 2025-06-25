@@ -3,9 +3,8 @@ package com.xammer.cloud.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
@@ -15,50 +14,69 @@ import software.amazon.awssdk.services.ecs.EcsClient;
 import software.amazon.awssdk.services.eks.EksClient;
 import software.amazon.awssdk.services.iam.IamClient;
 import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.pricing.PricingClient;
 
 @Configuration
 public class AwsConfig {
 
-    @Value("${aws.credentials.access-key-id}")
-    private String accessKey;
-
-    @Value("${aws.credentials.secret-access-key}")
-    private String secretKey;
-
     @Value("${aws.region}")
     private String region;
 
-    @Bean
-    public AwsCredentialsProvider awsCredentialsProvider() {
-        return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
+    @Bean("awsTaskExecutor")
+    public TaskExecutor threadPoolTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(20);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("AWS-Async-");
+        executor.initialize();
+        return executor;
     }
 
     @Bean
-    public Ec2Client ec2Client(AwsCredentialsProvider p) { return Ec2Client.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    
+    public Ec2Client ec2Client() {
+        return Ec2Client.builder().region(Region.of(region)).build();
+    }
+
     @Bean
-    public IamClient iamClient(AwsCredentialsProvider p) { return IamClient.builder().credentialsProvider(p).region(Region.AWS_GLOBAL).build(); }
-    
+    public IamClient iamClient() {
+        return IamClient.builder().region(Region.AWS_GLOBAL).build();
+    }
+
     @Bean
-    public EcsClient ecsClient(AwsCredentialsProvider p) { return EcsClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    
+    public EcsClient ecsClient() {
+        return EcsClient.builder().region(Region.of(region)).build();
+    }
+
     @Bean
-    public EksClient eksClient(AwsCredentialsProvider p) { return EksClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    
+    public EksClient eksClient() {
+        return EksClient.builder().region(Region.of(region)).build();
+    }
+
     @Bean
-    public LambdaClient lambdaClient(AwsCredentialsProvider p) { return LambdaClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    
+    public LambdaClient lambdaClient() {
+        return LambdaClient.builder().region(Region.of(region)).build();
+    }
+
     @Bean
-    public CloudWatchClient cloudWatchClient(AwsCredentialsProvider p) { return CloudWatchClient.builder().credentialsProvider(p).region(Region.of(region)).build(); }
-    
+    public CloudWatchClient cloudWatchClient() {
+        return CloudWatchClient.builder().region(Region.of(region)).build();
+    }
+
     @Bean
-    public CostExplorerClient costExplorerClient(AwsCredentialsProvider p) { return CostExplorerClient.builder().credentialsProvider(p).region(Region.US_EAST_1).build(); }
-    
+    public CostExplorerClient costExplorerClient() {
+        return CostExplorerClient.builder().region(Region.US_EAST_1).build();
+    }
+
     @Bean
-    public ComputeOptimizerClient computeOptimizerClient(AwsCredentialsProvider p) {
-        return ComputeOptimizerClient.builder()
-                .credentialsProvider(p)
-                .region(Region.of(region))
-                .build();
+    public ComputeOptimizerClient computeOptimizerClient() {
+        return ComputeOptimizerClient.builder().region(Region.of(region)).build();
+    }
+
+    // ADDED: Bean for the AWS Pricing API client.
+    @Bean
+    public PricingClient pricingClient() {
+        // The pricing API is only available in us-east-1 and ap-south-1.
+        return PricingClient.builder().region(Region.US_EAST_1).build();
     }
 }

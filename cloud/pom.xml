@@ -1,26 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>2.7.5</version>
-        <relativePath /> <!-- lookup parent from repository -->
+        <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.xammer</groupId>
     <artifactId>cloud-dashboard</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>cloud-dashboard</name>
-    <description>Live AWS Dashboard</description>
+    <description>Live AWS Dashboard - Advanced</description>
     <properties>
         <java.version>17</java.version>
-        <!-- Updated the SDK version based on your file -->
-        <aws.java.sdk.version>2.20.0</aws.java.sdk.version> 
+        <aws.java.sdk.version>2.20.0</aws.java.sdk.version>
     </properties>
 
-    <!-- This section manages the versions for all AWS SDK dependencies -->
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -35,71 +33,26 @@
 
     <dependencies>
         <!-- Spring Boot Starters -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-thymeleaf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-cache</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-thymeleaf</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-cache</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
 
         <!-- Lombok for boilerplate code reduction -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
+        <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><optional>true</optional></dependency>
 
         <!-- AWS SDK v2 Dependencies -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>ec2</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>costexplorer</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>iam</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatch</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>ecs</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>eks</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>lambda</artifactId>
-        </dependency>
-
-        <!-- 
-            CORRECTED: 
-            Removed the duplicate dependency and the hardcoded version. 
-            There is now only ONE entry for computeoptimizer.
-        -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>computeoptimizer</artifactId>
-        </dependency>
-
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ec2</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>costexplorer</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>iam</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudwatch</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ecs</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>eks</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>lambda</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>computeoptimizer</artifactId></dependency>
+        <!-- ADDED: AWS Pricing API Client -->
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>pricing</artifactId></dependency>
     </dependencies>
 
     <build>
@@ -109,10 +62,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
+                        <exclude><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId></exclude>
                     </excludes>
                 </configuration>
             </plugin>

@@ -24,420 +24,412 @@
         .world-map { width: 100%; height: 100%; object-fit: contain; }
         .progress-bar { background-color: #e5e7eb; border-radius: 0.25rem; overflow: hidden; width: 100%; height: 1rem; }
         .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; }
+        .clickable-row { cursor: pointer; }
+        
     </style>
 </head>
-<body class="text-gray-800">
-    <div th:if="${error}" class="flex items-center justify-center h-screen bg-red-50 text-red-700">
-        <div><h2 class="text-2xl font-bold">Error</h2><p th:text="${error}"></p></div>
+<body 
+    x-data="{ isModalOpen: false, modalTitle: '', modalResourceId: '' }"
+      @open-metrics-modal.window="
+        isModalOpen = true;
+        modalTitle = $event.detail.title;
+        modalResourceId = $event.detail.resourceId;
+        fetchMetricsForModal($event.detail.resourceId);
+      ">
+
+     <!-- class="text-gray-800"> -->
+    <div id="loadingState" class="flex items-center justify-center h-screen">
+        <div class="flex flex-col items-center">
+             <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <p class="mt-4 text-gray-600 font-semibold">Fetching live data from AWS...</p>
+        </div>
+    </div>
+    <div id="errorState" class="hidden flex items-center justify-center h-screen bg-red-50 text-red-700">
+        <div><h2 class="text-2xl font-bold">Error</h2><p id="errorMessage"></p></div>
     </div>
 
-    <div th:if="${dashboardData != null}" class="flex h-screen bg-white">
+       <div x-show="isModalOpen" x-cloak
+         class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
+         @click.away="isModalOpen = false">
+        <div class="relative mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+            <div class="flex justify-between items-center pb-3 border-b">
+                <div>
+                    <p class="text-2xl font-bold" x-text="modalTitle"></p>
+                    <p class="text-sm font-mono text-gray-500" x-text="modalResourceId"></p>
+                </div>
+                <div class="cursor-pointer z-50" @click="isModalOpen = false">
+                    <svg class="fill-current text-black" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><path d="M14.53 4.53l-1.06-1.06L9 7.94 4.53 3.47 3.47 4.53 7.94 9l-4.47 4.47 1.06 1.06L9 10.06l4.47 4.47 1.06-1.06L10.06 9z"></path></svg>
+                </div>
+            </div>
+            <div class="mt-3">
+                <canvas id="metricsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="appBody" class="hidden flex h-screen bg-white">
         <!-- Sidebar -->
         <div class="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
             <div class="h-16 flex items-center justify-center border-b"><span class="text-xl font-bold text-indigo-600">XamOps</span></div>
               <div class="p-4 border-b">
-                  <select class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                      <option th:each="acc : ${dashboardData.availableAccounts}" th:value="${acc.id}" th:text="${acc.name}" th:selected="${acc.id == dashboardData.selectedAccount.id}"></option>
-                  </select>
+                  <select id="accountSelector" class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
               </div>
             <nav class="flex-1 px-2 py-4 space-y-1 text-sm">
-                <a href="#" class="flex items-center gap-3 rounded-md bg-indigo-50 px-3 py-2 text-indigo-600 font-semibold"><i class="fas fa-tachometer-alt fa-fw w-5 text-center"></i><span>Dashboard</span></a>
+                <a href="/" class="flex items-center gap-3 rounded-md bg-indigo-50 px-3 py-2 text-indigo-600 font-semibold"><i class="fas fa-tachometer-alt fa-fw w-5 text-center"></i><span>Dashboard</span></a>
                 <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-chart-bar fa-fw w-5 text-center"></i><span>Reports</span></a>
-                
-                <div x-data="{ open: true }">
-                    <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                        <div class="flex items-center gap-3">
-                            <i class="fas fa-cloud fa-fw w-5 text-center"></i>
-                            <span>Cloudview</span>
-                        </div>
-                        <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
-                    </button>
-                    <div x-show="open" x-cloak class="pl-8 py-1 space-y-1">
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudk8s <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudlist</a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudmap</a>
-                    </div>
-                </div>
-
-                <div x-data="{ open: true }">
-                    <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                        <div class="flex items-center gap-3">
-                            <i class="fas fa-cogs fa-fw w-5 text-center"></i>
-                            <span>Optimization</span>
-                        </div>
-                        <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
-                    </button>
-                    <div x-show="open" x-cloak class="pl-8 py-1 space-y-1">
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">FinOps Report <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Costs overview</a>
-                        <a href="waste" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Waste</a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Rightsizing</a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Reservation</a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Savings</a>
-                    </div>
-                </div>
-
-                <div x-data="{ open: true }">
-                    <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-                        <div class="flex items-center gap-3">
-                            <i class="fas fa-shield-alt fa-fw w-5 text-center"></i>
-                            <span>Security</span>
-                        </div>
-                        <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
-                    </button>
-                    <div x-show="open" x-cloak class="pl-8 py-1 space-y-1">
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Security</a>
-                        <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Performance</a>
-                    </div>
-                </div>
-
-                 <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-users fa-fw w-5 text-center"></i><span>Teams</span></a>
-                 <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-code fa-fw w-5 text-center"></i><span>Logs</span></a>
+                <div x-data="{ open: true }"><button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><div class="flex items-center gap-3"><i class="fas fa-cloud fa-fw w-5 text-center"></i><span>Cloudview</span></div><i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i></button><div x-show="open" x-cloak class="pl-8 py-1 space-y-1"><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudk8s <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudlist</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudmap</a></div></div>
+                <div x-data="{ open: true }"><button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><div class="flex items-center gap-3"><i class="fas fa-cogs fa-fw w-5 text-center"></i><span>Optimization</span></div><i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i></button><div x-show="open" x-cloak class="pl-8 py-1 space-y-1"><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">FinOps Report <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Costs overview</a><a href="/waste" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Waste</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Rightsizing</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Reservation</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Savings</a></div></div>
+                <div x-data="{ open: true }"><button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><div class="flex items-center gap-3"><i class="fas fa-shield-alt fa-fw w-5 text-center"></i><span>Security</span></div><i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i></button><div x-show="open" x-cloak class="pl-8 py-1 space-y-1"><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Security</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Performance</a></div></div>
+                <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-users fa-fw w-5 text-center"></i><span>Teams</span></a><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-code fa-fw w-5 text-center"></i><span>Logs</span></a>
             </nav>
-            <div class="p-4 border-t mt-auto">
-                 <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-sm bg-gray-100"><i class="fas fa-cloud-download-alt fa-fw w-5 text-center"></i><span>Account manager</span></a>
-            </div>
+            <div class="p-4 border-t mt-auto"><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-sm bg-gray-100"><i class="fas fa-cloud-download-alt fa-fw w-5 text-center"></i><span>Account manager</span></a></div>
         </div>
 
-        <!-- Main Content -->
         <main class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
-            <header class="h-16 flex items-center justify-between border-b bg-white px-6 sticky top-0 z-10">
-                <div class="flex items-center gap-4 text-sm">
-                    <span class="text-gray-500">Updated just now</span>
-                </div>
-            </header>
+            <header class="h-16 flex items-center justify-between border-b bg-white px-6 sticky top-0 z-10"><div class="flex items-center gap-4 text-sm"><span id="updateTime" class="text-gray-500"></span></div></header>
+            <div class="bg-white p-6 rounded-lg shadow-sm"><h3 id="regionsTitle" class="font-semibold mb-4 text-gray-700"></h3><div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="md:col-span-2 map-container"><img src="https://raw.githubusercontent.com/djaiss/mapsicon/master/all/vector/world.svg" class="world-map" alt="World Map"/><div id="mapDots"></div></div><div id="regionList" class="space-y-3 overflow-y-auto" style="max-height: 380px;"></div></div></div>
+            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3><div id="resourceInventory" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">CloudWatch Global</h3><div id="cloudWatchStatus" class="grid grid-cols-3 gap-4 text-center"></div></div></div>
             
-            <div class="bg-white p-6 rounded-lg shadow-sm">
-                <h3 class="font-semibold mb-4 text-gray-700" th:text="|Your regions (${#lists.size(dashboardData.selectedAccount.regionStatus)})|"></h3>
-                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                     <div class="md:col-span-2 map-container">
-                         <img src="https://raw.githubusercontent.com/djaiss/mapsicon/master/all/vector/world.svg" class="world-map" alt="World Map"/>
-                         <div th:each="region : ${dashboardData.selectedAccount.regionStatus}" class="map-dot-container" th:style="|top: ${region.top}%; left: ${region.left}%;|">
-                             <div class="map-dot" th:classappend="${#strings.toLowerCase(region.status)}" th:title="${region.regionName}"></div>
-                         </div>
-                     </div>
-                     <div class="space-y-3 overflow-y-auto" style="max-height: 380px;">
-                         <div th:each="region : ${dashboardData.selectedAccount.regionStatus}" class="flex items-center">
-                            <span class="h-3 w-3 rounded-full mr-3" th:classappend="${region.status == 'ACTIVE' ? 'bg-blue-500' : (region.status == 'SEMI_ACTIVE' ? 'bg-red-500' : (region.status == 'SUSTAINABLE' ? 'bg-green-500' : 'bg-gray-400'))}"></span>
-                             <div>
-                                 <p class="font-semibold text-sm" th:text="${region.regionName}"></p>
-                                 <p class="text-xs text-gray-500" th:text="${region.regionId}"></p>
-                             </div>
-                         </div>
-                     </div>
-                 </div>
-            </div>
-
-            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
-                    <h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3>
-                    <div th:if="${dashboardData.selectedAccount.resourceInventory}" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-network-wired text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.vpc}"></p><p class="text-xs text-gray-500">VPC</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-cubes text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ecs}"></p><p class="text-xs text-gray-500">ECS</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-server text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ec2}"></p><p class="text-xs text-gray-500">EC2</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-dharmachakra text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.kubernetes}"></p><p class="text-xs text-gray-500">Kubernetes</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-bolt text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.lambdas}"></p><p class="text-xs text-gray-500">Lambdas</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-hdd text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.ebsVolumes}"></p><p class="text-xs text-gray-500">EBS Volumes</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-compact-disc text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.images}"></p><p class="text-xs text-gray-500">Images</p></div></div>
-                        <div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas fa-camera-retro text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl" th:text="${dashboardData.selectedAccount.resourceInventory.snapshots}"></p><p class="text-xs text-gray-500">Snapshots</p></div></div>
-                    </div>
-                </div>
-                <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.cloudWatchStatus}">
-                    <h3 class="font-semibold mb-4 text-gray-700">CloudWatch Global</h3>
-                    <div class="grid grid-cols-3 gap-4 text-center">
-                        <div><p class="font-semibold text-2xl text-green-600" th:text="${dashboardData.selectedAccount.cloudWatchStatus.ok}"></p><p class="text-xs text-gray-500">Ok</p></div>
-                        <div><p class="font-semibold text-2xl text-red-600" th:text="${dashboardData.selectedAccount.cloudWatchStatus.alarm}"></p><p class="text-xs text-gray-500">Alarm</p></div>
-                        <div><p class="font-semibold text-2xl text-yellow-500" th:text="${dashboardData.selectedAccount.cloudWatchStatus.insufficient}"></p><p class="text-xs text-gray-500">Insufficient</p></div>
-                    </div>
-                </div>
-            </div>
-
+            <!-- FIXED: Added correct placeholder divs -->
             <div class="bg-white p-6 rounded-lg shadow-sm space-y-8">
-                <div>
-                    <h3 class="font-semibold text-gray-700 mb-4">
-                        <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub
-                    </h3>
-                    
-                    <!-- ADDED: Summary Stat Cards -->
-                    <div th:if="${dashboardData.selectedAccount.optimizationSummary}" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                        <div class="bg-green-50 border border-green-200 p-4 rounded-lg text-center">
-                            <p class="text-xs text-green-700 font-semibold uppercase">Potential Savings</p>
-                            <p class="text-2xl font-bold text-green-800" th:text="${'$' + #numbers.formatDecimal(dashboardData.selectedAccount.optimizationSummary.totalPotentialSavings, 1, 2)}"></p>
-                            <p class="text-xs text-green-600">per month</p>
-                        </div>
-                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg text-center">
-                             <p class="text-xs text-red-700 font-semibold uppercase">Critical Alerts</p>
-                            <p class="text-2xl font-bold text-red-800" th:text="${dashboardData.selectedAccount.optimizationSummary.criticalAlertsCount}"></p>
-                            <p class="text-xs text-red-600">items to review</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div th:if="${dashboardData.selectedAccount.ec2Recommendations}">
-                    <h4 class="font-semibold text-sm text-gray-600 mb-2">EC2 Instance Right-Sizing</h4>
-                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.ec2Recommendations)}" class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-500">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3">Instance ID</th>
-                                    <th class="px-6 py-3">Current Type</th>
-                                    <th class="px-6 py-3">Recommended Type</th>
-                                    <th class="px-6 py-3">Reason</th>
-                                    <th class="px-6 py-3 text-right">Est. Monthly Savings (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr th:each="rec : ${dashboardData.selectedAccount.ec2Recommendations}" class="border-b hover:bg-gray-50">
-                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.resourceId}"></th>
-                                    <td class="px-6 py-4" th:text="${rec.currentType}"></td>
-                                    <td class="px-6 py-4 font-semibold text-green-600" th:text="${rec.recommendedType}"></td>
-                                    <td class="px-6 py-4" th:text="${rec.recommendationReason}"></td>
-                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(rec.estimatedMonthlySavings, 1, 2)}"></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.ec2Recommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">All EC2 instances are optimized!</h3>
-                    </div>
-                </div>
-
-                <div th:if="${dashboardData.selectedAccount.costAnomalies}">
-                    <h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>
-                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.costAnomalies)}" class="bg-gray-50 p-4 rounded-lg">
-                        <canvas id="costAnomalyChart"></canvas>
-                    </div>
-                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.costAnomalies)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No cost anomalies detected.</h3>
-                    </div>
-                </div>
-
-                <div th:if="${dashboardData.selectedAccount.ebsRecommendations}">
-                    <h4 class="font-semibold text-sm text-gray-600 mb-2">EBS Volume Optimization</h4>
-                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.ebsRecommendations)}" class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-500">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3">Volume ID</th>
-                                    <th class="px-6 py-3">Current Config</th>
-                                    <th class="px-6 py-3">Recommended Config</th>
-                                    <th class="px-6 py-3">Reason</th>
-                                    <th class="px-6 py-3 text-right">Est. Monthly Savings (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr th:each="rec : ${dashboardData.selectedAccount.ebsRecommendations}" class="border-b hover:bg-gray-50">
-                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.resourceId}"></th>
-                                    <td class="px-6 py-4" th:text="${rec.currentType}"></td>
-                                    <td class="px-6 py-4 font-semibold text-green-600" th:text="${rec.recommendedType}"></td>
-                                    <td class="px-6 py-4" th:text="${rec.recommendationReason}"></td>
-                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(rec.estimatedMonthlySavings, 1, 2)}"></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.ebsRecommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">All EBS volumes are optimized!</h3>
-                    </div>
-                </div>
-
-                <div th:if="${dashboardData.selectedAccount.lambdaRecommendations}">
-                    <h4 class="font-semibold text-sm text-gray-600 mb-2">Lambda Function Optimization</h4>
-                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.lambdaRecommendations)}" class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-500">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3">Function Name</th>
-                                    <th class="px-6 py-3">Current Memory</th>
-                                    <th class="px-6 py-3">Recommended Memory</th>
-                                    <th class="px-6 py-3">Reason</th>
-                                    <th class="px-6 py-3 text-right">Est. Monthly Savings (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr th:each="rec : ${dashboardData.selectedAccount.lambdaRecommendations}" class="border-b hover:bg-gray-50">
-                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.resourceId}"></th>
-                                    <td class="px-6 py-4" th:text="${rec.currentType}"></td>
-                                    <td class="px-6 py-4 font-semibold text-green-600" th:text="${rec.recommendedType}"></td>
-                                    <td class="px-6 py-4" th:text="${rec.recommendationReason}"></td>
-                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(rec.estimatedMonthlySavings, 1, 2)}"></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                     <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.lambdaRecommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">All Lambda functions are optimized!</h3>
-                    </div>
-                </div>
-
-                <div th:if="${dashboardData.selectedAccount.reservationAnalysis}">
-                    <h4 class="font-semibold text-sm text-gray-600 mb-2">Reserved Instance Analysis (Last 30 Days)</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5>
-                            <p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p>
-                            <div class="flex items-center gap-4">
-                                <p class="text-3xl font-bold text-indigo-600" th:text="${#numbers.formatDecimal(dashboardData.selectedAccount.reservationAnalysis.utilizationPercentage, 1, 1) + '%'}"></p>
-                                <div class="w-full">
-                                    <div class="progress-bar">
-                                        <div class="progress-bar-fill bg-indigo-500" th:style="'width: ' + ${dashboardData.selectedAccount.reservationAnalysis.utilizationPercentage} + '%;'"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5>
-                            <p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p>
-                             <div class="flex items-center gap-4">
-                                <p class="text-3xl font-bold text-green-600" th:text="${#numbers.formatDecimal(dashboardData.selectedAccount.reservationAnalysis.coveragePercentage, 1, 1) + '%'}"></p>
-                                <div class="w-full">
-                                    <div class="progress-bar">
-                                        <div class="progress-bar-fill bg-green-500" th:style="'width: ' + ${dashboardData.selectedAccount.reservationAnalysis.coveragePercentage} + '%;'"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div th:if="${dashboardData.selectedAccount.reservationPurchaseRecommendations}">
-                    <h4 class="font-semibold text-sm text-gray-600 mb-2">RI Purchase Recommendations</h4>
-                    <div th:if="${not #lists.isEmpty(dashboardData.selectedAccount.reservationPurchaseRecommendations)}" class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-500">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3">Instance Family</th>
-                                    <th class="px-6 py-3">Term</th>
-                                    <th class="px-6 py-3 text-right">Recommended #</th>
-                                    <th class="px-6 py-3 text-right">Est. Monthly Savings</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr th:each="rec : ${dashboardData.selectedAccount.reservationPurchaseRecommendations}" class="border-b hover:bg-gray-50">
-                                    <th class="px-6 py-4 font-medium text-gray-900" th:text="${rec.instanceFamily}"></th>
-                                    <td class="px-6 py-4" th:text="${rec.term}"></td>
-                                    <td class="px-6 py-4 text-right" th:text="${rec.recommendedInstances}"></td>
-                                    <td class="px-6 py-4 text-right font-mono text-green-600" th:text="'$' + ${rec.monthlySavings}"></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.reservationPurchaseRecommendations)}" class="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No RI purchase recommendations.</h3>
-                    </div>
-                </div>
+                <div id="optimizationHub"></div>
+                <div id="ec2RecSection"></div>
+                <div id="costAnomalySection"></div>
+                <div id="ebsRecSection"></div>
+                <div id="lambdaRecSection"></div>
+                <div id="riAnalysisSection"></div>
+                <div id="riPurchaseRecSection"></div>
             </div>
 
-             <div class="grid gap-6 lg:grid-cols-3">
-                 <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.costHistory}">
-                     <h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3>
-                     <canvas id="costHistoryChart"></canvas>
-                 </div>
-                 <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.securityInsights}">
-                     <h3 class="font-semibold mb-4 text-gray-700">Insights</h3>
-                     <div class="space-y-4">
-                         <div th:each="insight : ${dashboardData.selectedAccount.securityInsights}" class="flex items-start gap-3"><i class="fas fa-exclamation-circle text-red-500 mt-1"></i><div><p class="font-semibold text-sm" th:text="${insight.title}"></p><p class="text-xs text-gray-500" th:text="${insight.description}"></p><span class="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block" th:text="${insight.category + ' x' + insight.count}"></span></div></div>
-                         <div th:if="${#lists.isEmpty(dashboardData.selectedAccount.securityInsights)}"><p class="text-sm text-center text-gray-500">No security issues found.</p></div>
-                     </div>
-                 </div>
-             </div>
-
-             <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                 <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
-                      <h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3>
-                     <div class="overflow-y-auto max-h-96">
-                         <table class="w-full text-sm text-left text-gray-500">
-                             <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead>
-                             <tbody>
-                                 <tr th:each="item : ${dashboardData.selectedAccount.billingSummary}" class="border-b"><th class="px-6 py-4 font-medium" th:text="${item.serviceName}"></th><td class="px-6 py-4 text-right font-mono" th:text="${'$' + #numbers.formatDecimal(item.monthToDateCost, 1, 2)}"></td></tr>
-                                 <tr th:if="${#lists.isEmpty(dashboardData.selectedAccount.billingSummary)}"><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>
-                             </tbody>
-                         </table>
-                     </div>
-                 </div>
-                  <div class="space-y-6">
-                      <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.savingsSummary}">
-                           <h3 class="font-semibold mb-4 text-gray-700">Your Savings</h3>
-                           <div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600" th:text="${'$' + #numbers.formatDecimal(dashboardData.selectedAccount.savingsSummary.potential, 1, 2)}"></p><p class="text-xs text-gray-500">Potential Savings</p></div>
-                           <table class="w-full text-sm mt-4">
-                               <thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead>
-                               <tbody><tr th:each="s : ${dashboardData.selectedAccount.savingsSummary.suggestions}"><td th:text="${s.service}"></td><td class="text-right font-mono text-green-600" th:text="${'$' + #numbers.formatDecimal(s.suggested, 1, 2)}"></td></tr></tbody>
-                           </table>
-                      </div>
-                      <div class="bg-white p-6 rounded-lg shadow-sm" th:if="${dashboardData.selectedAccount.iamResources}">
-                          <h3 class="font-semibold mb-4 text-gray-700">IAM Resources</h3>
-                          <div class="space-y-3">
-                              <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Users</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.users}"></p></div>
-                              <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Groups</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.groups}"></p></div>
-                              <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Customer Managed Policies</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.customerManagedPolicies}"></p></div>
-                              <div class="flex justify-between items-center"><p class="text-sm">Roles</p><p class="font-semibold" th:text="${dashboardData.selectedAccount.iamResources.roles}"></p></div>
-                          </div>
-                      </div>
-                  </div>
-             </div>
+            <div class="grid gap-6 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3><canvas id="costHistoryChart"></canvas></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Insights</h3><div id="securityInsights" class="space-y-4"></div></div></div>
+            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3><div class="overflow-y-auto max-h-96"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead><tbody id="billingSummary"></tbody></table></div></div><div class="space-y-6"><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Your Savings</h3><div id="savingsSummary"></div></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">IAM Resources</h3><div id="iamResources" class="space-y-3"></div></div></div></div>
         </main>
     </div>
 
-    <script th:inline="javascript">
-      document.addEventListener('DOMContentLoaded', () => {
-        const costCtx = document.getElementById('costHistoryChart');
-        if (costCtx) {
-            const costHistoryData = /*[[${dashboardData.selectedAccount.costHistory}]]*/ null;
-            if (costHistoryData) {
-                new Chart(costCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: costHistoryData.labels,
-                        datasets: [{ label: 'Monthly Cost', data: costHistoryData.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }]
-                    },
-                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } }
-                });
-            }
+    <script>
+    const formatCurrency = (num) => '$' + (num != null ? num.toFixed(2) : '0.00');
+    const emptyStateHtml = (title) => `<div class="text-center py-8 px-4 border-2 border-dashed rounded-lg"><h3 class="mt-2 text-sm font-medium text-gray-900">${title}</h3></div>`;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const loadingEl = document.getElementById('loadingState');
+        const errorEl = document.getElementById('errorState');
+        const errorMessageEl = document.getElementById('errorMessage');
+        const appBodyEl = document.getElementById('appBody');
+
+        fetch(`${window.location.origin}/api/dashboard`)
+            .then(response => {
+                if (!response.ok) {
+                    if (response.redirected) { window.location.href = response.url; return; }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data) return;
+                populatePage(data);
+                loadingEl.classList.add('hidden');
+                appBodyEl.classList.remove('hidden');
+            })
+            .catch(error => {
+                console.error('Failed to fetch dashboard data:', error);
+                errorMessageEl.textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
+                loadingEl.classList.add('hidden');
+                errorEl.classList.remove('hidden');
+            });
+    });
+
+    function populatePage(data) {
+        const account = data.selectedAccount;
+        document.getElementById('updateTime').textContent = `Updated just now`;
+        
+        populateAccountSelector(data.availableAccounts, account);
+        populateRegions(account.regionStatus);
+        populateResourceInventory(account.resourceInventory);
+        populateCloudWatchStatus(account.cloudWatchStatus);
+        populateOptimizationHub(account.optimizationSummary);
+        populateRecTable('ec2RecSection', 'EC2 Instance Right-Sizing', ['Instance ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ec2Recommendations);
+        populateRecTable('ebsRecSection', 'EBS Volume Optimization', ['Volume ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ebsRecommendations);
+        populateRecTable('lambdaRecSection', 'Lambda Function Optimization', ['Function Name', 'Current', 'Recommended', 'Reason', 'Savings'], account.lambdaRecommendations);
+        populateRiPurchaseRecs(account.reservationPurchaseRecommendations);
+        populateSecurityInsights(account.securityInsights);
+        populateBillingSummary(account.billingSummary);
+        populateIamResources(account.iamResources);
+        populateSavingsSummary(account.savingsSummary);
+        populateRiAnalysis(account.reservationAnalysis);
+        
+        renderCostHistoryChart(account.costHistory);
+        renderAnomalyChart(account.costAnomalies);
+    }
+    
+    function populateAccountSelector(accounts, selected) { document.getElementById('accountSelector').innerHTML = accounts.map(acc => `<option value="${acc.id}" ${acc.id === selected.id ? 'selected' : ''}>${acc.name}</option>`).join(''); }
+    function populateRegions(regionStatus) {
+        document.getElementById('regionsTitle').textContent = `Your regions (${regionStatus.length})`;
+        document.getElementById('mapDots').innerHTML = regionStatus.map(r => `<div class="map-dot-container" style="top: ${r.top}%; left: ${r.left}%;"><div class="map-dot ${r.status.toLowerCase()}" title="${r.regionName}"></div></div>`).join('');
+        const colors = { 'ACTIVE': 'bg-blue-500', 'SEMI_ACTIVE': 'bg-red-500', 'SUSTAINABLE': 'bg-green-500', 'NON_ACTIVE': 'bg-gray-400' };
+        document.getElementById('regionList').innerHTML = regionStatus.map(r => `<div class="flex items-center"><span class="h-3 w-3 rounded-full mr-3 ${colors[r.status] || 'bg-gray-400'}"></span><div><p class="font-semibold text-sm">${r.regionName}</p><p class="text-xs text-gray-500">${r.regionId}</p></div></div>`).join('');
+    }
+    function populateResourceInventory(inv) {
+        const r = [{ n: 'VPC', i: 'fa-network-wired', v: inv.vpc }, { n: 'ECS', i: 'fa-cubes', v: inv.ecs }, { n: 'EC2', i: 'fa-server', v: inv.ec2 }, { n: 'Kubernetes', i: 'fa-dharmachakra', v: inv.kubernetes }, { n: 'Lambdas', i: 'fa-bolt', v: inv.lambdas }, { n: 'EBS Volumes', i: 'fa-hdd', v: inv.ebsVolumes }, { n: 'Images', i: 'fa-compact-disc', v: inv.images }, { n: 'Snapshots', i: 'fa-camera-retro', v: inv.snapshots }];
+        document.getElementById('resourceInventory').innerHTML = r.map(res => `<div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas ${res.i} text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl">${res.v}</p><p class="text-xs text-gray-500">${res.n}</p></div></div>`).join('');
+    }
+    function populateCloudWatchStatus(s) { document.getElementById('cloudWatchStatus').innerHTML = `<div><p class="font-semibold text-2xl text-green-600">${s.ok}</p><p class="text-xs text-gray-500">Ok</p></div><div><p class="font-semibold text-2xl text-red-600">${s.alarm}</p><p class="text-xs text-gray-500">Alarm</p></div><div><p class="font-semibold text-2xl text-yellow-500">${s.insufficient}</p><p class="text-xs text-gray-500">Insufficient</p></div>`; }
+    function populateOptimizationHub(summary) {
+        document.getElementById('optimizationHub').innerHTML = `
+            <h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="bg-green-50 border border-green-200 p-4 rounded-lg text-center">
+                    <p class="text-xs text-green-700 font-semibold uppercase">Potential Savings</p>
+                    <p class="text-2xl font-bold text-green-800">${formatCurrency(summary.totalPotentialSavings)}</p>
+                    <p class="text-xs text-green-600">per month</p>
+                </div>
+                <div class="bg-red-50 border border-red-200 p-4 rounded-lg text-center">
+                    <p class="text-xs text-red-700 font-semibold uppercase">Critical Alerts</p>
+                    <p class="text-2xl font-bold text-red-800">${summary.criticalAlertsCount}</p>
+                    <p class="text-xs text-red-600">items to review</p>
+                </div>
+            </div>`;
+    }
+    function populateRecTable(containerId, title, headers, recs) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        let tableHtml = '';
+        if (recs && recs.length > 0) {
+            const isClickable = containerId === 'ec2RecSection';
+            tableHtml = `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>${headers.map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr>
+                        </thead>
+                        <tbody>
+                            ${recs.map(rec => `
+                                <tr class="border-b hover:bg-gray-50 ${isClickable ? 'clickable-row' : ''}" 
+                                    ${isClickable ? `onclick="showMetricsModal('EC2', '${rec.resourceId}')"` : ''}>
+                                    <th class="px-6 py-4 font-medium text-gray-900">${rec.resourceId}</th>
+                                    <td class="px-6 py-4">${rec.currentType}</td>
+                                    <td class="px-6 py-4 font-semibold text-green-600">${rec.recommendedType}</td>
+                                    <td class="px-6 py-4">${rec.recommendationReason}</td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600">${formatCurrency(rec.estimatedMonthlySavings)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        } else {
+            tableHtml = emptyStateHtml(`All ${title.split(' ')[0]} resources are optimized!`);
         }
-    
-        const anomalyCtx = document.getElementById('costAnomalyChart');
-        if (anomalyCtx) {
-            const anomalyData = /*[[${dashboardData.selectedAccount.costAnomalies}]]*/ null;
-            if (anomalyData && anomalyData.length > 0) {
-                const labels = anomalyData.map(a => `${a.service} (${a.startDate})`);
-                const data = anomalyData.map(a => a.unexpectedSpend);
-    
-                new Chart(anomalyCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Unexpected Spend (USD)',
-                            data: data,
-                            backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                            borderColor: 'rgba(239, 68, 68, 1)',
-                            borderWidth: 1
-                        }]
+        container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">${title}</h4>${tableHtml}`;
+    }
+    function populateRiPurchaseRecs(recs) {
+        const container = document.getElementById('riPurchaseRecSection');
+        if (!container) return;
+        let tableHtml = '';
+        if (recs && recs.length > 0) {
+            tableHtml = `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                         <thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr><th class="px-6 py-3">Instance Family</th><th class="px-6 py-3">Term</th><th class="px-6 py-3 text-right">Recommended #</th><th class="px-6 py-3 text-right">Est. Monthly Savings</th></tr></thead>
+                         <tbody>
+                            ${recs.map(rec => `
+                                <tr class="border-b hover:bg-gray-50">
+                                    <th class="px-6 py-4 font-medium text-gray-900">${rec.instanceFamily}</th>
+                                    <td class="px-6 py-4">${rec.term}</td>
+                                    <td class="px-6 py-4 text-right">${rec.recommendedInstances}</td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600">$${rec.monthlySavings}</td>
+                                </tr>`).join('')}
+                         </tbody>
+                    </table>
+                </div>`;
+        } else {
+            tableHtml = emptyStateHtml('No RI purchase recommendations.');
+        }
+        container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">RI Purchase Recommendations</h4>${tableHtml}`;
+    }
+    function populateSecurityInsights(insights) {
+        const container = document.getElementById('securityInsights');
+        if (!container) return;
+        if (insights && insights.length > 0) {
+            container.innerHTML = insights.map(i => `<div class="flex items-start gap-3"><i class="fas fa-exclamation-circle text-red-500 mt-1"></i><div><p class="font-semibold text-sm">${i.title}</p><p class="text-xs text-gray-500">${i.description}</p><span class="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block">${i.category} x${i.count}</span></div></div>`).join('');
+        } else {
+            container.innerHTML = `<p class="text-sm text-center text-gray-500">No security issues found.</p>`;
+        }
+    }
+    function populateBillingSummary(summary) {
+        const container = document.getElementById('billingSummary');
+        if (!container) return;
+        if (summary && summary.length > 0) {
+            container.innerHTML = summary.map(item => `<tr class="border-b"><th class="px-6 py-4 font-medium">${item.serviceName}</th><td class="px-6 py-4 text-right font-mono">${formatCurrency(item.monthToDateCost)}</td></tr>`).join('');
+        } else {
+            container.innerHTML = `<tr><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>`;
+        }
+    }
+    function populateIamResources(iam) {
+        const container = document.getElementById('iamResources');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Users</p><p class="font-semibold">${iam.users}</p></div>
+            <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Groups</p><p class="font-semibold">${iam.groups}</p></div>
+            <div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Customer Managed Policies</p><p class="font-semibold">${iam.customerManagedPolicies}</p></div>
+            <div class="flex justify-between items-center"><p class="text-sm">Roles</p><p class="font-semibold">${iam.roles}</p></div>`;
+    }
+    function populateSavingsSummary(summary) {
+        const container = document.getElementById('savingsSummary');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600">${formatCurrency(summary.potential)}</p><p class="text-xs text-gray-500">Potential Savings</p></div>
+            <table class="w-full text-sm mt-4">
+                <thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead>
+                <tbody>${summary.suggestions.map(s => `<tr><td>${s.service}</td><td class="text-right font-mono text-green-600">${formatCurrency(s.suggested)}</td></tr>`).join('')}</tbody>
+            </table>`;
+    }
+    function populateRiAnalysis(analysis) {
+        const container = document.getElementById('riAnalysisSection');
+        if (!container) return;
+        container.innerHTML = `
+            <h4 class="font-semibold text-sm text-gray-600 mb-2">Reserved Instance Analysis (Last 30 Days)</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5>
+                    <p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p>
+                    <div class="flex items-center gap-4">
+                        <p class="text-3xl font-bold text-indigo-600">${analysis.utilizationPercentage.toFixed(1)}%</p>
+                        <div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-indigo-500" style="width: ${analysis.utilizationPercentage}%;"></div></div></div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5>
+                    <p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p>
+                     <div class="flex items-center gap-4">
+                        <p class="text-3xl font-bold text-green-600">${analysis.coveragePercentage.toFixed(1)}%</p>
+                        <div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-green-500" style="width: ${analysis.coveragePercentage}%;"></div></div></div>
+                    </div>
+                </div>
+            </div>`;
+    }
+    function renderCostHistoryChart(costHistory) {
+        const ctx = document.getElementById('costHistoryChart');
+        if (!ctx || !costHistory) return;
+        new Chart(ctx, { type: 'bar', data: { labels: costHistory.labels, datasets: [{ label: 'Monthly Cost', data: costHistory.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } } });
+    }
+    function renderAnomalyChart(anomalies) {
+        const container = document.getElementById('costAnomalySection');
+        if (!container) return;
+        let contentHtml = '';
+        if (anomalies && anomalies.length > 0) {
+            contentHtml = `<div class="bg-gray-50 p-4 rounded-lg"><canvas id="costAnomalyChartCanvas"></canvas></div>`;
+            container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>${contentHtml}`;
+            
+            setTimeout(() => {
+                const ctx = document.getElementById('costAnomalyChartCanvas');
+                if (!ctx) return;
+                const labels = anomalies.map(a => `${a.service} (${a.startDate})`);
+                const data = anomalies.map(a => a.unexpectedSpend);
+                new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Unexpected Spend (USD)', data: data, backgroundColor: 'rgba(239, 68, 68, 0.7)' }] }, options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `Unexpected Spend: ${formatCurrency(c.parsed.x)}` } } }, scales: { x: { beginAtZero: true, title: { display: true, text: 'Cost (USD)' } } } } });
+            }, 0);
+        } else {
+            container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>` + emptyStateHtml('No cost anomalies detected.');
+        }
+    }
+
+     let metricsChartInstance = null;
+
+    function populateRecTable(containerId, title, headers, recs) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        let tableHtml = '';
+        if (recs && recs.length > 0) {
+            const isClickable = containerId === 'ec2RecSection';
+            tableHtml = `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>${headers.map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr>
+                        </thead>
+                        <tbody>
+                            ${recs.map(rec => `
+                                <tr class="border-b hover:bg-gray-50 ${isClickable ? 'clickable-row' : ''}" 
+                                    ${isClickable ? `onclick="showMetricsModal('EC2', '${rec.resourceId}')"` : ''}>
+                                    <th class="px-6 py-4 font-medium text-gray-900">${rec.resourceId}</th>
+                                    <td class="px-6 py-4">${rec.currentType}</td>
+                                    <td class="px-6 py-4 font-semibold text-green-600">${rec.recommendedType}</td>
+                                    <td class="px-6 py-4">${rec.recommendationReason}</td>
+                                    <td class="px-6 py-4 text-right font-mono text-green-600">${formatCurrency(rec.estimatedMonthlySavings)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        } else {
+            tableHtml = emptyStateHtml(`All ${title.split(' ')[0]} resources are optimized!`);
+        }
+        container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">${title}</h4>${tableHtml}`;
+    }
+
+    // NEW: Function to handle showing the modal and fetching data
+    function showMetricsModal(service, resourceId) {
+        if (service !== 'EC2') return;
+
+        const event = new CustomEvent('open-metrics-modal', {
+            bubbles: true,
+            detail: { 
+                title: 'EC2 Instance Metrics',
+                resourceId: resourceId
+            }
+        });
+        window.dispatchEvent(event);
+    }
+
+        function fetchMetricsForModal(resourceId) {
+        // Clear previous chart
+        if (metricsChartInstance) {
+            metricsChartInstance.destroy();
+        }
+
+        // Fetch new data
+        fetch(`${window.location.origin}/api/metrics/ec2/${resourceId}`)
+            .then(res => res.json())
+            .then(data => {
+                renderMetricsChart(data);
+            })
+            .catch(err => console.error('Failed to fetch metrics:', err));
+    }
+
+    // NEW: Function to render the chart inside the modal
+function renderMetricsChart(data) {
+        const ctx = document.getElementById('metricsChart').getContext('2d');
+        const cpuData = data.CPUUtilization || [];
+        
+        const labels = cpuData.map(dp => new Date(dp.timestamp).toLocaleDateString());
+        const cpuValues = cpuData.map(dp => dp.average);
+
+        metricsChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Average CPU Utilization (%)',
+                    data: cpuValues,
+                    borderColor: 'rgb(79, 70, 229)',
+                    backgroundColor: 'rgba(79, 70, 229, 0.5)',
+                    fill: false,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
                     },
-                    options: {
-                        indexAxis: 'y',
-                        responsive: true,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return `Unexpected Spend: $${context.parsed.x.toFixed(2)}`;
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                beginAtZero: true,
-                                title: { display: true, text: 'Cost (USD)' }
-                            }
-                        }
+                    title: {
+                        display: true,
+                        text: 'CPU Utilization (Last 14 Days)'
                     }
-                });
+                }
             }
-        }
-      });
+        });
+    }
+    
     </script>
 </body>
 </html>
