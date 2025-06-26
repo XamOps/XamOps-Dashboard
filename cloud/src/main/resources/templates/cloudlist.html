@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xammer - Cloudlist</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style> body { font-family: 'Inter', sans-serif; } [x-cloak] { display: none !important; } </style>
+</head>
+<body class="bg-gray-100">
+
+<div class="flex h-screen bg-white">
+    <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+
+    <main class="flex-1 flex flex-col">
+        <header class="h-16 flex items-center justify-between border-b bg-white px-6">
+            <h1 class="text-xl font-semibold text-gray-800">Cloudlist - Resource Inventory</h1>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6" x-data="cloudlist()">
+            <div class="bg-white p-6 rounded-lg shadow-sm">
+                <!-- Search and Filter Controls -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <input type="text" x-model="searchTerm" placeholder="Search by name or ID..." class="md:col-span-2 form-input w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <select x-model="filterType" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">All Types</option>
+                        <option value="EC2 Instance">EC2 Instance</option>
+                        <option value="EBS Volume">EBS Volume</option>
+                    </select>
+                </div>
+
+                <!-- Resources Table -->
+                <div class="overflow-x-auto">
+                    <div x-show="isLoading" class="text-center p-8"> <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                    <div x-show="!isLoading && filteredResources.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">No resources found.</h3>
+                        <p class="mt-1 text-sm text-gray-500">Adjust your search or filter criteria.</p>
+                    </div>
+
+                    <table x-show="!isLoading && filteredResources.length > 0" class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3">Name / ID</th>
+                                <th class="px-6 py-3">Type</th>
+                                <th class="px-6 py-3">Region</th>
+                                <th class="px-6 py-3">State</th>
+                                <th class="px-6 py-3">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="resource in filteredResources" :key="resource.id">
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-6 py-4">
+                                        <p class="font-medium text-gray-900" x-text="resource.name"></p>
+                                        <p class="text-xs text-gray-500 font-mono" x-text="resource.id"></p>
+                                    </td>
+                                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="resource.type === 'EC2 Instance' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'" x-text="resource.type"></span></td>
+                                    <td class="px-6 py-4" x-text="resource.region"></td>
+                                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="{ 'bg-green-100 text-green-800': ['running', 'available'].includes(resource.state), 'bg-red-100 text-red-800': ['stopped', 'terminated'].includes(resource.state) }" x-text="resource.state"></span></td>
+                                    <td class="px-6 py-4">
+                                        <div class="text-xs text-gray-600">
+                                            <template x-for="(value, key) in resource.details">
+                                                <div class="flex justify-between">
+                                                    <span class="font-semibold" x-text="key + ':'"></span>
+                                                    <span class="font-mono" x-text="value"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+function cloudlist() {
+    return {
+        isLoading: true,
+        resources: [],
+        searchTerm: '',
+        filterType: '',
+        init() {
+            fetch(`${window.location.origin}/api/cloudlist/resources`)
+                .then(res => res.json())
+                .then(data => {
+                    this.resources = data;
+                    this.isLoading = false;
+                })
+                .catch(err => {
+                    console.error('Failed to load resources', err);
+                    this.isLoading = false;
+                });
+        },
+        get filteredResources() {
+            if (this.isLoading) {
+                return [];
+            }
+            return this.resources.filter(res => {
+                const searchMatch = this.searchTerm.toLowerCase() === '' || 
+                                    res.name.toLowerCase().includes(this.searchTerm.toLowerCase()) || 
+                                    res.id.toLowerCase().includes(this.searchTerm.toLowerCase());
+                const typeMatch = this.filterType === '' || res.type === this.filterType;
+                return searchMatch && typeMatch;
+            });
+        }
+    }
+}
+</script>
+
+</body>
+</html>

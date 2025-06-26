@@ -1,6 +1,9 @@
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.dto.MetricDto;
+import com.xammer.cloud.dto.ResourceDto;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
@@ -128,17 +131,78 @@ public class AwsDataService {
         return data;
     }
 
+
+        @Async("awsTaskExecutor")
+    @Cacheable("cloudlistResources")
+    public CompletableFuture<List<ResourceDto>> getAllResources() {
+        logger.info("Fetching all resources for Cloudlist...");
+
+        CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist();
+        CompletableFuture<List<ResourceDto>> ebsFuture = fetchEbsVolumesForCloudlist();
+
+        return ec2Future.thenCombine(ebsFuture, (ec2List, ebsList) -> {
+            List<ResourceDto> allResources = new ArrayList<>();
+            allResources.addAll(ec2List);
+            allResources.addAll(ebsList);
+            logger.info("... found {} total resources for Cloudlist.", allResources.size());
+            return allResources;
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return ec2Client.describeInstances().reservations().stream()
+                    .flatMap(r -> r.instances().stream())
+                    .map(i -> new ResourceDto(
+                        i.instanceId(),
+                        i.tags().stream().filter(t -> t.key().equals("Name")).findFirst().map(Tag::value).orElse("N/A"),
+                        "EC2 Instance",
+                        i.placement().availabilityZone().replaceAll(".$", ""),
+                        i.state().nameAsString(),
+                        i.launchTime(),
+                        Map.of("Type", i.instanceTypeAsString(), "Image ID", i.imageId())
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: EC2 instances.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchEbsVolumesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+             try {
+                return ec2Client.describeVolumes().volumes().stream()
+                    .map(v -> new ResourceDto(
+                        v.volumeId(),
+                        v.tags().stream().filter(t -> t.key().equals("Name")).findFirst().map(Tag::value).orElse("N/A"),
+                        "EBS Volume",
+                        v.availabilityZone().replaceAll(".$", ""),
+                        v.stateAsString(),
+                        v.createTime(),
+                        Map.of("Size", v.size() + " GiB", "Type", v.volumeTypeAsString())
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: EBS volumes.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
     // FIXED: Correctly reconstruct Datapoint objects from timestamps and values.
-    public Map<String, List<Datapoint>> getEc2InstanceMetrics(String instanceId) {
+    public Map<String, List<MetricDto>> getEc2InstanceMetrics(String instanceId) {
         logger.info("Fetching CloudWatch metrics for instance: {}", instanceId);
         try {
             GetMetricDataRequest cpuRequest = buildMetricDataRequest(instanceId, "CPUUtilization", "AWS/EC2");
             MetricDataResult cpuResult = cloudWatchClient.getMetricData(cpuRequest).metricDataResults().get(0);
-            List<Datapoint> cpuDatapoints = buildDatapoints(cpuResult);
+            List<MetricDto> cpuDatapoints = buildMetricDtos(cpuResult);
 
             GetMetricDataRequest networkInRequest = buildMetricDataRequest(instanceId, "NetworkIn", "AWS/EC2");
             MetricDataResult networkInResult = cloudWatchClient.getMetricData(networkInRequest).metricDataResults().get(0);
-            List<Datapoint> networkInDatapoints = buildDatapoints(networkInResult);
+            List<MetricDto> networkInDatapoints = buildMetricDtos(networkInResult);
 
             return Map.of(
                 "CPUUtilization", cpuDatapoints,
@@ -150,6 +214,19 @@ public class AwsDataService {
             return Collections.emptyMap();
         }
     }
+        private List<MetricDto> buildMetricDtos(MetricDataResult result) {
+        List<Instant> timestamps = result.timestamps();
+        List<Double> values = result.values();
+        
+        if (timestamps == null || values == null || timestamps.size() != values.size()) {
+            return Collections.emptyList();
+        }
+        
+        return IntStream.range(0, timestamps.size())
+                .mapToObj(i -> new MetricDto(timestamps.get(i), values.get(i)))
+                .collect(Collectors.toList());
+    }
+
 
     // --- Helper for reconstructing Datapoint objects ---
     private List<Datapoint> buildDatapoints(MetricDataResult result) {

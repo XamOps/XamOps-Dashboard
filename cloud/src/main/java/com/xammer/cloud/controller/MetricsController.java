@@ -1,12 +1,12 @@
 package com.xammer.cloud.controller;
 
+import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.service.AwsDataService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import software.amazon.awssdk.services.cloudwatch.model.Datapoint;
 
 import java.util.List;
 import java.util.Map;
@@ -21,9 +21,10 @@ public class MetricsController {
         this.awsDataService = awsDataService;
     }
 
+    // FIXED: The method now returns our JSON-friendly MetricDto.
     @GetMapping("/ec2/{instanceId}")
-    public ResponseEntity<Map<String, List<Datapoint>>> getEc2Metrics(@PathVariable String instanceId) {
-        Map<String, List<Datapoint>> metrics = awsDataService.getEc2InstanceMetrics(instanceId);
+    public ResponseEntity<Map<String, List<MetricDto>>> getEc2Metrics(@PathVariable String instanceId) {
+        Map<String, List<MetricDto>> metrics = awsDataService.getEc2InstanceMetrics(instanceId);
         return ResponseEntity.ok(metrics);
     }
 }

@@ -15,9 +15,10 @@
 <body class="bg-gray-100">
 
 <div class="flex h-screen bg-white">
+
+    <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
     <!-- Sidebar -->
-    <div class="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
-       <!-- Re-using sidebar from dashboard -->
+    <!-- <div class="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
        <div class="h-16 flex items-center justify-center border-b"><span class="text-xl font-bold text-indigo-600">XamOps</span></div>
        <div class="p-4 border-b">
            <select class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -33,7 +34,7 @@
            <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-users fa-fw w-5 text-center"></i><span>Teams</span></a><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-code fa-fw w-5 text-center"></i><span>Logs</span></a>
        </nav>
        <div class="p-4 border-t mt-auto"><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-sm bg-gray-100"><i class="fas fa-cloud-download-alt fa-fw w-5 text-center"></i><span>Account manager</span></a></div>
-    </div>
+    </div> -->
 
     <!-- Main Content -->
     <main class="flex-1 flex flex-col">

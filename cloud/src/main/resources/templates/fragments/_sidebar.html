@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<div th:fragment="sidebar" class="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
+    <div class="h-16 flex items-center justify-center border-b"><span class="text-xl font-bold text-indigo-600">XamOps</span></div>
+    <div class="p-4 border-b">
+        <select id="accountSelector" class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+             <option>MachaDalo</option> <!-- Placeholder, will be populated by JS -->
+        </select>
+    </div>
+    <nav class="flex-1 px-2 py-4 space-y-1 text-sm">
+        <a href="/" th:classappend="${#httpServletRequest.getRequestURI() == '/' ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-600 hover:bg-gray-100'}" class="flex items-center gap-3 rounded-md px-3 py-2"><i class="fas fa-tachometer-alt fa-fw w-5 text-center"></i><span>Dashboard</span></a>
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-chart-bar fa-fw w-5 text-center"></i><span>Reports</span></a>
+        
+        <div x-data="{ open: true }">
+            <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                <div class="flex items-center gap-3"><i class="fas fa-cloud fa-fw w-5 text-center"></i><span>Cloudview</span></div>
+                <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+            </button>
+            <div x-show="open" x-cloak class="pl-8 py-1 space-y-1">
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudk8s <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a>
+                <a href="/cloudlist" th:classappend="${#httpServletRequest.getRequestURI() == '/cloudlist' ? 'text-indigo-600 font-semibold' : ''}" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudlist</a>
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudmap</a>
+            </div>
+        </div>
+
+        <div x-data="{ open: true }">
+             <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2" th:classappend="${#httpServletRequest.getRequestURI() == '/waste' ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-600 hover:bg-gray-100'}">
+                <div class="flex items-center gap-3"><i class="fas fa-cogs fa-fw w-5 text-center"></i><span>Optimization</span></div>
+                <i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+            </button>
+            <div x-show="open" x-cloak class="pl-8 py-1 space-y-1">
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">FinOps Report <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a>
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Costs overview</a>
+                <a href="/waste" th:classappend="${#httpServletRequest.getRequestURI() == '/waste' ? 'text-indigo-600 font-semibold' : ''}" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Waste</a>
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Rightsizing</a>
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Reservation</a>
+                <a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Savings</a>
+            </div>
+        </div>
+        <!-- ... other nav items ... -->
+    </nav>
+    <div class="p-4 border-t mt-auto"><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-sm bg-gray-100"><i class="fas fa-cloud-download-alt fa-fw w-5 text-center"></i><span>Account manager</span></a></div>
+</div>
+
+</body>
+</html>
