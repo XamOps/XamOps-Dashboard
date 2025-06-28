@@ -69,13 +69,11 @@
 
     <div id="appBody" class="hidden">
         <div class="flex">
-            <!-- FIXED SIDEBAR CONTAINER -->
             <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20">
                 <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
             </aside>
 
-             <!-- MAIN CONTENT with ml-64 -->
-            <div class="ml-64 flex-1">
+             <div class="ml-64 flex-1">
                  <main class="flex-1 p-6 bg-gray-50 space-y-6">
                     <header class="h-16 flex items-center justify-between bg-white px-6 -mx-6 -mt-6 mb-6 border-b sticky top-0 z-10">
                         <div class="flex items-center gap-4 text-sm">
@@ -111,6 +109,16 @@
         const errorEl = document.getElementById('errorState');
         const errorMessageEl = document.getElementById('errorMessage');
         const appBodyEl = document.getElementById('appBody');
+        
+        // Check for cached data in sessionStorage
+        const cachedData = sessionStorage.getItem('dashboardData');
+
+        if (cachedData) {
+            populatePage(JSON.parse(cachedData));
+            loadingEl.classList.add('hidden');
+            appBodyEl.classList.remove('hidden');
+            return;
+        }
 
         fetch(`${window.location.origin}/api/dashboard`)
             .then(response => {
@@ -122,6 +130,8 @@
             })
             .then(data => {
                 if (!data) return;
+                // Cache the data in sessionStorage
+                sessionStorage.setItem('dashboardData', JSON.stringify(data));
                 populatePage(data);
                 loadingEl.classList.add('hidden');
                 appBodyEl.classList.remove('hidden');

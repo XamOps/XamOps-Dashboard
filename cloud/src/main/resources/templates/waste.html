@@ -44,18 +44,10 @@
 <body class="bg-gray-50">
 
 <div class="flex">
-    <!-- 
-      FIXED SIDEBAR CONTAINER
-      This container is fixed to the screen and holds the sidebar fragment.
-    -->
     <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
         <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
     </aside>
 
-    <!-- 
-      MAIN CONTENT with ml-64
-      The margin-left prevents the main content from being hidden under the fixed sidebar.
-    -->
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="wasteManagement()">
             <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
@@ -63,14 +55,13 @@
                     <h1 class="text-xl font-semibold text-gray-800">Waste Management</h1>
                     <p class="text-xs text-gray-500">Identify and eliminate unused cloud resources</p>
                 </div>
-                 <button @click="loadWastedResources" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                 <button @click="loadWastedResources(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
                     <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
                     <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
                 </button>
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                 <!-- Stats Cards -->
                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     <div class="bg-white rounded-xl p-5 card-shadow">
                         <div class="flex justify-between items-start">
@@ -114,7 +105,6 @@
                     </div>
                 </div>
                 
-                <!-- Table and Filters -->
                 <div class="bg-white rounded-xl p-6 card-shadow">
                     <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
                         <div>
@@ -131,7 +121,6 @@
                             <button @click="filter = 'EBS Volume'" :class="{ 'bg-indigo-600 text-white': filter === 'EBS Volume', 'bg-gray-100 text-gray-700': filter !== 'EBS Volume' }" class="px-3 py-1.5 text-sm rounded-lg transition">Volumes</button>
                         </div>
                     </div>
-                    <!-- Table content from previous correct version -->
                     <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-600">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -186,7 +175,16 @@ function wasteManagement() {
             this.$watch('filter', () => this.applyFilter());
         },
         
-        loadWastedResources() {
+        loadWastedResources(forceRefresh = false) {
+            const cachedData = sessionStorage.getItem('wasteData');
+
+            if (!forceRefresh && cachedData) {
+                this.wastedResources = JSON.parse(cachedData);
+                this.applyFilter();
+                this.isLoading = false;
+                return;
+            }
+
             this.isLoading = true;
             fetch(`${window.location.origin}/api/waste`)
                 .then(res => {
@@ -194,6 +192,7 @@ function wasteManagement() {
                     return res.json();
                 })
                 .then(data => {
+                    sessionStorage.setItem('wasteData', JSON.stringify(data));
                     this.wastedResources = data;
                     this.applyFilter();
                 })

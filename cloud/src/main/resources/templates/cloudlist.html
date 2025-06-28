@@ -21,7 +21,6 @@
 
         <div class="flex-1 overflow-y-auto p-6" x-data="cloudlist()">
             <div class="bg-white p-6 rounded-lg shadow-sm">
-                <!-- Search and Filter Controls -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <input type="text" x-model="searchTerm" placeholder="Search by name or ID..." class="md:col-span-2 form-input w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                     <select x-model="filterType" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
@@ -42,7 +41,6 @@
                     </select>
                 </div>
 
-                <!-- Resources Table -->
                 <div class="overflow-x-auto">
                     <div x-show="isLoading" class="text-center p-8"> <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
                     <div x-show="!isLoading && filteredResources.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
@@ -101,6 +99,10 @@
 </div>
 
 <script>
+const dataCache = {
+    cloudlist: null
+};
+
 function cloudlist() {
     return {
         isLoading: true,
@@ -108,9 +110,16 @@ function cloudlist() {
         searchTerm: '',
         filterType: '',
         init() {
+            if (dataCache.cloudlist) {
+                this.resources = dataCache.cloudlist;
+                this.isLoading = false;
+                return;
+            }
+
             fetch(`${window.location.origin}/api/cloudlist/resources`)
                 .then(res => res.json())
                 .then(data => {
+                    dataCache.cloudlist = data;
                     this.resources = data;
                     this.isLoading = false;
                 })
@@ -119,7 +128,6 @@ function cloudlist() {
                     this.isLoading = false;
                 });
         },
-        // FIXED: Rewrote the filtering logic to be more robust and declarative.
         get filteredResources() {
             if (this.isLoading) {
                 return [];

@@ -1,6 +1,5 @@
 package com.xammer.cloud.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
@@ -27,8 +26,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 @Configuration
 public class AwsConfig {
 
-    @Value("${aws.region}")
-    private String region;
+    private final String region = "ap-south-1"; // Region is now set here
 
     @Bean("awsTaskExecutor")
     public TaskExecutor threadPoolTaskExecutor() {
@@ -51,7 +49,7 @@ public class AwsConfig {
     @Bean public ComputeOptimizerClient computeOptimizerClient() { return ComputeOptimizerClient.builder().region(Region.of(region)).build(); }
     @Bean public PricingClient pricingClient() { return PricingClient.builder().region(Region.US_EAST_1).build(); }
     @Bean public RdsClient rdsClient() { return RdsClient.builder().region(Region.of(region)).build(); }
-    
+
     // ADDED: New clients for service expansion
     @Bean public S3Client s3Client() { return S3Client.builder().region(Region.of(region)).build(); }
     @Bean public ElasticLoadBalancingV2Client elbv2Client() { return ElasticLoadBalancingV2Client.builder().region(Region.of(region)).build(); }
