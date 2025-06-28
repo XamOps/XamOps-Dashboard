@@ -40,8 +40,8 @@ public class DashboardData {
         private String regionName;
         private String regionId;
         private String status;
-        private double top; 
-        private double left;
+        private double lat; // UPDATED
+        private double lon; // UPDATED
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor

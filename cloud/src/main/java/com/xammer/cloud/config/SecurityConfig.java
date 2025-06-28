@@ -1,5 +1,6 @@
 package com.xammer.cloud.config;
 
+import com.xammer.cloud.security.CustomAuthenticationSuccessHandler; // Import the new handler
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,38 +17,43 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    // Inject your custom success handler
+    private final CustomAuthenticationSuccessHandler authenticationSuccessHandler;
+
+    public SecurityConfig(CustomAuthenticationSuccessHandler authenticationSuccessHandler) {
+        this.authenticationSuccessHandler = authenticationSuccessHandler;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests((requests) -> requests
-                .antMatchers("/", "/waste").authenticated() // Require authentication for the main pages
-                .anyRequest().permitAll() // Allow access to static resources like CSS/JS and the login page
+                .antMatchers("/", "/waste", "/cloudlist").authenticated() // Secure the main pages
+                .anyRequest().permitAll()
             )
             .formLogin((form) -> form
                 .loginPage("/login")
+                .successHandler(authenticationSuccessHandler) // Use the custom success handler
                 .permitAll()
             )
             .logout((logout) -> logout.permitAll());
 
-        // For simplicity in a REST/SPA architecture, we can disable CSRF.
         http.csrf().disable();
 
         return http.build();
     }
 
-    // FIXED: Step 1 - Define a modern, strong password encoder bean.
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // FIXED: Step 2 - Update the UserDetailsService to use the new encoder.
     @Bean
     public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
         UserDetails user =
              User.builder()
                 .username("user")
-                .password(passwordEncoder.encode("password")) // The password is now properly encoded
+                .password(passwordEncoder.encode("password"))
                 .roles("USER")
                 .build();
 
