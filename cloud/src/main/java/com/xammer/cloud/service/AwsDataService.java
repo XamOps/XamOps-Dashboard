@@ -3,12 +3,12 @@ package com.xammer.cloud.service;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ResourceDto;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatch.model.Datapoint;
 import software.amazon.awssdk.services.cloudwatch.model.Dimension;
@@ -22,22 +22,31 @@ import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
 import software.amazon.awssdk.services.computeoptimizer.model.*;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
 import software.amazon.awssdk.services.costexplorer.model.*;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ecr.EcrClient;
 import software.amazon.awssdk.services.ecs.EcsClient;
 import software.amazon.awssdk.services.eks.EksClient;
+import software.amazon.awssdk.services.elasticache.ElastiCacheClient;
+import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.iam.IamClient;
 import software.amazon.awssdk.services.iam.model.NoSuchEntityException;
 import software.amazon.awssdk.services.iam.model.PasswordPolicy;
 import software.amazon.awssdk.services.iam.model.PolicyScopeType;
 import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.rds.RdsClient;
+import software.amazon.awssdk.services.route53.Route53Client;
+import software.amazon.awssdk.services.s3.S3Client;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +72,14 @@ public class AwsDataService {
     private final CostExplorerClient costExplorerClient;
     private final ComputeOptimizerClient computeOptimizerClient;
     private final PricingService pricingService;
+    private final RdsClient rdsClient;
+    private final S3Client s3Client;
+    private final ElasticLoadBalancingV2Client elbv2Client;
+    private final AutoScalingClient autoScalingClient;
+    private final ElastiCacheClient elastiCacheClient;
+    private final DynamoDbClient dynamoDbClient;
+    private final EcrClient ecrClient;
+    private final Route53Client route53Client;
 
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("us-east-1", "us-west-2", "eu-west-1", "eu-central-1", "ca-central-1");
     private static final Map<String, double[]> REGION_COORDINATES = Map.ofEntries(
@@ -76,14 +93,27 @@ public class AwsDataService {
             Map.entry("ap-northeast-3", new double[]{34, 83}), Map.entry("ap-south-1", new double[]{70, 60}),
             Map.entry("sa-east-1", new double[]{83, 35})
     );
-    public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda, CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co, PricingService pricingService) {
+    public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda,
+                          CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co,
+                          PricingService pricingService, RdsClient rdsClient, S3Client s3Client,
+                          ElasticLoadBalancingV2Client elbv2Client, AutoScalingClient autoScalingClient,
+                          ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient, Route53Client route53Client) {
         this.ec2Client = ec2; this.iamClient = iam; this.ecsClient = ecs; this.eksClient = eks; this.lambdaClient = lambda; this.cloudWatchClient = cw; this.costExplorerClient = ce;
         this.computeOptimizerClient = co;
         this.pricingService = pricingService;
+        this.rdsClient = rdsClient;
+        this.s3Client = s3Client;
+        this.elbv2Client = elbv2Client;
+        this.autoScalingClient = autoScalingClient;
+        this.elastiCacheClient = elastiCacheClient;
+        this.dynamoDbClient = dynamoDbClient;
+        this.ecrClient = ecrClient;
+        this.route53Client = route53Client;
     }
 
 
     public DashboardData getDashboardData() throws ExecutionException, InterruptedException {
+        // ... orchestration logic remains the same ...
         logger.info("--- LAUNCHING ASYNC DATA FETCH FROM AWS ---");
 
         CompletableFuture<List<DashboardData.RegionStatus>> regionStatusFuture = getRegionStatusForAccount();
@@ -131,37 +161,54 @@ public class AwsDataService {
         return data;
     }
 
-
-        @Async("awsTaskExecutor")
+@Async("awsTaskExecutor")
     @Cacheable("cloudlistResources")
     public CompletableFuture<List<ResourceDto>> getAllResources() {
         logger.info("Fetching all resources for Cloudlist...");
 
-        CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist();
-        CompletableFuture<List<ResourceDto>> ebsFuture = fetchEbsVolumesForCloudlist();
+        List<CompletableFuture<List<ResourceDto>>> resourceFutures = List.of(
+            fetchEc2InstancesForCloudlist(),
+            fetchEbsVolumesForCloudlist(),
+            fetchRdsInstancesForCloudlist(),
+            fetchLambdaFunctionsForCloudlist(),
+            fetchVpcsForCloudlist(),
+            fetchSecurityGroupsForCloudlist(),
+            fetchS3BucketsForCloudlist(),
+            fetchLoadBalancersForCloudlist(),
+            fetchAutoScalingGroupsForCloudlist(),
+            fetchElastiCacheClustersForCloudlist(),
+            fetchDynamoDbTablesForCloudlist(),
+            fetchEcrRepositoriesForCloudlist(),
+            fetchRoute53HostedZonesForCloudlist()
+        );
 
-        return ec2Future.thenCombine(ebsFuture, (ec2List, ebsList) -> {
-            List<ResourceDto> allResources = new ArrayList<>();
-            allResources.addAll(ec2List);
-            allResources.addAll(ebsList);
-            logger.info("... found {} total resources for Cloudlist.", allResources.size());
-            return allResources;
-        });
+        // FIXED: This logic now safely combines results from all successful futures.
+        return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> resourceFutures.stream()
+                .map(future -> future.getNow(Collections.emptyList())) // Get result if complete, otherwise get empty list
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList())
+            );
     }
-
     private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                logger.info("Cloudlist: Fetching EC2 Instances...");
                 return ec2Client.describeInstances().reservations().stream()
                     .flatMap(r -> r.instances().stream())
                     .map(i -> new ResourceDto(
                         i.instanceId(),
-                        i.tags().stream().filter(t -> t.key().equals("Name")).findFirst().map(Tag::value).orElse("N/A"),
+                        getTagName(i.tags(), "N/A"),
                         "EC2 Instance",
                         i.placement().availabilityZone().replaceAll(".$", ""),
                         i.state().nameAsString(),
                         i.launchTime(),
-                        Map.of("Type", i.instanceTypeAsString(), "Image ID", i.imageId())
+                        Map.of(
+                            "Type", i.instanceTypeAsString(),
+                            "Image ID", i.imageId(),
+                            "VPC ID", i.vpcId(),
+                            "Private IP", i.privateIpAddress()
+                        )
                     ))
                     .collect(Collectors.toList());
             } catch (Exception e) {
@@ -174,15 +221,20 @@ public class AwsDataService {
     private CompletableFuture<List<ResourceDto>> fetchEbsVolumesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
              try {
+                logger.info("Cloudlist: Fetching EBS Volumes...");
                 return ec2Client.describeVolumes().volumes().stream()
                     .map(v -> new ResourceDto(
                         v.volumeId(),
-                        v.tags().stream().filter(t -> t.key().equals("Name")).findFirst().map(Tag::value).orElse("N/A"),
+                        getTagName(v.tags(), "N/A"),
                         "EBS Volume",
                         v.availabilityZone().replaceAll(".$", ""),
                         v.stateAsString(),
                         v.createTime(),
-                        Map.of("Size", v.size() + " GiB", "Type", v.volumeTypeAsString())
+                        Map.of(
+                            "Size", v.size() + " GiB", 
+                            "Type", v.volumeTypeAsString(),
+                            "Attached to", v.attachments().isEmpty() ? "N/A" : v.attachments().get(0).instanceId()
+                        )
                     ))
                     .collect(Collectors.toList());
             } catch (Exception e) {
@@ -191,6 +243,280 @@ public class AwsDataService {
             }
         });
     }
+
+    private CompletableFuture<List<ResourceDto>> fetchRdsInstancesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching RDS Instances...");
+                return rdsClient.describeDBInstances().dbInstances().stream()
+                    .map(i -> new ResourceDto(
+                        i.dbInstanceIdentifier(),
+                        i.dbInstanceIdentifier(),
+                        "RDS Instance",
+                        i.availabilityZone().replaceAll(".$", ""),
+                        i.dbInstanceStatus(),
+                        i.instanceCreateTime(),
+                        Map.of(
+                            "Engine", i.engine() + " " + i.engineVersion(),
+                            "Class", i.dbInstanceClass(),
+                            "Multi-AZ", i.multiAZ().toString()
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: RDS Instances.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchLambdaFunctionsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching Lambda Functions...");
+                return lambdaClient.listFunctions().functions().stream()
+                    .map(f -> {
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+                        Instant lastModified = ZonedDateTime.parse(f.lastModified(), formatter).toInstant();
+                        
+                        return new ResourceDto(
+                            f.functionName(),
+                            f.functionName(),
+                            "Lambda Function",
+                            "Global",
+                            "Active",
+                            lastModified,
+                            Map.of(
+                                "Runtime", f.runtimeAsString(),
+                                "Memory", f.memorySize() + " MB",
+                                "Timeout", f.timeout() + "s"
+                            )
+                        );
+                    })
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: Lambda Functions.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchVpcsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching VPCs...");
+                return ec2Client.describeVpcs().vpcs().stream()
+                    .map(v -> new ResourceDto(
+                        v.vpcId(),
+                        getTagName(v.tags(), v.vpcId()),
+                        "VPC",
+                        "Regional",
+                        v.stateAsString(),
+                        null,
+                        Map.of(
+                            "CIDR Block", v.cidrBlock(),
+                            "Is Default", v.isDefault().toString()
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: VPCs.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchSecurityGroupsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching Security Groups...");
+                return ec2Client.describeSecurityGroups().securityGroups().stream()
+                    .map(sg -> new ResourceDto(
+                        sg.groupId(),
+                        sg.groupName(),
+                        "Security Group",
+                        "Regional",
+                        "Available",
+                        null,
+                        Map.of(
+                            "VPC ID", sg.vpcId(),
+                            "Inbound Rules", String.valueOf(sg.ipPermissions().size()),
+                            "Outbound Rules", String.valueOf(sg.ipPermissionsEgress().size())
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: Security Groups.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching S3 Buckets...");
+                return s3Client.listBuckets().buckets().stream()
+                    .map(b -> new ResourceDto(
+                        b.name(), b.name(), "S3 Bucket", "Global", "Available", b.creationDate(), Collections.emptyMap()
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: S3 Buckets.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchLoadBalancersForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching Load Balancers...");
+                return elbv2Client.describeLoadBalancers().loadBalancers().stream()
+                    .map(lb -> new ResourceDto(
+                        lb.loadBalancerName(),
+                        lb.loadBalancerName(),
+                        "Load Balancer",
+                        lb.availabilityZones().get(0).zoneName().replaceAll(".$",""),
+                        lb.state().codeAsString(),
+                        lb.createdTime(),
+                        Map.of(
+                           "Type", lb.typeAsString(),
+                           "Scheme", lb.schemeAsString(),
+                           "VPC ID", lb.vpcId()
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: Load Balancers.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchAutoScalingGroupsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching Auto Scaling Groups...");
+                return autoScalingClient.describeAutoScalingGroups().autoScalingGroups().stream()
+                    .map(asg -> new ResourceDto(
+                        asg.autoScalingGroupName(),
+                        asg.autoScalingGroupName(),
+                        "Auto Scaling Group",
+                        asg.availabilityZones().get(0).replaceAll(".$",""),
+                        "Active",
+                        asg.createdTime(),
+                        Map.of(
+                           "Desired", asg.desiredCapacity().toString(),
+                           "Min", asg.minSize().toString(),
+                           "Max", asg.maxSize().toString()
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: Auto Scaling Groups.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchElastiCacheClustersForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching ElastiCache Clusters...");
+                return elastiCacheClient.describeCacheClusters().cacheClusters().stream()
+                    .map(c -> new ResourceDto(
+                        c.cacheClusterId(),
+                        c.cacheClusterId(),
+                        "ElastiCache Cluster",
+                        c.preferredAvailabilityZone().replaceAll(".$",""),
+                        c.cacheClusterStatus(),
+                        c.cacheClusterCreateTime(),
+                        Map.of(
+                            "Engine", c.engine() + " " + c.engineVersion(),
+                            "NodeType", c.cacheNodeType(),
+                            "Nodes", c.numCacheNodes().toString()
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: ElastiCache Clusters.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchDynamoDbTablesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching DynamoDB Tables...");
+                return dynamoDbClient.listTables().tableNames().stream()
+                    .map(tableName -> {
+                        var tableDesc = dynamoDbClient.describeTable(b -> b.tableName(tableName)).table();
+                        return new ResourceDto(
+                            tableName, tableName, "DynamoDB Table", "Regional",
+                            tableDesc.tableStatusAsString(), tableDesc.creationDateTime(),
+                            Map.of(
+                                "Items", tableDesc.itemCount().toString(),
+                                "Size (Bytes)", tableDesc.tableSizeBytes().toString()
+                            )
+                        );
+                    })
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: DynamoDB Tables.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchEcrRepositoriesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching ECR Repositories...");
+                return ecrClient.describeRepositories().repositories().stream()
+                    .map(r -> new ResourceDto(
+                        r.repositoryName(),
+                        r.repositoryName(),
+                        "ECR Repository",
+                        "Regional",
+                        "Available",
+                        r.createdAt(),
+                        Map.of("URI", r.repositoryUri())
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: ECR Repositories.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchRoute53HostedZonesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching Route 53 Hosted Zones...");
+                return route53Client.listHostedZones().hostedZones().stream()
+                    .map(z -> new ResourceDto(
+                        z.id(),
+                        z.name(),
+                        "Route 53 Zone",
+                        "Global",
+                        "Available",
+                        null,
+                        Map.of(
+                            "Type", z.config().privateZone() ? "Private" : "Public",
+                            "Record Count", z.resourceRecordSetCount().toString()
+                        )
+                    ))
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: Route 53 Hosted Zones.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
 
     // FIXED: Correctly reconstruct Datapoint objects from timestamps and values.
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String instanceId) {
@@ -595,6 +921,15 @@ public class AwsDataService {
     
     private String getTagName(Snapshot snapshot) {
         return snapshot.hasTags() ? snapshot.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(snapshot.snapshotId()) : snapshot.snapshotId();
+    }
+
+    // Helper for extracting tag name from a list of tags, with a default value
+    private String getTagName(List<Tag> tags, String defaultName) {
+        return tags.stream()
+                .filter(t -> t.key().equalsIgnoreCase("Name"))
+                .findFirst()
+                .map(Tag::value)
+                .orElse(defaultName);
     }
 
     private double calculateEbsMonthlyCost(Volume volume, String region) {
