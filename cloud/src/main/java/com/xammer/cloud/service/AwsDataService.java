@@ -171,6 +171,21 @@ public class AwsDataService {
     }
 
     @Async("awsTaskExecutor")
+    @Cacheable("allRecommendations")
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getAllOptimizationRecommendations() {
+        logger.info("Fetching all optimization recommendations (EC2, EBS, Lambda)...");
+
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = getEc2InstanceRecommendations();
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = getEbsVolumeRecommendations();
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture = getLambdaFunctionRecommendations();
+
+        return CompletableFuture.allOf(ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture)
+            .thenApply(v -> Stream.of(ec2RecsFuture.join(), ebsRecsFuture.join(), lambdaRecsFuture.join())
+                .flatMap(List::stream)
+                .collect(Collectors.toList()));
+    }
+    
+    @Async("awsTaskExecutor")
     @Cacheable("regionStatus")
     public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForAccount() {
         logger.info("Fetching status for active regions (regions with running EC2 instances)...");
@@ -1178,7 +1193,7 @@ public class AwsDataService {
         "cloudlistResources", "wastedResources", "regionStatus", "inventory",
         "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
         "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
-        "billingSummary", "iamResources", "costHistory"
+        "billingSummary", "iamResources", "costHistory", "allRecommendations"
     }, allEntries = true)
     public void clearAllCaches() {
         logger.info("All dashboard caches have been evicted.");

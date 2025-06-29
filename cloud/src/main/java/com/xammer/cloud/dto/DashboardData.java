@@ -40,8 +40,8 @@ public class DashboardData {
         private String regionName;
         private String regionId;
         private String status;
-        private double lat; // UPDATED
-        private double lon; // UPDATED
+        private double lat;
+        private double lon;
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor
@@ -100,6 +100,35 @@ public class DashboardData {
         private double estimatedMonthlySavings;
         private String recommendationReason;
     }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class RightsizingRecommendation {
+        private String resourceId;
+        private String accountName;
+        private String region;
+        private String service;
+        private String currentType;
+        private String usage;
+        private String recommendedType;
+        private double currentMonthlyCost;
+        private double recommendedMonthlyCost;
+        private double estimatedMonthlySavings;
+        private String recommendationReason;
+        private List<RightsizingOption> recommendationOptions;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class RightsizingOption {
+        private String recommendedType;
+        private double recommendedMonthlyCost;
+        private double estimatedMonthlySavings;
+        private String usage;
+    }
+
 
     @Data
     @AllArgsConstructor
