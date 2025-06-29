@@ -83,7 +83,7 @@ public class AwsDataService {
     private final Route53Client route53Client;
 
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("us-east-1", "us-west-2", "eu-west-1", "eu-central-1", "ca-central-1");
-    
+
     private static final Map<String, double[]> REGION_GEO = Map.ofEntries(
             Map.entry("us-east-1", new double[]{38.8951, -77.0364}),
             Map.entry("us-east-2", new double[]{40.0, -83.0}),
@@ -144,7 +144,7 @@ public class AwsDataService {
                 costHistoryFuture, billingFuture, iamFuture, savingsFuture,
                 ec2RecsFuture, anomaliesFuture, ebsRecsFuture,
                 lambdaRecsFuture, reservationFuture, reservationPurchaseFuture).join();
-        
+
         logger.info("--- ALL ASYNC DATA FETCHES COMPLETE ---");
 
         List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.get();
@@ -164,13 +164,13 @@ public class AwsDataService {
                 optimizationSummary,
                 null
         );
-        
+
         data.setAvailableAccounts(List.of(mainAccount, new DashboardData.Account("987654321098", "Xammer", new ArrayList<>(), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)));
         data.setSelectedAccount(mainAccount);
         return data;
     }
-    
-    @Async("awsTaskExecutor") 
+
+    @Async("awsTaskExecutor")
     @Cacheable("regionStatus")
     public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForAccount() {
         logger.info("Fetching status for active regions (regions with running EC2 instances)...");
@@ -192,7 +192,7 @@ public class AwsDataService {
                         return regionClient.describeInstances(request).hasReservations();
                     } catch (Exception e) {
                         logger.warn("Could not perform active check for region {}: {}", region.regionName(), e.getMessage());
-                        return false; 
+                        return false;
                     }
                 })
                 .map(this::mapRegionToStatus)
@@ -202,15 +202,15 @@ public class AwsDataService {
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
     }
-    
+
     private DashboardData.RegionStatus mapRegionToStatus(Region region) {
         double[] coords = REGION_GEO.get(region.regionName());
-        String status = "ACTIVE"; 
-        
+        String status = "ACTIVE";
+
         if (SUSTAINABLE_REGIONS.contains(region.regionName())) {
             status = "SUSTAINABLE";
         }
-        
+
         return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, coords[0], coords[1]);
     }
 
@@ -242,7 +242,7 @@ public class AwsDataService {
                 .collect(Collectors.toList())
             );
     }
-    
+
     private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -284,7 +284,7 @@ public class AwsDataService {
                         v.stateAsString(),
                         v.createTime(),
                         Map.of(
-                            "Size", v.size() + " GiB", 
+                            "Size", v.size() + " GiB",
                             "Type", v.volumeTypeAsString(),
                             "Attached to", v.attachments().isEmpty() ? "N/A" : v.attachments().get(0).instanceId()
                         )
@@ -331,7 +331,7 @@ public class AwsDataService {
                     .map(f -> {
                         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
                         Instant lastModified = ZonedDateTime.parse(f.lastModified(), formatter).toInstant();
-                        
+
                         return new ResourceDto(
                             f.functionName(),
                             f.functionName(),
@@ -569,7 +569,7 @@ public class AwsDataService {
             }
         });
     }
-    
+
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String instanceId) {
         logger.info("Fetching CloudWatch metrics for instance: {}", instanceId);
         try {
@@ -591,15 +591,15 @@ public class AwsDataService {
             return Collections.emptyMap();
         }
     }
-    
+
     private List<MetricDto> buildMetricDtos(MetricDataResult result) {
         List<Instant> timestamps = result.timestamps();
         List<Double> values = result.values();
-        
+
         if (timestamps == null || values == null || timestamps.size() != values.size()) {
             return Collections.emptyList();
         }
-        
+
         return IntStream.range(0, timestamps.size())
                 .mapToObj(i -> new MetricDto(timestamps.get(i), values.get(i)))
                 .collect(Collectors.toList());
@@ -641,11 +641,14 @@ public class AwsDataService {
         wasted.addAll(findUnusedElasticIps());
         wasted.addAll(findOldSnapshots());
         wasted.addAll(findDeregisteredAmis());
+        wasted.addAll(findIdleRdsInstances());
+        wasted.addAll(findIdleLoadBalancers());
+        wasted.addAll(findUnusedSecurityGroups());
         logger.info("... found {} wasted resources.", wasted.size());
         return CompletableFuture.completedFuture(wasted);
     }
-    
-    @Async("awsTaskExecutor") 
+
+    @Async("awsTaskExecutor")
     @Cacheable("inventory")
     public CompletableFuture<DashboardData.ResourceInventory> getResourceInventory() {
         logger.info("Fetching resource inventory...");
@@ -660,8 +663,8 @@ public class AwsDataService {
         try { snapshots = ec2Client.describeSnapshots(r -> r.ownerIds("self")).snapshots().size(); } catch (Exception e) { logger.error("Inv check fail: Snapshots", e); }
         return CompletableFuture.completedFuture(new DashboardData.ResourceInventory(vpc, ecs, ec2, k8s, lambdas, ebs, images, snapshots));
     }
-    
-    @Async("awsTaskExecutor") 
+
+    @Async("awsTaskExecutor")
     @Cacheable("cloudwatchStatus")
     public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus() {
         logger.info("Fetching CloudWatch status...");
@@ -674,7 +677,7 @@ public class AwsDataService {
         } catch (Exception e) { logger.error("Could not fetch CloudWatch alarms.", e); return CompletableFuture.completedFuture(new DashboardData.CloudWatchStatus(0,0,0)); }
     }
 
-    @Async("awsTaskExecutor") 
+    @Async("awsTaskExecutor")
     @Cacheable("securityInsights")
     public CompletableFuture<List<DashboardData.SecurityInsight>> getSecurityInsights() {
         logger.info("Fetching security insights...");
@@ -690,7 +693,7 @@ public class AwsDataService {
         catch (Exception e) { logger.error("Could not fetch password policy.", e); }
         return CompletableFuture.completedFuture(insights);
     }
-    
+
     @Async("awsTaskExecutor")
     @Cacheable("ec2Recs")
     public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEc2InstanceRecommendations() {
@@ -707,7 +710,7 @@ public class AwsDataService {
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
-    
+
     @Async("awsTaskExecutor")
     @Cacheable("costAnomalies")
     public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies() {
@@ -724,7 +727,7 @@ public class AwsDataService {
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
-    
+
     @Async("awsTaskExecutor")
     @Cacheable("ebsRecs")
     public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEbsVolumeRecommendations() {
@@ -744,7 +747,7 @@ public class AwsDataService {
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
-    
+
     @Async("awsTaskExecutor")
     @Cacheable("lambdaRecs")
     public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getLambdaFunctionRecommendations() {
@@ -764,7 +767,7 @@ public class AwsDataService {
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
-    
+
     @Async("awsTaskExecutor")
     @Cacheable("reservationAnalysis")
     public CompletableFuture<DashboardData.ReservationAnalysis> getReservationAnalysis() {
@@ -796,7 +799,7 @@ public class AwsDataService {
                 .service("Amazon Elastic Compute Cloud - Compute")
                 .build();
             GetReservationPurchaseRecommendationResponse response = costExplorerClient.getReservationPurchaseRecommendation(request);
-            
+
             return CompletableFuture.completedFuture(response.recommendations().stream()
                 .filter(rec -> rec.recommendationDetails() != null && !rec.recommendationDetails().isEmpty())
                 .flatMap(rec -> rec.recommendationDetails().stream()
@@ -880,7 +883,7 @@ public class AwsDataService {
         List<DashboardData.SavingsSuggestion> suggestions = List.of(new DashboardData.SavingsSuggestion("Rightsizing", 155.93), new DashboardData.SavingsSuggestion("Spots", 211.78));
         return CompletableFuture.completedFuture(new DashboardData.SavingsSummary(suggestions.stream().mapToDouble(DashboardData.SavingsSuggestion::getSuggested).sum(), suggestions));
     }
-    
+
     private List<DashboardData.WastedResource> findUnattachedEbsVolumes() {
        try {
            return ec2Client.describeVolumes(req -> req.filters(f -> f.name("status").values("available")))
@@ -928,7 +931,7 @@ public class AwsDataService {
             return Collections.emptyList();
         }
     }
-    
+
     private List<DashboardData.WastedResource> findDeregisteredAmis() {
         try {
             DescribeImagesRequest imagesRequest = DescribeImagesRequest.builder().owners("self").build();
@@ -941,11 +944,118 @@ public class AwsDataService {
             return Collections.emptyList();
         }
     }
-    
+
+    private List<DashboardData.WastedResource> findIdleRdsInstances() {
+        try {
+            return rdsClient.describeDBInstances().dbInstances().stream()
+                .filter(this::isRdsInstanceIdle)
+                .map(dbInstance -> new DashboardData.WastedResource(
+                    dbInstance.dbInstanceIdentifier(),
+                    dbInstance.dbInstanceIdentifier(),
+                    "RDS Instance",
+                    dbInstance.availabilityZone().replaceAll(".$", ""),
+                    20.0, // Placeholder for cost
+                    "Idle RDS Instance (no connections)"
+                ))
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("Sub-task failed: idle RDS instances.", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean isRdsInstanceIdle(software.amazon.awssdk.services.rds.model.DBInstance dbInstance) {
+        try {
+            GetMetricDataRequest request = GetMetricDataRequest.builder()
+                .startTime(Instant.now().minus(7, ChronoUnit.DAYS))
+                .endTime(Instant.now())
+                .metricDataQueries(MetricDataQuery.builder()
+                    .id("rdsConnections")
+                    .metricStat(MetricStat.builder()
+                        .metric(Metric.builder()
+                            .namespace("AWS/RDS")
+                            .metricName("DatabaseConnections")
+                            .dimensions(Dimension.builder().name("DBInstanceIdentifier").value(dbInstance.dbInstanceIdentifier()).build())
+                            .build())
+                        .period(86400) // 1 day
+                        .stat("Maximum")
+                        .build())
+                    .returnData(true)
+                    .build())
+                .build();
+
+            List<MetricDataResult> results = cloudWatchClient.getMetricData(request).metricDataResults();
+            if (!results.isEmpty() && !results.get(0).values().isEmpty()) {
+                return results.get(0).values().stream().allMatch(v -> v < 1); // No connections in the last 7 days
+            }
+        } catch (Exception e) {
+            logger.error("Could not get metrics for RDS instance {}: {}", dbInstance.dbInstanceIdentifier(), e.getMessage());
+        }
+        return false;
+    }
+
+    private List<DashboardData.WastedResource> findIdleLoadBalancers() {
+        List<DashboardData.WastedResource> wastedLbs = new ArrayList<>();
+        try {
+            elbv2Client.describeLoadBalancers().loadBalancers().forEach(lb -> {
+                boolean isIdle = elbv2Client.describeTargetGroups(req -> req.loadBalancerArn(lb.loadBalancerArn()))
+                    .targetGroups().stream()
+                    .allMatch(tg -> elbv2Client.describeTargetHealth(req -> req.targetGroupArn(tg.targetGroupArn()))
+                        .targetHealthDescriptions().isEmpty());
+
+                if (isIdle) {
+                    wastedLbs.add(new DashboardData.WastedResource(
+                        lb.loadBalancerArn(),
+                        lb.loadBalancerName(),
+                        "Load Balancer",
+                        lb.availabilityZones().get(0).zoneName().replaceAll(".$",""),
+                        15.0, // Placeholder for cost
+                        "Idle Load Balancer (no targets)"
+                    ));
+                }
+            });
+            return wastedLbs;
+        } catch (Exception e) {
+            logger.error("Sub-task failed: idle Load Balancers.", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private List<DashboardData.WastedResource> findUnusedSecurityGroups() {
+        try {
+            return ec2Client.describeSecurityGroups().securityGroups().stream()
+                .filter(sg -> sg.vpcId() != null && isSecurityGroupUnused(sg.groupId()))
+                .map(sg -> new DashboardData.WastedResource(
+                    sg.groupId(),
+                    sg.groupName(),
+                    "Security Group",
+                    "Regional",
+                    0.0, // Security groups are free, but are a security risk
+                    "Unused Security Group"
+                ))
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("Sub-task failed: unused security groups.", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean isSecurityGroupUnused(String groupId) {
+        try {
+            DescribeNetworkInterfacesRequest request = DescribeNetworkInterfacesRequest.builder()
+                .filters(software.amazon.awssdk.services.ec2.model.Filter.builder().name("group-id").values(groupId).build())
+                .build();
+            return ec2Client.describeNetworkInterfaces(request).networkInterfaces().isEmpty();
+        } catch (Exception e) {
+            logger.error("Could not check usage for security group {}: {}", groupId, e.getMessage());
+        }
+        return false;
+    }
+
     private String getTagName(Volume volume) {
         return volume.hasTags() ? volume.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(volume.volumeId()) : volume.volumeId();
     }
-    
+
     private String getTagName(Snapshot snapshot) {
         return snapshot.hasTags() ? snapshot.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(snapshot.snapshotId()) : snapshot.snapshotId();
     }
@@ -969,7 +1079,7 @@ public class AwsDataService {
         }
         return 0.0;
     }
-    
+
     private DashboardData.OptimizationSummary getOptimizationSummary(
         List<DashboardData.OptimizationRecommendation> ec2Recs,
         List<DashboardData.OptimizationRecommendation> ebsRecs,
@@ -979,7 +1089,7 @@ public class AwsDataService {
         long criticalAlerts = anomalies.size() + ec2Recs.size() + ebsRecs.size() + lambdaRecs.size();
         return new DashboardData.OptimizationSummary(totalSavings, criticalAlerts);
     }
-    
+
     private String getServiceNameFromAnomaly(Anomaly anomaly) {
         if (anomaly.rootCauses() != null && !anomaly.rootCauses().isEmpty()) {
             RootCause rootCause = anomaly.rootCauses().get(0);
@@ -998,7 +1108,7 @@ public class AwsDataService {
             return "N/A";
         }
     }
-    
+
     private String getTermValue(ReservationPurchaseRecommendation rec) {
         try {
             return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year";
@@ -1009,9 +1119,9 @@ public class AwsDataService {
     }
 
     @CacheEvict(value = {
-        "cloudlistResources", "wastedResources", "regionStatus", "inventory", 
-        "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies", 
-        "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs", 
+        "cloudlistResources", "wastedResources", "regionStatus", "inventory",
+        "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
+        "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
         "billingSummary", "iamResources", "costHistory"
     }, allEntries = true)
     public void clearAllCaches() {

@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { 
+        body {
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
         }
@@ -104,14 +104,14 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="bg-white rounded-xl p-6 card-shadow">
                     <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
                         <div>
                             <h2 class="text-lg font-semibold text-gray-800">Wasted Resources</h2>
                             <p class="text-sm text-gray-500">Filter and manage unused cloud resources</p>
                         </div>
-                        
+
                         <div class="flex flex-wrap items-center gap-2">
                             <span class="text-sm font-medium text-gray-600">Filter by:</span>
                             <button @click="filter = 'All'" :class="{ 'bg-indigo-600 text-white': filter === 'All', 'bg-gray-100 text-gray-700': filter !== 'All' }" class="px-3 py-1.5 text-sm rounded-lg transition">All</button>
@@ -119,6 +119,9 @@
                             <button @click="filter = 'Elastic IP'" :class="{ 'bg-indigo-600 text-white': filter === 'Elastic IP', 'bg-gray-100 text-gray-700': filter !== 'Elastic IP' }" class="px-3 py-1.5 text-sm rounded-lg transition">Elastic IP</button>
                             <button @click="filter = 'Snapshot'" :class="{ 'bg-indigo-600 text-white': filter === 'Snapshot', 'bg-gray-100 text-gray-700': filter !== 'Snapshot' }" class="px-3 py-1.5 text-sm rounded-lg transition">Snapshots</button>
                             <button @click="filter = 'EBS Volume'" :class="{ 'bg-indigo-600 text-white': filter === 'EBS Volume', 'bg-gray-100 text-gray-700': filter !== 'EBS Volume' }" class="px-3 py-1.5 text-sm rounded-lg transition">Volumes</button>
+                            <button @click="filter = 'RDS Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'RDS Instance', 'bg-gray-100 text-gray-700': filter !== 'RDS Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">RDS</button>
+                            <button @click="filter = 'Load Balancer'" :class="{ 'bg-indigo-600 text-white': filter === 'Load Balancer', 'bg-gray-100 text-gray-700': filter !== 'Load Balancer' }" class="px-3 py-1.5 text-sm rounded-lg transition">Load Balancers</button>
+                            <button @click="filter = 'Security Group'" :class="{ 'bg-indigo-600 text-white': filter === 'Security Group', 'bg-gray-100 text-gray-700': filter !== 'Security Group' }" class="px-3 py-1.5 text-sm rounded-lg transition">Security Groups</button>
                         </div>
                     </div>
                     <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="overflow-x-auto">
@@ -168,13 +171,13 @@ function wasteManagement() {
         filter: 'All',
         wastedResources: [],
         filteredResources: [],
-        
+
         init() {
             this.loadWastedResources();
             // Use $watch to reactively call applyFilter whenever 'filter' changes.
             this.$watch('filter', () => this.applyFilter());
         },
-        
+
         loadWastedResources(forceRefresh = false) {
             const cachedData = sessionStorage.getItem('wasteData');
 
@@ -205,7 +208,7 @@ function wasteManagement() {
                     this.isLoading = false;
                 });
         },
-        
+
         applyFilter() {
             if (this.filter === 'All') {
                 this.filteredResources = this.wastedResources;
@@ -234,8 +237,13 @@ function wasteManagement() {
 
         getResourceTypeColor(type) {
             const colors = {
-                'EBS Volume': 'bg-blue-100 text-blue-800', 'Snapshot': 'bg-purple-100 text-purple-800',
-                'AMI': 'bg-yellow-100 text-yellow-800', 'Elastic IP': 'bg-green-100 text-green-800'
+                'EBS Volume': 'bg-blue-100 text-blue-800',
+                'Snapshot': 'bg-purple-100 text-purple-800',
+                'AMI': 'bg-yellow-100 text-yellow-800',
+                'Elastic IP': 'bg-green-100 text-green-800',
+                'RDS Instance': 'bg-orange-100 text-orange-800',
+                'Load Balancer': 'bg-cyan-100 text-cyan-800',
+                'Security Group': 'bg-gray-200 text-gray-800'
             };
             return colors[type] || 'bg-gray-100 text-gray-800';
         }
