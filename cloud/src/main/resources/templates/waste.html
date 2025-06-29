@@ -122,6 +122,8 @@
                             <button @click="filter = 'RDS Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'RDS Instance', 'bg-gray-100 text-gray-700': filter !== 'RDS Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">RDS</button>
                             <button @click="filter = 'Load Balancer'" :class="{ 'bg-indigo-600 text-white': filter === 'Load Balancer', 'bg-gray-100 text-gray-700': filter !== 'Load Balancer' }" class="px-3 py-1.5 text-sm rounded-lg transition">Load Balancers</button>
                             <button @click="filter = 'Security Group'" :class="{ 'bg-indigo-600 text-white': filter === 'Security Group', 'bg-gray-100 text-gray-700': filter !== 'Security Group' }" class="px-3 py-1.5 text-sm rounded-lg transition">Security Groups</button>
+                            <button @click="filter = 'EC2 Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'EC2 Instance', 'bg-gray-100 text-gray-700': filter !== 'EC2 Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">EC2</button>
+                            <button @click="filter = 'ENI'" :class="{ 'bg-indigo-600 text-white': filter === 'ENI', 'bg-gray-100 text-gray-700': filter !== 'ENI' }" class="px-3 py-1.5 text-sm rounded-lg transition">ENI</button>
                         </div>
                     </div>
                     <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="overflow-x-auto">
@@ -243,7 +245,9 @@ function wasteManagement() {
                 'Elastic IP': 'bg-green-100 text-green-800',
                 'RDS Instance': 'bg-orange-100 text-orange-800',
                 'Load Balancer': 'bg-cyan-100 text-cyan-800',
-                'Security Group': 'bg-gray-200 text-gray-800'
+                'Security Group': 'bg-gray-200 text-gray-800',
+                'EC2 Instance': 'bg-teal-100 text-teal-800',
+                'ENI': 'bg-pink-100 text-pink-800'
             };
             return colors[type] || 'bg-gray-100 text-gray-800';
         }

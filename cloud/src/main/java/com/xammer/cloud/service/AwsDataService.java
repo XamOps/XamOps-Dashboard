@@ -625,7 +625,7 @@ public class AwsDataService {
                 .build();
 
         return GetMetricDataRequest.builder()
-                .startTime(Instant.now().minus(14, ChronoUnit.DAYS))
+                .startTime(Instant.now().minus(30, ChronoUnit.DAYS))
                 .endTime(Instant.now())
                 .metricDataQueries(metricDataQuery)
                 .scanBy(ScanBy.TIMESTAMP_DESCENDING)
@@ -644,6 +644,8 @@ public class AwsDataService {
         wasted.addAll(findIdleRdsInstances());
         wasted.addAll(findIdleLoadBalancers());
         wasted.addAll(findUnusedSecurityGroups());
+        wasted.addAll(findIdleEc2Instances());
+        wasted.addAll(findUnattachedEnis());
         logger.info("... found {} wasted resources.", wasted.size());
         return CompletableFuture.completedFuture(wasted);
     }
@@ -1051,6 +1053,60 @@ public class AwsDataService {
         }
         return false;
     }
+
+    private List<DashboardData.WastedResource> findIdleEc2Instances() {
+        try {
+            return ec2Client.describeInstances().reservations().stream()
+                .flatMap(r -> r.instances().stream())
+                .filter(this::isEc2InstanceIdle)
+                .map(instance -> new DashboardData.WastedResource(
+                    instance.instanceId(),
+                    getTagName(instance.tags(), instance.instanceId()),
+                    "EC2 Instance",
+                    instance.placement().availabilityZone().replaceAll(".$", ""),
+                    10.0, // Placeholder for cost
+                    "Idle EC2 Instance (low CPU)"
+                ))
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("Sub-task failed: idle EC2 instances.", e);
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean isEc2InstanceIdle(Instance instance) {
+        try {
+            GetMetricDataRequest request = buildMetricDataRequest(instance.instanceId(), "CPUUtilization", "AWS/EC2");
+            List<MetricDataResult> results = cloudWatchClient.getMetricData(request).metricDataResults();
+            if (!results.isEmpty() && !results.get(0).values().isEmpty()) {
+                // Check if average CPU utilization over the last 30 days is less than 3%
+                return results.get(0).values().stream().mapToDouble(Double::doubleValue).average().orElse(100.0) < 3.0;
+            }
+        } catch (Exception e) {
+            logger.error("Could not get metrics for EC2 instance {}: {}", instance.instanceId(), e.getMessage());
+        }
+        return false;
+    }
+
+    private List<DashboardData.WastedResource> findUnattachedEnis() {
+        try {
+            return ec2Client.describeNetworkInterfaces(req -> req.filters(f -> f.name("status").values("available")))
+                .networkInterfaces().stream()
+                .map(eni -> new DashboardData.WastedResource(
+                    eni.networkInterfaceId(),
+                    getTagName(eni.tagSet(), eni.networkInterfaceId()),
+                    "ENI",
+                    eni.availabilityZone().replaceAll(".$", ""),
+                    2.0, // Placeholder for cost
+                    "Unattached ENI"
+                ))
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("Sub-task failed: unattached ENIs.", e);
+            return Collections.emptyList();
+        }
+    }
+
 
     private String getTagName(Volume volume) {
         return volume.hasTags() ? volume.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(volume.volumeId()) : volume.volumeId();
