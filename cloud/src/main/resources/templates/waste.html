@@ -3,95 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xammer - Waste Dashboard</title>
+    <title>Xammer - Waste Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
         [x-cloak] { display: none !important; }
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        .skeleton {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            background-color: #e2e8f0;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        /* Custom scrollbar for the sidebar */
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 3px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-50">
 
-<div class="flex h-screen bg-white">
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
 
-    <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
-    <!-- Sidebar -->
-    <!-- <div class="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col">
-       <div class="h-16 flex items-center justify-center border-b"><span class="text-xl font-bold text-indigo-600">XamOps</span></div>
-       <div class="p-4 border-b">
-           <select class="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-               <option>MachaDalo</option>
-           </select>
-       </div>
-       <nav class="flex-1 px-2 py-4 space-y-1 text-sm">
-           <a href="/" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-tachometer-alt fa-fw w-5 text-center"></i><span>Dashboard</span></a>
-           <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-chart-bar fa-fw w-5 text-center"></i><span>Reports</span></a>
-           <div x-data="{ open: true }"><button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><div class="flex items-center gap-3"><i class="fas fa-cloud fa-fw w-5 text-center"></i><span>Cloudview</span></div><i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i></button><div x-show="open" x-cloak class="pl-8 py-1 space-y-1"><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudk8s <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudlist</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Cloudmap</a></div></div>
-           <div x-data="{ open: true }"><button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md bg-indigo-50 px-3 py-2 text-indigo-600 font-semibold"><div class="flex items-center gap-3"><i class="fas fa-cogs fa-fw w-5 text-center"></i><span>Optimization</span></div><i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i></button><div x-show="open" x-cloak class="pl-8 py-1 space-y-1"><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">FinOps Report <span class="text-xs bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full ml-2">BETA</span></a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Costs overview</a><a href="/waste" class="block rounded-md px-3 py-2 text-indigo-600 bg-indigo-50">Waste</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Rightsizing</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Reservation</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Savings</a></div></div>
-           <div x-data="{ open: true }"><button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><div class="flex items-center gap-3"><i class="fas fa-shield-alt fa-fw w-5 text-center"></i><span>Security</span></div><i class="fas transition-transform" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i></button><div x-show="open" x-cloak class="pl-8 py-1 space-y-1"><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Security</a><a href="#" class="block rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100">Performance</a></div></div>
-           <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-users fa-fw w-5 text-center"></i><span>Teams</span></a><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"><i class="fas fa-code fa-fw w-5 text-center"></i><span>Logs</span></a>
-       </nav>
-       <div class="p-4 border-t mt-auto"><a href="#" class="flex items-center gap-3 rounded-md px-3 py-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-sm bg-gray-100"><i class="fas fa-cloud-download-alt fa-fw w-5 text-center"></i><span>Account manager</span></a></div>
-    </div> -->
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="wasteManagement()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">Waste Management</h1>
+                    <p class="text-xs text-gray-500">Identify and eliminate unused cloud resources</p>
+                </div>
+                 <button @click="loadWastedResources(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
+                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                </button>
+            </header>
 
-    <!-- Main Content -->
-    <main class="flex-1 flex flex-col">
-        <header class="h-16 flex items-center justify-between border-b bg-white px-6">
-            <h1 class="text-xl font-semibold text-gray-800">Waste Management</h1>
-        </header>
-
-        <div id="wasteContainer" class="flex-1 overflow-y-auto p-6 space-y-6" x-data="{ filter: 'All', wastedResources: [] }" x-init="
-            fetch(`${window.location.origin}/api/waste`)
-                .then(res => res.json())
-                .then(data => wastedResources = data)
-                .catch(err => console.error('Failed to load waste data', err));
-        ">
-            <div class="bg-white p-6 rounded-lg shadow-sm">
-                <div class="flex flex-wrap items-center gap-2 mb-4 border-b pb-3">
-                    <span class="text-sm font-medium text-gray-600 mr-2">Show for:</span>
-                    <button @click="filter = 'All'" :class="{ 'bg-indigo-600 text-white': filter === 'All', 'bg-gray-200 text-gray-700': filter !== 'All' }" class="px-3 py-1 text-sm rounded-full transition">All</button>
-                    <button @click="filter = 'AMI'" :class="{ 'bg-indigo-600 text-white': filter === 'AMI', 'bg-gray-200 text-gray-700': filter !== 'AMI' }" class="px-3 py-1 text-sm rounded-full transition">AMI</button>
-                    <button @click="filter = 'Elastic IP'" :class="{ 'bg-indigo-600 text-white': filter === 'Elastic IP', 'bg-gray-200 text-gray-700': filter !== 'Elastic IP' }" class="px-3 py-1 text-sm rounded-full transition">Elastic IP</button>
-                    <button @click="filter = 'Snapshot'" :class="{ 'bg-indigo-600 text-white': filter === 'Snapshot', 'bg-gray-200 text-gray-700': filter !== 'Snapshot' }" class="px-3 py-1 text-sm rounded-full transition">Snapshots</button>
-                    <button @click="filter = 'EBS Volume'" :class="{ 'bg-indigo-600 text-white': filter === 'EBS Volume', 'bg-gray-200 text-gray-700': filter !== 'EBS Volume' }" class="px-3 py-1 text-sm rounded-full transition">Volumes</button>
+            <div class="flex-1 p-6 space-y-6">
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
+                                <div x-show="isLoading" class="skeleton h-8 w-24 mt-2 rounded"></div>
+                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
+                            </div>
+                            <div class="bg-blue-100 p-3 rounded-lg"><i class="fas fa-coins text-blue-500 text-lg"></i></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-gray-500 text-sm font-medium">Resources Found</h3>
+                                 <div x-show="isLoading" class="skeleton h-8 w-16 mt-2 rounded"></div>
+                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="resourceCount"></p>
+                            </div>
+                            <div class="bg-red-100 p-3 rounded-lg"><i class="fas fa-trash-alt text-red-500 text-lg"></i></div>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl p-5 card-shadow">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-gray-500 text-sm font-medium">Top Waste Category</h3>
+                                <div x-show="isLoading" class="skeleton h-8 w-28 mt-2 rounded"></div>
+                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="topCategory"></p>
+                            </div>
+                            <div class="bg-yellow-100 p-3 rounded-lg"><i class="fas fa-exclamation-triangle text-yellow-500 text-lg"></i></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-gray-500 text-sm font-medium">Last Scanned</h3>
+                                <div x-show="isLoading" class="skeleton h-8 w-24 mt-2 rounded"></div>
+                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1">Just now</p>
+                            </div>
+                            <div class="bg-green-100 p-3 rounded-lg"><i class="fas fa-check-circle text-green-500 text-lg"></i></div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <div x-show="wastedResources.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
-                         <div class="mx-auto h-12 w-12 text-green-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No wasted resources found!</h3>
-                        <p class="mt-1 text-sm text-gray-500">Your account appears to be clean and optimized.</p>
-                    </div>
+                <div class="bg-white rounded-xl p-6 card-shadow">
+                    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+                        <div>
+                            <h2 class="text-lg font-semibold text-gray-800">Wasted Resources</h2>
+                            <p class="text-sm text-gray-500">Filter and manage unused cloud resources</p>
+                        </div>
 
-                    <table x-show="wastedResources.length > 0" class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3">Name / ID</th><th class="px-6 py-3">Type</th><th class="px-6 py-3">Region</th><th class="px-6 py-3">Monthly Cost</th><th class="px-6 py-3">Reason</th><th class="px-6 py-3 text-center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="resource in wastedResources" :key="resource.resourceId">
-                                <tr x-show="filter === 'All' || filter === resource.resourceType" class="border-b hover:bg-gray-50" x-transition>
-                                    <td class="px-6 py-4"><p class="font-medium text-gray-900" x-text="resource.resourceName"></p><p class="text-xs text-gray-500 font-mono" x-text="resource.resourceId"></p></td>
-                                    <td class="px-6 py-4" x-text="resource.resourceType"></td>
-                                    <td class="px-6 py-4" x-text="resource.region"></td>
-                                    <td class="px-6 py-4 font-mono text-red-600" x-text="'$' + parseFloat(resource.monthlySavings).toFixed(2)"></td>
-                                    <td class="px-6 py-4" x-text="resource.reason"></td>
-                                    <td class="px-6 py-4 text-center space-x-2">
-                                        <button class="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400" disabled title="Delete action will be enabled in a future phase"><i class="fas fa-trash-alt mr-1"></i>Remove</button>
-                                        <button class="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 disabled:bg-gray-400" disabled><i class="fas fa-archive mr-1"></i>Archive</button>
-                                    </td>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium text-gray-600">Filter by:</span>
+                            <button @click="filter = 'All'" :class="{ 'bg-indigo-600 text-white': filter === 'All', 'bg-gray-100 text-gray-700': filter !== 'All' }" class="px-3 py-1.5 text-sm rounded-lg transition">All</button>
+                            <button @click="filter = 'AMI'" :class="{ 'bg-indigo-600 text-white': filter === 'AMI', 'bg-gray-100 text-gray-700': filter !== 'AMI' }" class="px-3 py-1.5 text-sm rounded-lg transition">AMI</button>
+                            <button @click="filter = 'Elastic IP'" :class="{ 'bg-indigo-600 text-white': filter === 'Elastic IP', 'bg-gray-100 text-gray-700': filter !== 'Elastic IP' }" class="px-3 py-1.5 text-sm rounded-lg transition">Elastic IP</button>
+                            <button @click="filter = 'Snapshot'" :class="{ 'bg-indigo-600 text-white': filter === 'Snapshot', 'bg-gray-100 text-gray-700': filter !== 'Snapshot' }" class="px-3 py-1.5 text-sm rounded-lg transition">Snapshots</button>
+                            <button @click="filter = 'EBS Volume'" :class="{ 'bg-indigo-600 text-white': filter === 'EBS Volume', 'bg-gray-100 text-gray-700': filter !== 'EBS Volume' }" class="px-3 py-1.5 text-sm rounded-lg transition">Volumes</button>
+                            <button @click="filter = 'RDS Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'RDS Instance', 'bg-gray-100 text-gray-700': filter !== 'RDS Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">RDS</button>
+                            <button @click="filter = 'Load Balancer'" :class="{ 'bg-indigo-600 text-white': filter === 'Load Balancer', 'bg-gray-100 text-gray-700': filter !== 'Load Balancer' }" class="px-3 py-1.5 text-sm rounded-lg transition">Load Balancers</button>
+                            <button @click="filter = 'Security Group'" :class="{ 'bg-indigo-600 text-white': filter === 'Security Group', 'bg-gray-100 text-gray-700': filter !== 'Security Group' }" class="px-3 py-1.5 text-sm rounded-lg transition">Security Groups</button>
+                            <button @click="filter = 'EC2 Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'EC2 Instance', 'bg-gray-100 text-gray-700': filter !== 'EC2 Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">EC2</button>
+                            <button @click="filter = 'ENI'" :class="{ 'bg-indigo-600 text-white': filter === 'ENI', 'bg-gray-100 text-gray-700': filter !== 'ENI' }" class="px-3 py-1.5 text-sm rounded-lg transition">ENI</button>
+                        </div>
+                    </div>
+                    <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Resource</th>
+                                    <th class="px-6 py-3">Type</th>
+                                    <th class="px-6 py-3">Region</th>
+                                    <th class="px-6 py-3">Monthly Cost</th>
+                                    <th class="px-6 py-3">Reason</th>
+                                    <th class="px-6 py-3 text-center">Actions</th>
                                 </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template x-for="resource in filteredResources" :key="resource.resourceId">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4">
+                                            <p class="font-medium text-gray-900" x-text="resource.resourceName || 'Untitled Resource'"></p>
+                                            <p class="text-xs text-gray-500 font-mono mt-1" x-text="resource.resourceId"></p>
+                                        </td>
+                                        <td class="px-6 py-4"><span class="px-2 py-0.5 text-xs font-semibold rounded-full" :class="getResourceTypeColor(resource.resourceType)" x-text="resource.resourceType"></span></td>
+                                        <td class="px-6 py-4" x-text="resource.region"></td>
+                                        <td class="px-6 py-4 font-semibold text-red-600" x-text="'$' + resource.monthlySavings.toFixed(2)"></td>
+                                        <td class="px-6 py-4" x-text="resource.reason"></td>
+                                        <td class="px-6 py-4 text-center">
+                                            <div class="flex justify-center gap-2">
+                                                <button disabled title="Delete action will be enabled in a future phase" class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-trash-alt mr-1"></i>Remove</button>
+                                                <button disabled class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-archive mr-1"></i>Archive</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
-    </main>
+        </main>
+    </div>
 </div>
+
+<script>
+function wasteManagement() {
+    return {
+        isLoading: true,
+        filter: 'All',
+        wastedResources: [],
+        filteredResources: [],
+
+        init() {
+            this.loadWastedResources();
+            // Use $watch to reactively call applyFilter whenever 'filter' changes.
+            this.$watch('filter', () => this.applyFilter());
+        },
+
+        loadWastedResources(forceRefresh = false) {
+            const cachedData = sessionStorage.getItem('wasteData');
+
+            if (!forceRefresh && cachedData) {
+                this.wastedResources = JSON.parse(cachedData);
+                this.applyFilter();
+                this.isLoading = false;
+                return;
+            }
+
+            this.isLoading = true;
+            fetch(`${window.location.origin}/api/waste`)
+                .then(res => {
+                    if (!res.ok) throw new Error('Network response was not ok.');
+                    return res.json();
+                })
+                .then(data => {
+                    sessionStorage.setItem('wasteData', JSON.stringify(data));
+                    this.wastedResources = data;
+                    this.applyFilter();
+                })
+                .catch(err => {
+                    console.error('Failed to load waste data', err);
+                    this.wastedResources = [];
+                    this.applyFilter();
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
+        },
+
+        applyFilter() {
+            if (this.filter === 'All') {
+                this.filteredResources = this.wastedResources;
+            } else {
+                this.filteredResources = this.wastedResources.filter(r => r.resourceType === this.filter);
+            }
+        },
+
+        get potentialSavings() {
+            if (!this.filteredResources) return 0;
+            return this.filteredResources.reduce((sum, r) => sum + r.monthlySavings, 0);
+        },
+
+        get resourceCount() {
+            return this.filteredResources.length;
+        },
+
+        get topCategory() {
+            if (this.resourceCount === 0) return 'None';
+            const counts = this.filteredResources.reduce((acc, r) => {
+                acc[r.resourceType] = (acc[r.resourceType] || 0) + 1;
+                return acc;
+            }, {});
+            return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+        },
+
+        getResourceTypeColor(type) {
+            const colors = {
+                'EBS Volume': 'bg-blue-100 text-blue-800',
+                'Snapshot': 'bg-purple-100 text-purple-800',
+                'AMI': 'bg-yellow-100 text-yellow-800',
+                'Elastic IP': 'bg-green-100 text-green-800',
+                'RDS Instance': 'bg-orange-100 text-orange-800',
+                'Load Balancer': 'bg-cyan-100 text-cyan-800',
+                'Security Group': 'bg-gray-200 text-gray-800',
+                'EC2 Instance': 'bg-teal-100 text-teal-800',
+                'ENI': 'bg-pink-100 text-pink-800'
+            };
+            return colors[type] || 'bg-gray-100 text-gray-800';
+        }
+    }
+}
+</script>
 
 </body>
 </html>

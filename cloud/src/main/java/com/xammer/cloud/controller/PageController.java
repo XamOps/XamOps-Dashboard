@@ -26,4 +26,10 @@ public class PageController {
     public String cloudlistPage() {
         return "cloudlist";
     }
+
+    // ADDED: Mapping for the new Rightsizing page
+    @GetMapping("/rightsizing")
+    public String rightsizingPage() {
+        return "rightsizing";
+    }
 }
