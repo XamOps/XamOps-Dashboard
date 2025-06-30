@@ -111,9 +111,7 @@ public class AwsDataService {
         this.route53Client = route53Client;
     }
 
-
     public DashboardData getDashboardData() throws ExecutionException, InterruptedException {
-        // ... orchestration logic remains the same ...
         logger.info("--- LAUNCHING ASYNC DATA FETCH FROM AWS ---");
 
         CompletableFuture<List<DashboardData.RegionStatus>> regionStatusFuture = getRegionStatusForAccount();
@@ -161,7 +159,8 @@ public class AwsDataService {
         return data;
     }
 
-@Async("awsTaskExecutor")
+
+    @Async("awsTaskExecutor")
     @Cacheable("cloudlistResources")
     public CompletableFuture<List<ResourceDto>> getAllResources() {
         logger.info("Fetching all resources for Cloudlist...");
@@ -182,14 +181,14 @@ public class AwsDataService {
             fetchRoute53HostedZonesForCloudlist()
         );
 
-        // FIXED: This logic now safely combines results from all successful futures.
         return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
             .thenApply(v -> resourceFutures.stream()
-                .map(future -> future.getNow(Collections.emptyList())) // Get result if complete, otherwise get empty list
+                .map(future -> future.getNow(Collections.emptyList()))
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList())
             );
     }
+
     private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -231,14 +230,14 @@ public class AwsDataService {
                         v.stateAsString(),
                         v.createTime(),
                         Map.of(
-                            "Size", v.size() + " GiB", 
+                            "Size", v.size() + " GiB",
                             "Type", v.volumeTypeAsString(),
                             "Attached to", v.attachments().isEmpty() ? "N/A" : v.attachments().get(0).instanceId()
                         )
                     ))
                     .collect(Collectors.toList());
             } catch (Exception e) {
-                logger.error("Cloudlist sub-task failed: EBS volumes.", e);
+                logger.error("Cloudlist sub-task failed: EBS volumes. Error: {}", e.getMessage());
                 return Collections.emptyList();
             }
         });
@@ -301,7 +300,7 @@ public class AwsDataService {
         });
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchVpcsForCloudlist() {
+   private CompletableFuture<List<ResourceDto>> fetchVpcsForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 logger.info("Cloudlist: Fetching VPCs...");
@@ -320,7 +319,7 @@ public class AwsDataService {
                     ))
                     .collect(Collectors.toList());
             } catch (Exception e) {
-                logger.error("Cloudlist sub-task failed: VPCs.", e);
+                logger.error("Cloudlist sub-task failed: VPCs. Error: {}", e.getMessage());
                 return Collections.emptyList();
             }
         });
@@ -346,7 +345,7 @@ public class AwsDataService {
                     ))
                     .collect(Collectors.toList());
             } catch (Exception e) {
-                logger.error("Cloudlist sub-task failed: Security Groups.", e);
+                logger.error("Cloudlist sub-task failed: Security Groups. Error: {}", e.getMessage());
                 return Collections.emptyList();
             }
         });
@@ -433,9 +432,9 @@ public class AwsDataService {
                         c.cacheClusterStatus(),
                         c.cacheClusterCreateTime(),
                         Map.of(
-                            "Engine", c.engine() + " " + c.engineVersion(),
-                            "NodeType", c.cacheNodeType(),
-                            "Nodes", c.numCacheNodes().toString()
+                           "Engine", c.engine() + " " + c.engineVersion(),
+                           "NodeType", c.cacheNodeType(),
+                           "Nodes", c.numCacheNodes().toString()
                         )
                     ))
                     .collect(Collectors.toList());
@@ -505,8 +504,8 @@ public class AwsDataService {
                         "Available",
                         null,
                         Map.of(
-                            "Type", z.config().privateZone() ? "Private" : "Public",
-                            "Record Count", z.resourceRecordSetCount().toString()
+                           "Type", z.config().privateZone() ? "Private" : "Public",
+                           "Record Count", z.resourceRecordSetCount().toString()
                         )
                     ))
                     .collect(Collectors.toList());
@@ -540,7 +539,7 @@ public class AwsDataService {
             return Collections.emptyMap();
         }
     }
-        private List<MetricDto> buildMetricDtos(MetricDataResult result) {
+     private List<MetricDto> buildMetricDtos(MetricDataResult result) {
         List<Instant> timestamps = result.timestamps();
         List<Double> values = result.values();
         
@@ -926,10 +925,10 @@ public class AwsDataService {
     // Helper for extracting tag name from a list of tags, with a default value
     private String getTagName(List<Tag> tags, String defaultName) {
         return tags.stream()
-                .filter(t -> t.key().equalsIgnoreCase("Name"))
-                .findFirst()
-                .map(Tag::value)
-                .orElse(defaultName);
+            .filter(t -> t.key().equalsIgnoreCase("Name"))
+            .findFirst()
+            .map(Tag::value)
+            .orElse(defaultName);
     }
 
     private double calculateEbsMonthlyCost(Volume volume, String region) {

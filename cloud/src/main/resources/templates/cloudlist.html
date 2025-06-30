@@ -6,8 +6,11 @@
     <title>Xammer - Cloudlist</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <style> body { font-family: 'Inter', sans-serif; } [x-cloak] { display: none !important; } </style>
+    <style> 
+        body { font-family: 'Inter', sans-serif; }
+        /* Simple styles for showing/hiding content without Alpine.js */
+        .hidden { display: none !important; }
+    </style>
 </head>
 <body class="bg-gray-100">
 
@@ -19,12 +22,12 @@
             <h1 class="text-xl font-semibold text-gray-800">Cloudlist - Resource Inventory</h1>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6" x-data="cloudlist()">
+        <div class="flex-1 overflow-y-auto p-6" id="cloudlist-app">
             <div class="bg-white p-6 rounded-lg shadow-sm">
                 <!-- Search and Filter Controls -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <input type="text" x-model="searchTerm" placeholder="Search by name or ID..." class="md:col-span-2 form-input w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                    <select x-model="filterType" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <input type="text" id="search-input" placeholder="Search by name or ID..." class="md:col-span-2 form-input w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <select id="type-filter" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                         <option value="">All Types</option>
                         <option value="EC2 Instance">EC2 Instance</option>
                         <option value="EBS Volume">EBS Volume</option>
@@ -44,13 +47,7 @@
 
                 <!-- Resources Table -->
                 <div class="overflow-x-auto">
-                    <div x-show="isLoading" class="text-center p-8"> <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
-                    <div x-show="!isLoading && filteredResources.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No resources found.</h3>
-                        <p class="mt-1 text-sm text-gray-500">Adjust your search or filter criteria.</p>
-                    </div>
-
-                    <table x-show="!isLoading && filteredResources.length > 0" class="w-full text-sm text-left text-gray-500">
+                    <table class="w-full text-sm text-left text-gray-500">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
                                 <th class="px-6 py-3">Name / ID</th>
@@ -60,40 +57,20 @@
                                 <th class="px-6 py-3">Details</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <template x-for="resource in filteredResources" :key="resource.id">
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-6 py-4">
-                                        <p class="font-medium text-gray-900" x-text="resource.name"></p>
-                                        <p class="text-xs text-gray-500 font-mono" x-text="resource.id"></p>
-                                    </td>
-                                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="{
-                                        'bg-blue-100 text-blue-800': resource.type === 'EC2 Instance',
-                                        'bg-purple-100 text-purple-800': resource.type === 'EBS Volume',
-                                        'bg-orange-100 text-orange-800': resource.type === 'RDS Instance',
-                                        'bg-yellow-100 text-yellow-800': resource.type === 'Lambda Function',
-                                        'bg-red-100 text-red-800': resource.type === 'ElastiCache Cluster',
-                                        'bg-green-100 text-green-800': ['S3 Bucket', 'Route 53 Zone'].includes(resource.type),
-                                        'bg-cyan-100 text-cyan-800': ['Load Balancer', 'Auto Scaling Group', 'ECR Repository'].includes(resource.type),
-                                        'bg-indigo-100 text-indigo-800': resource.type === 'DynamoDB Table',
-                                        'bg-gray-200 text-gray-800': ['VPC', 'Security Group'].includes(resource.type)
-                                    }" x-text="resource.type"></span></td>
-                                    <td class="px-6 py-4" x-text="resource.region"></td>
-                                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize" :class="{ 'bg-green-100 text-green-800': ['running', 'available', 'active', 'in-use'].includes(resource.state.toLowerCase()), 'bg-red-100 text-red-800': ['stopped', 'terminated'].includes(resource.state.toLowerCase()) }" x-text="resource.state"></span></td>
-                                    <td class="px-6 py-4">
-                                        <div class="text-xs text-gray-600">
-                                            <template x-for="(value, key) in resource.details">
-                                                <div class="flex justify-between">
-                                                    <span class="font-semibold" x-text="key + ':'"></span>
-                                                    <span class="font-mono truncate" x-text="value"></span>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </template>
+                        <tbody id="resources-table-body">
+                            <!-- Loading State (initially visible) -->
+                             <tr id="loading-state">
+                                <td colspan="5" class="text-center p-8">
+                                    <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
+                     <!-- Empty State (initially hidden) -->
+                    <div id="empty-state" class="hidden text-center py-12 px-4 border-2 border-dashed rounded-lg mt-4">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">No resources found.</h3>
+                        <p class="mt-1 text-sm text-gray-500">Adjust your search or filter criteria.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -101,43 +78,128 @@
 </div>
 
 <script>
-function cloudlist() {
-    return {
-        isLoading: true,
-        resources: [],
-        searchTerm: '',
-        filterType: '',
+document.addEventListener('DOMContentLoaded', function() {
+    const app = {
+        // Store all resources fetched from the API
+        allResources: [],
+        
+        // References to key DOM elements
+        dom: {
+            searchInput: document.getElementById('search-input'),
+            typeFilter: document.getElementById('type-filter'),
+            loadingState: document.getElementById('loading-state'),
+            tableBody: document.getElementById('resources-table-body'),
+            emptyState: document.getElementById('empty-state')
+        },
+        
+        // Initialize the component
         init() {
+            this.setupEventListeners();
+            this.fetchResources();
+        },
+        
+        // Set up listeners for the search and filter inputs
+        setupEventListeners() {
+            this.dom.searchInput.addEventListener('input', () => this.render());
+            this.dom.typeFilter.addEventListener('change', () => this.render());
+        },
+        
+        // Fetch the master list of resources from the backend API
+        fetchResources() {
+            this.dom.loadingState.classList.remove('hidden');
+            
             fetch(`${window.location.origin}/api/cloudlist/resources`)
-                .then(res => res.json())
-                .then(data => {
-                    this.resources = data;
-                    this.isLoading = false;
+                .then(res => {
+                    if (!res.ok) throw new Error(`Network response was not ok. Status: ${res.status}`);
+                    return res.json();
                 })
-                .catch(err => {
-                    console.error('Failed to load resources', err);
-                    this.isLoading = false;
+                .then(data => {
+                    this.allResources = Array.isArray(data) ? data : [];
+                    this.render(); // Render the initial unfiltered list
+                })
+                .catch(error => {
+                    console.error('Error fetching resources:', error);
+                    this.allResources = [];
+                    this.render(); // Render to show the empty state
                 });
         },
-        // FIXED: Rewrote the filtering logic to be more robust and declarative.
-        get filteredResources() {
-            if (this.isLoading) {
-                return [];
-            }
+        
+        // Main function to filter and re-render the table
+        render() {
+            this.dom.loadingState.classList.add('hidden');
+            const searchTerm = this.dom.searchInput.value.toLowerCase();
+            const filterType = this.dom.typeFilter.value;
             
-            return this.resources.filter(resource => {
-                const typeMatch = this.filterType === '' || resource.type === this.filterType;
-                
-                const term = this.searchTerm.toLowerCase();
-                const searchMatch = this.searchTerm === '' || 
-                                    resource.name.toLowerCase().includes(term) || 
-                                    resource.id.toLowerCase().includes(term);
-
+            const filtered = this.allResources.filter(resource => {
+                const typeMatch = filterType === '' || (resource.type && resource.type === filterType);
+                const searchMatch = searchTerm === '' || 
+                                    (resource.name && resource.name.toLowerCase().includes(searchTerm)) || 
+                                    (resource.id && resource.id.toLowerCase().includes(searchTerm));
                 return typeMatch && searchMatch;
             });
+            
+            this.renderTable(filtered);
+        },
+        
+        // Clears and re-populates the table body with the provided resources
+        renderTable(resources) {
+            this.dom.tableBody.innerHTML = ''; // Clear existing rows
+
+            if (resources.length === 0) {
+                this.dom.emptyState.classList.remove('hidden');
+            } else {
+                this.dom.emptyState.classList.add('hidden');
+            }
+
+            resources.forEach(resource => {
+                const row = document.createElement('tr');
+                row.className = 'border-b hover:bg-gray-50';
+                
+                const detailsHtml = Object.entries(resource.details || {})
+                    .map(([key, value]) => `
+                        <div class="flex justify-between">
+                            <span class="font-semibold">${key}:</span>
+                            <span class="font-mono truncate">${value}</span>
+                        </div>`)
+                    .join('');
+
+                row.innerHTML = `
+                    <td class="px-6 py-4">
+                        <p class="font-medium text-gray-900">${resource.name || 'N/A'}</p>
+                        <p class="text-xs text-gray-500 font-mono">${resource.id || 'N/A'}</p>
+                    </td>
+                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${this.getTypeClass(resource.type)}">${resource.type || 'Unknown'}</span></td>
+                    <td class="px-6 py-4">${resource.region || 'N/A'}</td>
+                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${this.getStateClass(resource.state)}">${resource.state || 'Unknown'}</span></td>
+                    <td class="px-6 py-4"><div class="text-xs text-gray-600">${detailsHtml}</div></td>
+                `;
+                this.dom.tableBody.appendChild(row);
+            });
+        },
+        
+        // Helper functions for styling
+        getTypeClass(type) {
+            const map = {
+                'EC2 Instance': 'bg-blue-100 text-blue-800', 'EBS Volume': 'bg-purple-100 text-purple-800',
+                'RDS Instance': 'bg-orange-100 text-orange-800', 'Lambda Function': 'bg-yellow-100 text-yellow-800',
+                'ElastiCache Cluster': 'bg-red-100 text-red-800', 'S3 Bucket': 'bg-green-100 text-green-800',
+                'Route 53 Zone': 'bg-green-100 text-green-800', 'Load Balancer': 'bg-cyan-100 text-cyan-800',
+                'Auto Scaling Group': 'bg-cyan-100 text-cyan-800', 'ECR Repository': 'bg-cyan-100 text-cyan-800',
+                'DynamoDB Table': 'bg-indigo-100 text-indigo-800', 'VPC': 'bg-gray-200 text-gray-800',
+                'Security Group': 'bg-gray-200 text-gray-800'
+            };
+            return map[type] || 'bg-gray-100 text-gray-800';
+        },
+        getStateClass(state) {
+            const s = (state || '').toLowerCase();
+            if (['running', 'available', 'active', 'in-use'].includes(s)) return 'bg-green-100 text-green-800';
+            if (['stopped', 'terminated', 'deleting'].includes(s)) return 'bg-red-100 text-red-800';
+            return 'bg-gray-100 text-gray-800';
         }
-    }
-}
+    };
+    
+    app.init();
+});
 </script>
 
 </body>

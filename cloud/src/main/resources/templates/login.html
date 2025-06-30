@@ -5,34 +5,143 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XamOps - Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        /* Base styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            position: relative;
+            overflow: hidden;
+            background-color: #000; /* Black background */
+        }
+
+        /* Glassmorphism Form Container */
+        .glass-container {
+            position: relative;
+            z-index: 1; /* Ensure form is above background */
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            border-radius: 1.5rem;
+        }
+        
+        /* Pure CSS Aurora Background */
+        .aurora-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .aurora {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 140vmax;
+            height: 140vmax;
+            transform: translate(-50%, -50%);
+        }
+
+        .aurora__item {
+            position: absolute;
+            border-radius: 50%;
+            mix-blend-mode: screen; /* You can also try 'overlay' or 'lighten' */
+            opacity: 0.5;
+            filter: blur(8vw);
+            will-change: transform;
+        }
+        
+        .aurora__item:nth-of-type(1) {
+            width: 60vmax;
+            height: 60vmax;
+            background-color: #3A29FF; /* Blue */
+            top: 10%;
+            left: 10%;
+            animation: aurora-1 15s linear infinite alternate;
+        }
+        
+        .aurora__item:nth-of-type(2) {
+            width: 50vmax;
+            height: 50vmax;
+            background-color: #FF94B4; /* Pink */
+            top: 25%;
+            right: 5%;
+            animation: aurora-2 18s linear infinite alternate;
+        }
+        
+        .aurora__item:nth-of-type(3) {
+            width: 45vmax;
+            height: 45vmax;
+            background-color: #FF3232; /* Red */
+            bottom: 15%;
+            left: 20%;
+            animation: aurora-3 20s linear infinite alternate;
+        }
+        
+        @keyframes aurora-1 {
+            to { transform: translateX(80vmax) translateY(20vmax); }
+        }
+        
+        @keyframes aurora-2 {
+            to { transform: translateX(-60vmax) translateY(30vmax); }
+        }
+        
+        @keyframes aurora-3 {
+            to { transform: translateX(40vmax) translateY(-40vmax); }
+        }
+
     </style>
 </head>
-<body class="bg-gray-50 flex items-center justify-center h-screen">
-    <div class="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
-        <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Sign in to XamOps</h2>
+<body class="flex items-center justify-center h-screen px-4">
+
+    <!-- Aurora Background Container -->
+    <div class="aurora-background">
+        <div class="aurora">
+            <div class="aurora__item"></div>
+            <div class="aurora__item"></div>
+            <div class="aurora__item"></div>
+        </div>
+    </div>
+
+    <!-- Login Form -->
+    <div class="max-w-md w-full glass-container p-8">
         
-        <div th:if="${param.error}" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-            <strong class="font-bold">Error!</strong>
-            <span class="block sm:inline">Invalid username or password.</span>
+        <h2 class="text-3xl font-bold text-center text-gray-100 mb-2">
+           Welcome to <span class="text-[#818cf8]">XamOps</span>
+        </h2>
+        <p class="text-center text-gray-300 mb-8">Sign in to continue</p>
+        
+        <!-- Thymeleaf error message display -->
+        <div th:if="${param.error}" class="bg-red-200 border-l-4 border-red-500 text-red-800 p-4 rounded-md mb-6" role="alert">
+            <p class="font-bold">Login Failed</p>
+            <p>Invalid username or password. Please try again.</p>
         </div>
 
-        <form th:action="@{/login}" method="post">
-            <div class="mb-4">
-                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
-                <input type="text" id="username" name="username" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required autofocus>
-            </div>
-            <div class="mb-6">
-                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                <input type="password" id="password" name="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required>
-            </div>
+        <!-- Corrected form tag for Spring Security -->
+        <form th:action="@{/login}" method="post" class="space-y-6">
             <div>
-                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <label for="username" class="block text-sm font-medium text-gray-300">Username</label>
+                <input type="text" id="username" name="username" class="mt-1 block w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg shadow-sm text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 sm:text-sm" placeholder="user" required autofocus>
+            </div>
+            
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-300">Password</label>
+                <input type="password" id="password" name="password" class="mt-1 block w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg shadow-sm text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 sm:text-sm" placeholder="password" required>
+            </div>
+            
+            <div>
+                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
                     Sign in
                 </button>
             </div>
         </form>
     </div>
+
 </body>
 </html>
