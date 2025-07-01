@@ -57,11 +57,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const infoPanel = document.getElementById('info-panel');
     const infoContent = document.getElementById('info-content');
     const closePanelBtn = document.getElementById('close-panel-btn');
-    let cy; // To hold the cytoscape instance
+    let cy;
 
-    closePanelBtn.addEventListener('click', () => {
-        infoPanel.classList.add('translate-x-full');
-    });
+    closePanelBtn.addEventListener('click', () => infoPanel.classList.add('translate-x-full'));
 
     fetch('/api/cloudmap/graph-data')
         .then(response => {
@@ -78,6 +76,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
     function renderGraph(graphData) {
+        // --- Define our color palette ---
+        const colors = {
+            green: '#22C55E', // Green 500
+            red: '#EF4444',   // Red 500
+            amber: '#F59E0B', // Amber 500
+            grey: '#6B7281',  // Gray 500
+            blue: '#3B82F6'   // Blue 500
+        };
+
         cy = cytoscape({
             container: document.getElementById('cy'),
             elements: graphData,
@@ -85,9 +92,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 {
                     selector: 'node',
                     style: {
-                        'background-color': '#666', 'label': 'data(label)', 'width': '60px', 'height': '60px',
+                        'label': 'data(label)', 'width': '60px', 'height': '60px',
                         'font-size': '10px', 'text-valign': 'bottom', 'text-halign': 'center',
-                        'color': '#fff', 'text-outline-color': '#888', 'text-outline-width': 2
+                        'color': '#fff', 'text-outline-color': '#888', 'text-outline-width': 2,
+                        'transition-property': 'background-color, border-color, border-width',
+                        'transition-duration': '0.3s'
                     }
                 },
                 {
@@ -98,10 +107,33 @@ document.addEventListener('DOMContentLoaded', function () {
                     selector: ':parent',
                     style: { 'background-opacity': 0.2, 'border-color': '#666', 'border-width': 1, 'text-valign': 'top', 'font-weight': 'bold' }
                 },
-                { selector: 'node[type="EC2 Instance"]', style: { 'background-color': '#FF9900', 'shape': 'ellipse' } },
-                { selector: 'node[type="VPC"]', style: { 'background-color': '#232F3E', 'background-opacity': 0.3 } },
-                { selector: 'node[type="Subnet"]', style: { 'background-color': '#527FFF', 'background-opacity': 0.2 } },
-                { selector: 'node[type="Security Group"]', style: { 'background-color': '#DD4444', 'shape': 'diamond', 'width':'25px', 'height':'25px' } }
+                // --- Static Node Shapes and Base Colors ---
+                { selector: 'node[type="EC2 Instance"]',   style: { 'shape': 'ellipse',       'background-color': colors.grey } },
+                { selector: 'node[type="RDS Instance"]',   style: { 'shape': 'barrel',        'background-color': colors.grey } },
+                { selector: 'node[type="Load Balancer"]',  style: { 'shape': 'round-octagon', 'background-color': colors.blue } },
+                { selector: 'node[type="S3 Bucket"]',      style: { 'shape': 'round-rectangle', 'width': '80px', 'background-color': colors.green } },
+                { selector: 'node[type="Security Group"]', style: { 'shape': 'diamond',       'width':'25px', 'height':'25px', 'background-color': '#DD4444' } },
+                { selector: 'node[type="VPC"]',            style: { 'background-color': '#232F3E', 'background-opacity': 0.3 } },
+                { selector: 'node[type="Subnet"]',         style: { 'background-color': '#527FFF', 'background-opacity': 0.2 } },
+
+                // --- DYNAMIC STYLES based on 'displayState' ---
+                {
+                    selector: 'node[displayState="running"], node[displayState="available"], node[displayState="active"]',
+                    style: { 'background-color': colors.green }
+                },
+                {
+                    selector: 'node[displayState="stopped"], node[displayState="terminated"]',
+                    style: { 'background-color': colors.red }
+                },
+                {
+                    selector: 'node[displayState*="pending"], node[displayState*="stopping"], node[displayState*="creating"]',
+                    style: {
+                        'background-color': colors.amber,
+                        'border-color': colors.amber,
+                        'border-width': '4px',
+                        'border-style': 'double'
+                    }
+                }
             ],
             layout: {
                 name: 'cose',
@@ -112,18 +144,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Handle node tap event
-        cy.on('tap', 'node', function(evt){
-            const nodeData = evt.target.data();
-            displayNodeInfo(nodeData);
-        });
-
-        // Close panel when clicking on the background
-        cy.on('tap', function(event) {
-            if (event.target === cy) {
-                infoPanel.classList.add('translate-x-full');
-            }
-        });
+        cy.on('tap', 'node', evt => displayNodeInfo(evt.target.data()));
+        cy.on('tap', evt => { if (evt.target === cy) infoPanel.classList.add('translate-x-full'); });
     }
 
     function displayNodeInfo(data) {
@@ -131,12 +153,11 @@ document.addEventListener('DOMContentLoaded', function () {
                            <p class="text-sm text-gray-500 font-mono mb-4">${data.id}</p>
                            <div class="space-y-2 text-sm">`;
 
-        // Create key-value pairs for all data properties, skipping internal ones
         const internalKeys = ['id', 'label', 'parent'];
         for (const [key, value] of Object.entries(data)) {
             if (!internalKeys.includes(key) && value) {
                 contentHtml += `<div class="flex justify-between border-b pb-1">
-                                    <span class="font-semibold text-gray-600">${key}</span>
+                                    <span class="font-semibold text-gray-600">${key.replace(/([A-Z])/g, ' $1').trim()}</span>
                                     <span class="font-mono text-gray-800 text-right">${value}</span>
                                 </div>`;
             }

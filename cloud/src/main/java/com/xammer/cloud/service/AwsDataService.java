@@ -1320,7 +1320,7 @@ public class AwsDataService {
         logger.info("All dashboard caches have been evicted.");
     }
 
-  @Async("awsTaskExecutor")
+@Async("awsTaskExecutor")
 @Cacheable("graphData")
 public CompletableFuture<List<Map<String, Object>>> getGraphData() {
     logger.info("Fetching data for infrastructure graph...");
@@ -1328,7 +1328,19 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
         List<Map<String, Object>> elements = new ArrayList<>();
 
         try {
-            // Fetch VPCs and add them as nodes
+            // 1. Add S3 Buckets
+            s3Client.listBuckets().buckets().forEach(bucket -> {
+                Map<String, Object> bucketNode = new HashMap<>();
+                Map<String, Object> bucketData = new HashMap<>();
+                bucketData.put("id", bucket.name());
+                bucketData.put("label", bucket.name());
+                bucketData.put("type", "S3 Bucket");
+                bucketData.put("CreationDate", bucket.creationDate().toString());
+                bucketNode.put("data", bucketData);
+                elements.add(bucketNode);
+            });
+
+            // 2. Process resources within each VPC
             ec2Client.describeVpcs().vpcs().forEach(vpc -> {
                 Map<String, Object> vpcNode = new HashMap<>();
                 Map<String, Object> vpcData = new HashMap<>();
@@ -1340,7 +1352,7 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                 vpcNode.put("data", vpcData);
                 elements.add(vpcNode);
 
-                // Fetch Subnets for this VPC
+                // Fetch Subnets, Security Groups, Load Balancers
                 DescribeSubnetsRequest subnetsRequest = DescribeSubnetsRequest.builder()
                         .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
                         .build();
@@ -1357,7 +1369,6 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                     elements.add(subnetNode);
                 });
 
-                // Fetch Security Groups for this VPC
                 DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder()
                         .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
                         .build();
@@ -1372,9 +1383,25 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                     sgNode.put("data", sgData);
                     elements.add(sgNode);
                 });
+
+                elbv2Client.describeLoadBalancers().loadBalancers().stream()
+                    .filter(lb -> vpc.vpcId().equals(lb.vpcId()))
+                    .forEach(lb -> {
+                        Map<String, Object> lbNode = new HashMap<>();
+                        Map<String, Object> lbData = new HashMap<>();
+                        lbData.put("id", lb.loadBalancerArn());
+                        lbData.put("label", lb.loadBalancerName());
+                        lbData.put("type", "Load Balancer");
+                        lb.availabilityZones().stream().findFirst().ifPresent(az -> lbData.put("parent", az.subnetId()));
+                        lbData.put("State", lb.state().codeAsString());
+                        lbData.put("Scheme", lb.schemeAsString());
+                        lbData.put("LBType", lb.typeAsString());
+                        lbNode.put("data", lbData);
+                        elements.add(lbNode);
+                    });
             });
 
-            // Fetch EC2 Instances and add them as nodes
+            // 3. Process EC2 instances
             ec2Client.describeInstances().reservations().stream()
                 .flatMap(r -> r.instances().stream())
                 .filter(instance -> instance.subnetId() != null)
@@ -1385,13 +1412,12 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                     instanceData.put("label", getTagName(instance.tags(), instance.instanceId()));
                     instanceData.put("type", "EC2 Instance");
                     instanceData.put("parent", instance.subnetId());
-                    instanceData.put("InstanceType", instance.instanceTypeAsString());
                     instanceData.put("State", instance.state().nameAsString());
+                    instanceData.put("InstanceType", instance.instanceTypeAsString());
                     instanceData.put("PrivateIpAddress", instance.privateIpAddress());
                     instanceNode.put("data", instanceData);
                     elements.add(instanceNode);
 
-                    // Add edge from instance to its security group(s)
                     instance.securityGroups().forEach(sg -> {
                          Map<String, Object> edge = new HashMap<>();
                          Map<String, Object> edgeData = new HashMap<>();
@@ -1402,6 +1428,24 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                          elements.add(edge);
                     });
                 });
+
+            // 4. Process RDS Instances
+            rdsClient.describeDBInstances().dbInstances().forEach(db -> {
+                if (db.dbSubnetGroup() != null && !db.dbSubnetGroup().subnets().isEmpty()) {
+                    Map<String, Object> dbNode = new HashMap<>();
+                    Map<String, Object> dbData = new HashMap<>();
+                    dbData.put("id", db.dbInstanceArn());
+                    dbData.put("label", db.dbInstanceIdentifier());
+                    dbData.put("type", "RDS Instance");
+                    dbData.put("parent", db.dbSubnetGroup().subnets().get(0).subnetIdentifier());
+                    dbData.put("Status", db.dbInstanceStatus());
+                    dbData.put("Engine", db.engine());
+                    dbData.put("EngineVersion", db.engineVersion());
+                    dbData.put("InstanceClass", db.dbInstanceClass());
+                    dbNode.put("data", dbData);
+                    elements.add(dbNode);
+                }
+            });
 
         } catch (Exception e) {
             logger.error("Failed to build graph data", e);
