@@ -728,22 +728,31 @@ public class AwsDataService {
         }
     }
 
-    @Async("awsTaskExecutor")
-    @Cacheable("costAnomalies")
-    public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies() {
-        logger.info("Fetching cost anomalies...");
-        try {
-            AnomalyDateInterval dateInterval = AnomalyDateInterval.builder().startDate(LocalDate.now().minusDays(60).toString()).endDate(LocalDate.now().toString()).build();
-            GetAnomaliesRequest request = GetAnomaliesRequest.builder().dateInterval(dateInterval).build();
-            List<Anomaly> anomalies = costExplorerClient.getAnomalies(request).anomalies();
-            return CompletableFuture.completedFuture(anomalies.stream()
-                .map(a -> new DashboardData.CostAnomaly(a.anomalyId(), getServiceNameFromAnomaly(a), a.impact().totalImpact(), LocalDate.parse(a.anomalyStartDate()), a.anomalyEndDate() != null ? LocalDate.parse(a.anomalyEndDate()) : LocalDate.now()))
-                .collect(Collectors.toList()));
-        } catch (Exception e) {
-            logger.error("Could not fetch Cost Anomalies.", e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
-        }
+   @Async("awsTaskExecutor")
+@Cacheable("costAnomalies")
+public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies() {
+    logger.info("Fetching cost anomalies...");
+    try {
+        AnomalyDateInterval dateInterval = AnomalyDateInterval.builder()
+            .startDate(LocalDate.now().minusDays(60).toString())
+            .endDate(LocalDate.now().toString())
+            .build();
+        GetAnomaliesRequest request = GetAnomaliesRequest.builder().dateInterval(dateInterval).build();
+        List<Anomaly> anomalies = costExplorerClient.getAnomalies(request).anomalies();
+        return CompletableFuture.completedFuture(anomalies.stream()
+            .map(a -> new DashboardData.CostAnomaly(
+                a.anomalyId(),
+                getServiceNameFromAnomaly(a),
+                a.impact().totalImpact(),
+                LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract YYYY-MM-DD
+                a.anomalyEndDate() != null ? LocalDate.parse(a.anomalyEndDate().substring(0, 10)) : LocalDate.now() // Extract YYYY-MM-DD
+            ))
+            .collect(Collectors.toList()));
+    } catch (Exception e) {
+        logger.error("Could not fetch Cost Anomalies.", e);
+        return CompletableFuture.completedFuture(Collections.emptyList());
     }
+}
 
     @Async("awsTaskExecutor")
     @Cacheable("ebsRecs")
