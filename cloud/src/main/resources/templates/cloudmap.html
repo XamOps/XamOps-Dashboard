@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Cloudmap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #cy {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+<div class="flex h-screen bg-white">
+    <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+
+    <main class="flex-1 flex flex-col">
+        <header class="h-16 flex items-center justify-between border-b bg-white px-6">
+            <h1 class="text-xl font-semibold text-gray-800">Cloudmap - Infrastructure Visualization</h1>
+        </header>
+
+        <div class="flex-1 relative" id="cloudmap-container">
+            <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-white z-10">
+                <i class="fas fa-spinner fa-spin fa-3x text-indigo-600"></i>
+            </div>
+            <div id="cy"></div>
+        </div>
+    </main>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const loadingSpinner = document.getElementById('loading-spinner');
+
+    fetch('/api/cloudmap/graph-data')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            loadingSpinner.style.display = 'none';
+            renderGraph(data);
+        })
+        .catch(error => {
+            console.error('Error fetching graph data:', error);
+            loadingSpinner.innerHTML = '<div class="text-center"><i class="fas fa-exclamation-triangle fa-2x text-red-500"></i><p class="mt-2 text-red-600 font-semibold">Could not load graph data.</p><p class="text-xs text-gray-500">Please check backend logs for details.</p></div>';
+        });
+
+    function renderGraph(graphData) {
+        const cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: graphData,
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'background-color': '#666',
+                        'label': 'data(label)',
+                        'width': '60px',
+                        'height': '60px',
+                        'font-size': '10px',
+                        'text-valign': 'bottom',
+                        'text-halign': 'center',
+                        'color': '#fff',
+                        'text-outline-color': '#888',
+                        'text-outline-width': 2
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 2,
+                        'line-color': '#ccc',
+                        'target-arrow-color': '#ccc',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier'
+                    }
+                },
+                {
+                    selector: ':parent',
+                    style: {
+                        'background-opacity': 0.2,
+                        'border-color': '#666',
+                        'border-width': 1,
+                        'text-valign': 'top',
+                        'font-weight': 'bold'
+                    }
+                },
+                // Style for different resource types
+                {
+                    selector: 'node[type="EC2 Instance"]',
+                    style: { 'background-color': '#FF9900', 'shape': 'ellipse' } // AWS Orange
+                },
+                {
+                    selector: 'node[type="VPC"]',
+                    style: { 'background-color': '#232F3E', 'background-opacity': 0.3 } // AWS Dark Blue
+                },
+                {
+                    selector: 'node[type="Subnet"]',
+                    style: { 'background-color': '#527FFF', 'background-opacity': 0.2 } // A nice blue
+                },
+                {
+                    selector: 'node[type="Security Group"]',
+                    style: { 'background-color': '#DD4444', 'shape': 'diamond', 'width':'25px', 'height':'25px'} // A red for security
+                }
+            ],
+            layout: {
+                name: 'cose',
+                idealEdgeLength: 100,
+                nodeOverlap: 20,
+                refresh: 20,
+                fit: true,
+                padding: 30,
+                randomize: false,
+                componentSpacing: 100,
+                nodeRepulsion: 400000,
+                edgeElasticity: 100,
+                nestingFactor: 5,
+                gravity: 80,
+                numIter: 1000,
+                initialTemp: 200,
+                coolingFactor: 0.95,
+                minTemp: 1.0
+            }
+        });
+
+        // Show details on click
+        cy.on('tap', 'node', function(evt){
+            var node = evt.target;
+            alert( `Tapped Node: ${node.data('label')}\nID: ${node.id()}\nType: ${node.data('type')}` );
+        });
+    }
+});
+</script>
+
+</body>
+</html>

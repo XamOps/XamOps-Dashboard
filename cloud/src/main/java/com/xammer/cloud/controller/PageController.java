@@ -15,7 +15,7 @@ public class PageController {
     public String wastePage() {
         return "waste";
     }
-    
+
     @GetMapping("/login")
     public String loginPage() {
         return "login";
@@ -31,5 +31,10 @@ public class PageController {
     @GetMapping("/rightsizing")
     public String rightsizingPage() {
         return "rightsizing";
+    }
+
+    @GetMapping("/cloudmap")
+    public String cloudmapPage() {
+        return "cloudmap";
     }
 }
