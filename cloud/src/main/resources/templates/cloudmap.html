@@ -15,6 +15,11 @@
             position: absolute;
             top: 0;
             left: 0;
+            z-index: 1; /* Behind the info panel */
+        }
+        #info-panel {
+            transition: transform 0.3s ease-in-out;
+            z-index: 10;
         }
     </style>
 </head>
@@ -29,10 +34,19 @@
         </header>
 
         <div class="flex-1 relative" id="cloudmap-container">
-            <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-white z-10">
+            <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-white z-20">
                 <i class="fas fa-spinner fa-spin fa-3x text-indigo-600"></i>
             </div>
+            
             <div id="cy"></div>
+
+            <div id="info-panel" class="absolute top-0 right-0 h-full w-96 bg-white shadow-lg p-6 border-l transform translate-x-full">
+                <button id="close-panel-btn" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+                    <i class="fas fa-times fa-lg"></i>
+                </button>
+                <div id="info-content">
+                    </div>
+            </div>
         </div>
     </main>
 </div>
@@ -40,12 +54,18 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const loadingSpinner = document.getElementById('loading-spinner');
+    const infoPanel = document.getElementById('info-panel');
+    const infoContent = document.getElementById('info-content');
+    const closePanelBtn = document.getElementById('close-panel-btn');
+    let cy; // To hold the cytoscape instance
+
+    closePanelBtn.addEventListener('click', () => {
+        infoPanel.classList.add('translate-x-full');
+    });
 
     fetch('/api/cloudmap/graph-data')
         .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
         })
         .then(data => {
@@ -58,88 +78,73 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
     function renderGraph(graphData) {
-        const cy = cytoscape({
+        cy = cytoscape({
             container: document.getElementById('cy'),
             elements: graphData,
             style: [
                 {
                     selector: 'node',
                     style: {
-                        'background-color': '#666',
-                        'label': 'data(label)',
-                        'width': '60px',
-                        'height': '60px',
-                        'font-size': '10px',
-                        'text-valign': 'bottom',
-                        'text-halign': 'center',
-                        'color': '#fff',
-                        'text-outline-color': '#888',
-                        'text-outline-width': 2
+                        'background-color': '#666', 'label': 'data(label)', 'width': '60px', 'height': '60px',
+                        'font-size': '10px', 'text-valign': 'bottom', 'text-halign': 'center',
+                        'color': '#fff', 'text-outline-color': '#888', 'text-outline-width': 2
                     }
                 },
                 {
                     selector: 'edge',
-                    style: {
-                        'width': 2,
-                        'line-color': '#ccc',
-                        'target-arrow-color': '#ccc',
-                        'target-arrow-shape': 'triangle',
-                        'curve-style': 'bezier'
-                    }
+                    style: { 'width': 2, 'line-color': '#ccc', 'target-arrow-color': '#ccc', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' }
                 },
                 {
                     selector: ':parent',
-                    style: {
-                        'background-opacity': 0.2,
-                        'border-color': '#666',
-                        'border-width': 1,
-                        'text-valign': 'top',
-                        'font-weight': 'bold'
-                    }
+                    style: { 'background-opacity': 0.2, 'border-color': '#666', 'border-width': 1, 'text-valign': 'top', 'font-weight': 'bold' }
                 },
-                // Style for different resource types
-                {
-                    selector: 'node[type="EC2 Instance"]',
-                    style: { 'background-color': '#FF9900', 'shape': 'ellipse' } // AWS Orange
-                },
-                {
-                    selector: 'node[type="VPC"]',
-                    style: { 'background-color': '#232F3E', 'background-opacity': 0.3 } // AWS Dark Blue
-                },
-                {
-                    selector: 'node[type="Subnet"]',
-                    style: { 'background-color': '#527FFF', 'background-opacity': 0.2 } // A nice blue
-                },
-                {
-                    selector: 'node[type="Security Group"]',
-                    style: { 'background-color': '#DD4444', 'shape': 'diamond', 'width':'25px', 'height':'25px'} // A red for security
-                }
+                { selector: 'node[type="EC2 Instance"]', style: { 'background-color': '#FF9900', 'shape': 'ellipse' } },
+                { selector: 'node[type="VPC"]', style: { 'background-color': '#232F3E', 'background-opacity': 0.3 } },
+                { selector: 'node[type="Subnet"]', style: { 'background-color': '#527FFF', 'background-opacity': 0.2 } },
+                { selector: 'node[type="Security Group"]', style: { 'background-color': '#DD4444', 'shape': 'diamond', 'width':'25px', 'height':'25px' } }
             ],
             layout: {
                 name: 'cose',
-                idealEdgeLength: 100,
-                nodeOverlap: 20,
-                refresh: 20,
-                fit: true,
-                padding: 30,
-                randomize: false,
-                componentSpacing: 100,
-                nodeRepulsion: 400000,
-                edgeElasticity: 100,
-                nestingFactor: 5,
-                gravity: 80,
-                numIter: 1000,
-                initialTemp: 200,
-                coolingFactor: 0.95,
-                minTemp: 1.0
+                idealEdgeLength: 100, nodeOverlap: 20, refresh: 20, fit: true, padding: 30,
+                randomize: false, componentSpacing: 100, nodeRepulsion: 400000,
+                edgeElasticity: 100, nestingFactor: 5, gravity: 80, numIter: 1000,
+                initialTemp: 200, coolingFactor: 0.95, minTemp: 1.0
             }
         });
 
-        // Show details on click
+        // Handle node tap event
         cy.on('tap', 'node', function(evt){
-            var node = evt.target;
-            alert( `Tapped Node: ${node.data('label')}\nID: ${node.id()}\nType: ${node.data('type')}` );
+            const nodeData = evt.target.data();
+            displayNodeInfo(nodeData);
         });
+
+        // Close panel when clicking on the background
+        cy.on('tap', function(event) {
+            if (event.target === cy) {
+                infoPanel.classList.add('translate-x-full');
+            }
+        });
+    }
+
+    function displayNodeInfo(data) {
+        let contentHtml = `<h2 class="text-xl font-bold mb-1">${data.label}</h2>
+                           <p class="text-sm text-gray-500 font-mono mb-4">${data.id}</p>
+                           <div class="space-y-2 text-sm">`;
+
+        // Create key-value pairs for all data properties, skipping internal ones
+        const internalKeys = ['id', 'label', 'parent'];
+        for (const [key, value] of Object.entries(data)) {
+            if (!internalKeys.includes(key) && value) {
+                contentHtml += `<div class="flex justify-between border-b pb-1">
+                                    <span class="font-semibold text-gray-600">${key}</span>
+                                    <span class="font-mono text-gray-800 text-right">${value}</span>
+                                </div>`;
+            }
+        }
+
+        contentHtml += `</div>`;
+        infoContent.innerHTML = contentHtml;
+        infoPanel.classList.remove('translate-x-full');
     }
 });
 </script>

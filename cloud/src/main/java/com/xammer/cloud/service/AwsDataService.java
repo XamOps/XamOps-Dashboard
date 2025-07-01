@@ -1320,89 +1320,95 @@ public class AwsDataService {
         logger.info("All dashboard caches have been evicted.");
     }
 
-    @Async("awsTaskExecutor")
-    @Cacheable("graphData")
-    public CompletableFuture<List<Map<String, Object>>> getGraphData() {
-        logger.info("Fetching data for infrastructure graph...");
-        return CompletableFuture.supplyAsync(() -> {
-            List<Map<String, Object>> elements = new ArrayList<>();
+  @Async("awsTaskExecutor")
+@Cacheable("graphData")
+public CompletableFuture<List<Map<String, Object>>> getGraphData() {
+    logger.info("Fetching data for infrastructure graph...");
+    return CompletableFuture.supplyAsync(() -> {
+        List<Map<String, Object>> elements = new ArrayList<>();
 
-            try {
-                // Fetch VPCs and add them as nodes
-                ec2Client.describeVpcs().vpcs().forEach(vpc -> {
-                    Map<String, Object> vpcNode = new HashMap<>();
-                    Map<String, Object> vpcData = new HashMap<>();
-                    vpcData.put("id", vpc.vpcId());
-                    vpcData.put("label", getTagName(vpc.tags(), vpc.vpcId()));
-                    vpcData.put("type", "VPC");
-                    vpcNode.put("data", vpcData);
-                    elements.add(vpcNode);
+        try {
+            // Fetch VPCs and add them as nodes
+            ec2Client.describeVpcs().vpcs().forEach(vpc -> {
+                Map<String, Object> vpcNode = new HashMap<>();
+                Map<String, Object> vpcData = new HashMap<>();
+                vpcData.put("id", vpc.vpcId());
+                vpcData.put("label", getTagName(vpc.tags(), vpc.vpcId()));
+                vpcData.put("type", "VPC");
+                vpcData.put("CidrBlock", vpc.cidrBlock());
+                vpcData.put("IsDefault", vpc.isDefault().toString());
+                vpcNode.put("data", vpcData);
+                elements.add(vpcNode);
 
-                    // Fetch Subnets for this VPC
-                    DescribeSubnetsRequest subnetsRequest = DescribeSubnetsRequest.builder()
-                            .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
-                            .build();
-                    ec2Client.describeSubnets(subnetsRequest).subnets().forEach(subnet -> {
-                        Map<String, Object> subnetNode = new HashMap<>();
-                        Map<String, Object> subnetData = new HashMap<>();
-                        subnetData.put("id", subnet.subnetId());
-                        subnetData.put("label", getTagName(subnet.tags(), subnet.subnetId()));
-                        subnetData.put("type", "Subnet");
-                        subnetData.put("parent", vpc.vpcId()); // Nest inside VPC
-                        subnetNode.put("data", subnetData);
-                        elements.add(subnetNode);
-                    });
+                // Fetch Subnets for this VPC
+                DescribeSubnetsRequest subnetsRequest = DescribeSubnetsRequest.builder()
+                        .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
+                        .build();
+                ec2Client.describeSubnets(subnetsRequest).subnets().forEach(subnet -> {
+                    Map<String, Object> subnetNode = new HashMap<>();
+                    Map<String, Object> subnetData = new HashMap<>();
+                    subnetData.put("id", subnet.subnetId());
+                    subnetData.put("label", getTagName(subnet.tags(), subnet.subnetId()));
+                    subnetData.put("type", "Subnet");
+                    subnetData.put("parent", vpc.vpcId());
+                    subnetData.put("AvailabilityZone", subnet.availabilityZone());
+                    subnetData.put("CidrBlock", subnet.cidrBlock());
+                    subnetNode.put("data", subnetData);
+                    elements.add(subnetNode);
+                });
 
-                    // Fetch Security Groups for this VPC
-                    DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder()
-                            .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
-                            .build();
-                    ec2Client.describeSecurityGroups(sgsRequest).securityGroups().forEach(sg -> {
-                        Map<String, Object> sgNode = new HashMap<>();
-                        Map<String, Object> sgData = new HashMap<>();
-                        sgData.put("id", sg.groupId());
-                        sgData.put("label", sg.groupName());
-                        sgData.put("type", "Security Group");
-                        sgData.put("parent", vpc.vpcId()); // Nest inside VPC
-                        sgNode.put("data", sgData);
-                        elements.add(sgNode);
+                // Fetch Security Groups for this VPC
+                DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder()
+                        .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
+                        .build();
+                ec2Client.describeSecurityGroups(sgsRequest).securityGroups().forEach(sg -> {
+                    Map<String, Object> sgNode = new HashMap<>();
+                    Map<String, Object> sgData = new HashMap<>();
+                    sgData.put("id", sg.groupId());
+                    sgData.put("label", sg.groupName());
+                    sgData.put("type", "Security Group");
+                    sgData.put("parent", vpc.vpcId());
+                    sgData.put("Description", sg.description());
+                    sgNode.put("data", sgData);
+                    elements.add(sgNode);
+                });
+            });
+
+            // Fetch EC2 Instances and add them as nodes
+            ec2Client.describeInstances().reservations().stream()
+                .flatMap(r -> r.instances().stream())
+                .filter(instance -> instance.subnetId() != null)
+                .forEach(instance -> {
+                    Map<String, Object> instanceNode = new HashMap<>();
+                    Map<String, Object> instanceData = new HashMap<>();
+                    instanceData.put("id", instance.instanceId());
+                    instanceData.put("label", getTagName(instance.tags(), instance.instanceId()));
+                    instanceData.put("type", "EC2 Instance");
+                    instanceData.put("parent", instance.subnetId());
+                    instanceData.put("InstanceType", instance.instanceTypeAsString());
+                    instanceData.put("State", instance.state().nameAsString());
+                    instanceData.put("PrivateIpAddress", instance.privateIpAddress());
+                    instanceNode.put("data", instanceData);
+                    elements.add(instanceNode);
+
+                    // Add edge from instance to its security group(s)
+                    instance.securityGroups().forEach(sg -> {
+                         Map<String, Object> edge = new HashMap<>();
+                         Map<String, Object> edgeData = new HashMap<>();
+                         edgeData.put("id", instance.instanceId() + "-" + sg.groupId());
+                         edgeData.put("source", instance.instanceId());
+                         edgeData.put("target", sg.groupId());
+                         edge.put("data", edgeData);
+                         elements.add(edge);
                     });
                 });
 
-                // Fetch EC2 Instances and add them as nodes
-                ec2Client.describeInstances().reservations().stream()
-                        .flatMap(r -> r.instances().stream())
-                        .filter(instance -> instance.subnetId() != null) // Ensure instance has a subnet
-                        .forEach(instance -> {
-                            Map<String, Object> instanceNode = new HashMap<>();
-                            Map<String, Object> instanceData = new HashMap<>();
-                            instanceData.put("id", instance.instanceId());
-                            instanceData.put("label", getTagName(instance.tags(), instance.instanceId()));
-                            instanceData.put("type", "EC2 Instance");
-                            instanceData.put("parent", instance.subnetId()); // Nest inside Subnet
-                            instanceNode.put("data", instanceData);
-                            elements.add(instanceNode);
+        } catch (Exception e) {
+            logger.error("Failed to build graph data", e);
+            throw new RuntimeException("Failed to fetch graph data from AWS", e);
+        }
 
-                            // Add edge from instance to its security group(s)
-                            instance.securityGroups().forEach(sg -> {
-                                Map<String, Object> edge = new HashMap<>();
-                                Map<String, Object> edgeData = new HashMap<>();
-                                edgeData.put("id", instance.instanceId() + "-" + sg.groupId()); // Unique edge ID
-                                edgeData.put("source", instance.instanceId());
-                                edgeData.put("target", sg.groupId());
-                                edge.put("data", edgeData);
-                                elements.add(edge);
-                            });
-                        });
-
-            } catch (Exception e) {
-                logger.error("Failed to build graph data", e);
-                // Propagate the exception so the future completes exceptionally
-                throw new RuntimeException("Failed to fetch graph data from AWS", e);
-            }
-
-            return elements;
-        });
-    }
-
+        return elements;
+    });
+}
 }
