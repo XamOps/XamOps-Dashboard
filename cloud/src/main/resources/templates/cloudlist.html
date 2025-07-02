@@ -305,7 +305,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Security Group': 'fas fa-shield-alt', 'Route 53 Zone': 'fas fa-route',
                 'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
                 'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
-                'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left'
+                'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left',
+                'SNS Topic': 'fas fa-bell', // ADDED
+                'SQS Queue': 'fas fa-envelope-open-text'// ADDED
             };
             return map[serviceType] || 'fas fa-cloud';
         },
@@ -317,7 +319,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 'S3 Bucket': 'text-red-500', 'Load Balancer': 'text-teal-500',
                 'VPC': 'text-green-500', 'Security Group': 'text-red-600',
                 'CloudTrail': 'text-blue-600', 'Certificate Manager': 'text-green-600',
-                'CloudWatch Log Group': 'text-indigo-500'
+                'CloudWatch Log Group': 'text-indigo-500',
+                'SNS Topic': 'text-pink-500', // ADDED
+                'SQS Queue': 'text-cyan-500'
             };
             return map[serviceType] || 'text-gray-500';
         }

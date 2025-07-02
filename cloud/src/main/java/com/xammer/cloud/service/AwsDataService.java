@@ -1,10 +1,11 @@
+// in cloud/src/main/java/com/xammer/cloud/service/AwsDataService.java
+
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.DashboardData.ServiceGroupDto;
 import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ResourceDto;
-
 import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,11 +45,12 @@ import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
-
 import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
-
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -93,6 +95,8 @@ public class AwsDataService {
     private final CloudTrailClient cloudTrailClient;
     private final AcmClient acmClient;
     private final CloudWatchLogsClient cloudWatchLogsClient;
+    private final SnsClient snsClient;
+    private final SqsClient sqsClient;
     private final String configuredRegion;
 
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("us-east-1", "us-west-2", "eu-west-1", "eu-central-1",
@@ -123,7 +127,7 @@ public class AwsDataService {
                           ElasticLoadBalancingV2Client elbv2Client, AutoScalingClient autoScalingClient,
                           ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient,
                           Route53Client route53Client, CloudTrailClient cloudTrailClient, AcmClient acmClient,
-                          CloudWatchLogsClient cloudWatchLogsClient) {
+                          CloudWatchLogsClient cloudWatchLogsClient, SnsClient snsClient, SqsClient sqsClient) {
         this.ec2Client = ec2;
         this.iamClient = iam;
         this.ecsClient = ecs;
@@ -144,6 +148,8 @@ public class AwsDataService {
         this.cloudTrailClient = cloudTrailClient;
         this.acmClient = acmClient;
         this.cloudWatchLogsClient = cloudWatchLogsClient;
+        this.snsClient = snsClient;
+        this.sqsClient = sqsClient;
         // Set the region explicitly or via configuration
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
     }
@@ -315,7 +321,9 @@ public class AwsDataService {
                 fetchRoute53HostedZonesForCloudlist(),
                 fetchCloudTrailsForCloudlist(),
                 fetchAcmCertificatesForCloudlist(),
-                fetchCloudWatchLogGroupsForCloudlist() // ADDED
+                fetchCloudWatchLogGroupsForCloudlist(),
+                fetchSnsTopicsForCloudlist(),
+                fetchSqsQueuesForCloudlist()
         );
 
         return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
@@ -755,6 +763,53 @@ public class AwsDataService {
         });
     }
 
+    private CompletableFuture<List<ResourceDto>> fetchSnsTopicsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching SNS Topics...");
+                return snsClient.listTopics().topics().stream()
+                        .map(t -> new ResourceDto(
+                                t.topicArn(),
+                                t.topicArn().substring(t.topicArn().lastIndexOf(':') + 1),
+                                "SNS Topic",
+                                getRegionFromArn(t.topicArn()),
+                                "Active",
+                                null,
+                                Collections.emptyMap()
+                        ))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: SNS Topics.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchSqsQueuesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching SQS Queues...");
+                return sqsClient.listQueues().queueUrls().stream()
+                        .map(queueUrl -> {
+                            String[] arnParts = sqsClient.getQueueAttributes(req -> req.queueUrl(queueUrl).attributeNames(QueueAttributeName.QUEUE_ARN)).attributes().get(QueueAttributeName.QUEUE_ARN).split(":");
+                            return new ResourceDto(
+                                    queueUrl,
+                                    arnParts[5],
+                                    "SQS Queue",
+                                    arnParts[3],
+                                    "Active",
+                                    null,
+                                    Collections.emptyMap()
+                            );
+                        })
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: SQS Queues.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
     private String getRegionFromArn(String arn) {
         if (arn == null || arn.isBlank()) {
             return "Unknown";
@@ -991,9 +1046,9 @@ public class AwsDataService {
                             a.anomalyId(),
                             getServiceNameFromAnomaly(a),
                             a.impact().totalImpact(),
-                            LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract yyyy-MM-DD
+                            LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract YYYY-MM-DD
                             a.anomalyEndDate() != null ? LocalDate.parse(a.anomalyEndDate().substring(0, 10))
-                                    : LocalDate.now() // Extract yyyy-MM-DD
+                                    : LocalDate.now() // Extract YYYY-MM-DD
                     ))
                     .collect(Collectors.toList()));
         } catch (Exception e) {
