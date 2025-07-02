@@ -1657,4 +1657,11 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData(String vpcId) {
         return elements;
     });
 }
+
+@Async("awsTaskExecutor")
+@Cacheable("vpcList")
+public CompletableFuture<List<Vpc>> getVpcList() {
+    logger.info("Fetching list of VPCs...");
+    return CompletableFuture.supplyAsync(() -> ec2Client.describeVpcs().vpcs());
+}
 }
