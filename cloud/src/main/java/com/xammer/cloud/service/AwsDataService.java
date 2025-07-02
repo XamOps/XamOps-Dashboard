@@ -1507,7 +1507,6 @@ public class AwsDataService {
         }
     }
 
-
 @Async("awsTaskExecutor")
 @Cacheable(value = "graphData", key = "#vpcId")
 public CompletableFuture<List<Map<String, Object>>> getGraphData(String vpcId) {
