@@ -991,9 +991,9 @@ public class AwsDataService {
                             a.anomalyId(),
                             getServiceNameFromAnomaly(a),
                             a.impact().totalImpact(),
-                            LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract YYYY-MM-DD
+                            LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract yyyy-MM-DD
                             a.anomalyEndDate() != null ? LocalDate.parse(a.anomalyEndDate().substring(0, 10))
-                                    : LocalDate.now() // Extract YYYY-MM-DD
+                                    : LocalDate.now() // Extract yyyy-MM-DD
                     ))
                     .collect(Collectors.toList()));
         } catch (Exception e) {
