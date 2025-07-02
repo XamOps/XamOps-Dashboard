@@ -6,70 +6,78 @@
     <title>Xammer - Cloudlist</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style> 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Simple styles for showing/hiding content without Alpine.js */
         .hidden { display: none !important; }
+        .rotate-180 { transform: rotate(180deg); }
+        .transition-all { transition: all 0.2s ease-in-out; }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-50">
 
 <div class="flex h-screen bg-white">
+    <!-- Sidebar -->
     <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
 
+    <!-- Main Content -->
     <main class="flex-1 flex flex-col">
-        <header class="h-16 flex items-center justify-between border-b bg-white px-6">
-            <h1 class="text-xl font-semibold text-gray-800">Cloudlist - Resource Inventory</h1>
+        <!-- Header -->
+        <header class="h-16 flex-shrink-0 flex items-center justify-between border-b bg-white px-6">
+            <div class="flex items-center">
+                <h1 class="text-xl font-semibold text-gray-800">Cloudlist</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="update-status" class="text-sm text-gray-500"></span>
+                <button id="refresh-button" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+                    <i class="fas fa-sync-alt mr-1"></i>Refresh now
+                </button>
+            </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6" id="cloudlist-app">
-            <div class="bg-white p-6 rounded-lg shadow-sm">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <input type="text" id="search-input" placeholder="Search by name or ID..." class="md:col-span-2 form-input w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                    <select id="type-filter" class="form-select w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                        <option value="">All Types</option>
-                        <option value="EC2 Instance">EC2 Instance</option>
-                        <option value="EBS Volume">EBS Volume</option>
-                        <option value="RDS Instance">RDS Instance</option>
-                        <option value="Lambda Function">Lambda Function</option>
-                        <option value="VPC">VPC</option>
-                        <option value="Security Group">Security Group</option>
-                        <option value="S3 Bucket">S3 Bucket</option>
-                        <option value="Load Balancer">Load Balancer</option>
-                        <option value="Auto Scaling Group">Auto Scaling Group</option>
-                        <option value="ElastiCache Cluster">ElastiCache Cluster</option>
-                        <option value="DynamoDB Table">DynamoDB Table</option>
-                        <option value="ECR Repository">ECR Repository</option>
-                        <option value="Route 53 Zone">Route 53 Zone</option>
+        <!-- Page Content -->
+        <div class="flex-1 overflow-y-auto p-6">
+            <!-- Control Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <div class="flex items-center gap-4 flex-1">
+                    <select id="region-filter" class="form-select w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">All Regions</option>
+                        <option value="ap-south-1">Asia Pacific (Mumbai)</option>
+                        <option value="us-east-1">US East (N. Virginia)</option>
+                        <option value="Global">Global</option>
+                        <option value="Regional">Regional</option>
                     </select>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3">Name / ID</th>
-                                <th class="px-6 py-3">Type</th>
-                                <th class="px-6 py-3">Region</th>
-                                <th class="px-6 py-3">State</th>
-                                <th class="px-6 py-3">Details</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resources-table-body">
-                            <!-- Loading State (initially visible) -->
-                             <tr id="loading-state">
-                                <td colspan="5" class="text-center p-8">
-                                    <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                     <!-- Empty State (initially hidden) -->
-                    <div id="empty-state" class="hidden text-center py-12 px-4 border-2 border-dashed rounded-lg mt-4">
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No resources found.</h3>
-                        <p class="mt-1 text-sm text-gray-500">Adjust your search or filter criteria.</p>
+                    <div class="relative flex-1 min-w-[300px]">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" id="search-input" placeholder="Search by any field..." class="form-input w-full pl-10 rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                     </div>
                 </div>
+                <div class="flex items-center gap-2">
+                    <button class="px-4 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                        <i class="fas fa-filter mr-2 text-gray-500"></i>Filter
+                    </button>
+                    <button class="px-4 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                        <i class="fas fa-file-excel mr-2 text-green-600"></i>Save To Excel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Resource List Container -->
+            <div id="resource-list-container" class="space-y-2">
+                <!-- Loading State -->
+                <div id="loading-state" class="w-full text-center p-12">
+                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
+                    <p class="mt-4 text-gray-600 font-semibold">Fetching AWS Resources...</p>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="hidden text-center py-12 px-4 border-2 border-dashed rounded-lg mt-4">
+                <i class="fas fa-box-open fa-3x text-gray-400"></i>
+                <h3 class="mt-4 text-lg font-medium text-gray-900">No Resources Found</h3>
+                <p class="mt-1 text-sm text-gray-500">Try adjusting your search or filter criteria.</p>
             </div>
         </div>
     </main>
@@ -78,121 +86,202 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const app = {
-        // Store all resources fetched from the API
-        allResources: [],
-        
-        // References to key DOM elements
+        allGroups: [],
         dom: {
             searchInput: document.getElementById('search-input'),
-            typeFilter: document.getElementById('type-filter'),
+            regionFilter: document.getElementById('region-filter'),
+            listContainer: document.getElementById('resource-list-container'),
             loadingState: document.getElementById('loading-state'),
-            tableBody: document.getElementById('resources-table-body'),
-            emptyState: document.getElementById('empty-state')
+            emptyState: document.getElementById('empty-state'),
+            refreshButton: document.getElementById('refresh-button'),
+            updateStatus: document.getElementById('update-status'),
         },
-        
-        // Initialize the component
+
         init() {
             this.setupEventListeners();
             this.fetchResources();
         },
-        
-        // Set up listeners for the search and filter inputs
+
         setupEventListeners() {
             this.dom.searchInput.addEventListener('input', () => this.render());
-            this.dom.typeFilter.addEventListener('change', () => this.render());
+            this.dom.regionFilter.addEventListener('change', () => this.render());
+            this.dom.refreshButton.addEventListener('click', () => {
+                this.dom.listContainer.innerHTML = ''; 
+                this.fetchResources();
+            });
         },
-        
-        // Fetch the master list of resources from the backend API
+
         fetchResources() {
             this.dom.loadingState.classList.remove('hidden');
+            this.dom.emptyState.classList.add('hidden');
+            this.dom.updateStatus.textContent = 'Updating...';
             
-            fetch(`${window.location.origin}/api/cloudlist/resources`)
+            fetch('/api/cloudlist/resources')
                 .then(res => {
-                    if (!res.ok) throw new Error(`Network response was not ok. Status: ${res.status}`);
+                    if (!res.ok) throw new Error(`API Error: ${res.status}`);
                     return res.json();
                 })
                 .then(data => {
-                    this.allResources = Array.isArray(data) ? data : [];
-                    this.render(); // Render the initial unfiltered list
+                    this.allGroups = Array.isArray(data) ? data : [];
+                    this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                    this.render();
                 })
                 .catch(error => {
                     console.error('Error fetching resources:', error);
-                    this.allResources = [];
-                    this.render(); // Render to show the empty state
+                    this.allGroups = [];
+                    this.dom.updateStatus.textContent = 'Update failed';
+                    this.render();
                 });
         },
-        
-        // Main function to filter and re-render the table
+
         render() {
             this.dom.loadingState.classList.add('hidden');
-            const searchTerm = this.dom.searchInput.value.toLowerCase();
-            const filterType = this.dom.typeFilter.value;
-            
-            const filtered = this.allResources.filter(resource => {
-                const typeMatch = filterType === '' || (resource.type && resource.type === filterType);
-                const searchMatch = searchTerm === '' || 
-                                    (resource.name && resource.name.toLowerCase().includes(searchTerm)) || 
-                                    (resource.id && resource.id.toLowerCase().includes(searchTerm));
-                return typeMatch && searchMatch;
-            });
-            
-            this.renderTable(filtered);
-        },
-        
-        // Clears and re-populates the table body with the provided resources
-        renderTable(resources) {
-            this.dom.tableBody.innerHTML = ''; // Clear existing rows
+            this.dom.listContainer.innerHTML = '';
 
-            if (resources.length === 0) {
+            const filteredGroups = this.getFilteredData();
+
+            if (filteredGroups.length === 0 && this.allGroups.length > 0) {
                 this.dom.emptyState.classList.remove('hidden');
             } else {
                 this.dom.emptyState.classList.add('hidden');
             }
 
-            resources.forEach(resource => {
-                const row = document.createElement('tr');
-                row.className = 'border-b hover:bg-gray-50';
-                
-                const detailsHtml = Object.entries(resource.details || {})
-                    .map(([key, value]) => `
-                        <div class="flex justify-between">
-                            <span class="font-semibold">${key}:</span>
-                            <span class="font-mono truncate">${value}</span>
-                        </div>`)
-                    .join('');
+            filteredGroups.forEach(group => {
+                const groupElement = this.createGroupElement(group);
+                this.dom.listContainer.appendChild(groupElement);
+            });
+            
+            this.addEventListenersForToggles();
+        },
 
-                row.innerHTML = `
-                    <td class="px-6 py-4">
-                        <p class="font-medium text-gray-900">${resource.name || 'N/A'}</p>
-                        <p class="text-xs text-gray-500 font-mono">${resource.id || 'N/A'}</p>
-                    </td>
-                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${this.getTypeClass(resource.type)}">${resource.type || 'Unknown'}</span></td>
-                    <td class="px-6 py-4">${resource.region || 'N/A'}</td>
-                    <td class="px-6 py-4"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${this.getStateClass(resource.state)}">${resource.state || 'Unknown'}</span></td>
-                    <td class="px-6 py-4"><div class="text-xs text-gray-600">${detailsHtml}</div></td>
-                `;
-                this.dom.tableBody.appendChild(row);
+        getFilteredData() {
+            const searchTerm = this.dom.searchInput.value.toLowerCase();
+            const region = this.dom.regionFilter.value;
+
+            if (!searchTerm && !region) {
+                return this.allGroups;
+            }
+
+            return this.allGroups.map(group => {
+                const matchingResources = group.resources.filter(res => {
+                    const regionMatch = !region || (res.region && res.region === region) || (region === 'Global' && res.region === 'Global') || (region === 'Regional' && res.region === 'Regional');
+                    const searchMatch = !searchTerm ||
+                        (res.name && res.name.toLowerCase().includes(searchTerm)) ||
+                        (res.id && res.id.toLowerCase().includes(searchTerm));
+                    return regionMatch && searchMatch;
+                });
+                // Return a new group object with filtered resources, but only if there are matches
+                return { ...group, resources: matchingResources };
+            }).filter(group => group.resources.length > 0); // Filter out groups with no matching resources
+        },
+        
+        createGroupElement(group) {
+            const container = document.createElement('div');
+            container.className = 'bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200';
+            const groupId = `group-content-${group.serviceType.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+            container.innerHTML = `
+                <div class="flex items-center justify-between p-3 border-b cursor-pointer hover:bg-gray-50 toggle-button" data-target="#${groupId}">
+                    <div class="flex items-center gap-3 flex-1">
+                        <i class="fas fa-chevron-right text-gray-400 w-4 text-center transition-all"></i>
+                        <input type="checkbox" class="form-checkbox h-4 w-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                        <i class="${this.getServiceIcon(group.serviceType)} w-5 text-center text-gray-600"></i>
+                        <span class="font-semibold text-gray-800">${group.serviceType}</span>
+                        <span class="text-xs font-medium text-gray-500 bg-gray-200 rounded-full px-2 py-0.5">${group.resources.length}</span>
+                    </div>
+                    <div class="flex items-center gap-2 w-auto justify-end">
+                        <span class="text-xs text-gray-500 font-semibold pr-4">ACTION</span>
+                        <button class="px-3 py-1 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Details</button>
+                    </div>
+                </div>
+                <div id="${groupId}" class="resource-content hidden">
+                    ${group.resources.map(res => this.createResourceRow(res)).join('')}
+                </div>
+            `;
+            return container;
+        },
+
+        createResourceRow(resource) {
+            const detailsId = `details-${resource.id.replace(/[^a-zA-Z0-9]/g, '')}`;
+            const hasDetails = resource.details && Object.keys(resource.details).length > 0;
+
+            const detailsHtml = hasDetails ? Object.entries(resource.details)
+                .map(([key, value]) => `<div class="text-xs"><span class="font-semibold">${key}:</span> <span class="font-mono">${value}</span></div>`)
+                .join('') : '';
+
+            return `
+                <div class="bg-white border-t">
+                    <div class="grid grid-cols-12 items-center p-3 pl-8 text-sm hover:bg-indigo-50/50">
+                        <div class="col-span-6 flex items-center gap-3">
+                            <i class="fas fa-chevron-right text-gray-400 w-4 text-center transition-all ${hasDetails ? 'cursor-pointer' : 'invisible'} details-toggle" data-target="#${detailsId}"></i>
+                            <input type="checkbox" class="form-checkbox h-4 w-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <div class="flex-1">
+                                <p class="font-medium text-gray-900">${resource.name || 'N/A'}</p>
+                                <p class="font-mono text-xs text-gray-500">${resource.id || 'N/A'}</p>
+                            </div>
+                        </div>
+                        <div class="col-span-2 font-medium text-gray-700">${resource.region || 'Global'}</div>
+                        <div class="col-span-2">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${this.getStateClass(resource.state)}">
+                                ${resource.state || 'Unknown'}
+                            </span>
+                        </div>
+                        <div class="col-span-2 text-right pr-6">
+                            <button class="px-3 py-1 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Details</button>
+                        </div>
+                    </div>
+                    ${hasDetails ? `<div id="${detailsId}" class="hidden p-3 pl-20 bg-gray-50 border-t">${detailsHtml}</div>` : ''}
+                </div>
+            `;
+        },
+
+        addEventListenersForToggles() {
+            this.dom.listContainer.querySelectorAll('.toggle-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    if (e.target.matches('input, button')) return;
+                    const targetSelector = button.getAttribute('data-target');
+                    const content = this.dom.listContainer.querySelector(targetSelector);
+                    const icon = button.querySelector('.fa-chevron-right');
+                    
+                    if (content) {
+                        content.classList.toggle('hidden');
+                        icon.classList.toggle('rotate-90');
+                    }
+                });
+            });
+
+            this.dom.listContainer.querySelectorAll('.details-toggle').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const targetSelector = button.getAttribute('data-target');
+                    const content = this.dom.listContainer.querySelector(targetSelector);
+                    if(content) {
+                        content.classList.toggle('hidden');
+                        button.classList.toggle('rotate-90');
+                    }
+                });
             });
         },
         
-        // Helper functions for styling
-        getTypeClass(type) {
-            const map = {
-                'EC2 Instance': 'bg-blue-100 text-blue-800', 'EBS Volume': 'bg-purple-100 text-purple-800',
-                'RDS Instance': 'bg-orange-100 text-orange-800', 'Lambda Function': 'bg-yellow-100 text-yellow-800',
-                'ElastiCache Cluster': 'bg-red-100 text-red-800', 'S3 Bucket': 'bg-green-100 text-green-800',
-                'Route 53 Zone': 'bg-green-100 text-green-800', 'Load Balancer': 'bg-cyan-100 text-cyan-800',
-                'Auto Scaling Group': 'bg-cyan-100 text-cyan-800', 'ECR Repository': 'bg-cyan-100 text-cyan-800',
-                'DynamoDB Table': 'bg-indigo-100 text-indigo-800', 'VPC': 'bg-gray-200 text-gray-800',
-                'Security Group': 'bg-gray-200 text-gray-800'
-            };
-            return map[type] || 'bg-gray-100 text-gray-800';
-        },
         getStateClass(state) {
             const s = (state || '').toLowerCase();
-            if (['running', 'available', 'active', 'in-use'].includes(s)) return 'bg-green-100 text-green-800';
-            if (['stopped', 'terminated', 'deleting'].includes(s)) return 'bg-red-100 text-red-800';
+            if (['running', 'available', 'active', 'in-use', 'issued'].includes(s)) return 'bg-green-100 text-green-800';
+            if (['stopped', 'terminated', 'deleting', 'inactive', 'expired'].includes(s)) return 'bg-red-100 text-red-800';
+            if (['pending', 'stopping', 'pending_validation'].includes(s)) return 'bg-yellow-100 text-yellow-800';
             return 'bg-gray-100 text-gray-800';
+        },
+
+        getServiceIcon(serviceType) {
+            const map = {
+                'EC2 Instance': 'fas fa-server', 'EBS Volume': 'fas fa-hdd',
+                'RDS Instance': 'fas fa-database', 'Lambda Function': 'fas fa-bolt',
+                'S3 Bucket': 'fas fa-archive', 'Load Balancer': 'fas fa-network-wired',
+                'Auto Scaling Group': 'fas fa-layer-group', 'VPC': 'fas fa-project-diagram',
+                'Security Group': 'fas fa-shield-alt', 'Route 53 Zone': 'fas fa-route',
+                'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
+                'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
+                'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left'
+            };
+            return map[serviceType] || 'fas fa-cloud';
         }
     };
     

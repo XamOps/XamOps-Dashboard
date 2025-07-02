@@ -1,6 +1,6 @@
 package com.xammer.cloud.controller;
 
-import com.xammer.cloud.dto.ResourceDto;
+import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.service.AwsDataService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,9 +20,15 @@ public class CloudlistController {
         this.awsDataService = awsDataService;
     }
 
+    /**
+     * UPDATED: This endpoint now returns a list of resource groups
+     * instead of a flat list of resources.
+     */
     @GetMapping("/resources")
-    public ResponseEntity<List<ResourceDto>> getAllResources() throws ExecutionException, InterruptedException {
-        List<ResourceDto> resources = awsDataService.getAllResources().get();
+    public ResponseEntity<List<DashboardData.ServiceGroupDto>> getAllResources() throws ExecutionException, InterruptedException {
+        // Call the new service method that returns grouped data
+        // Note: The type is now DashboardData.ServiceGroupDto
+        List<DashboardData.ServiceGroupDto> resources = awsDataService.getAllResourcesGrouped().get();
         return ResponseEntity.ok(resources);
     }
 }

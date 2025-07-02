@@ -60,9 +60,11 @@
         <dependency><groupId>software.amazon.awssdk</groupId><artifactId>dynamodb</artifactId></dependency>
         <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ecr</artifactId></dependency>
         <dependency><groupId>software.amazon.awssdk</groupId><artifactId>route53</artifactId></dependency>
-        
-        <!-- ADDED: New dependency for Log Groups -->
         <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudwatchlogs</artifactId></dependency>
+        
+        <!-- ADDED: Dependencies for CloudTrail and ACM -->
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudtrail</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>acm</artifactId></dependency>
     </dependencies>
 
     <build>
