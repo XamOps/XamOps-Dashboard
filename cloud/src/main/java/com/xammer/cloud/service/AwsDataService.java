@@ -1,6 +1,7 @@
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.dto.DashboardData.ServiceGroupDto;
 import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ResourceDto;
 
@@ -41,6 +42,12 @@ import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
+
+import software.amazon.awssdk.services.acm.AcmClient; // ADDED
+import software.amazon.awssdk.services.cloudtrail.CloudTrailClient; // ADDED
+import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient; // ADDED
+
+
 
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -83,35 +90,40 @@ public class AwsDataService {
     private final DynamoDbClient dynamoDbClient;
     private final EcrClient ecrClient;
     private final Route53Client route53Client;
+    private final CloudTrailClient cloudTrailClient;
+    private final AcmClient acmClient;
+    private final CloudWatchLogsClient cloudWatchLogsClient;
+    private final String configuredRegion;
 
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("us-east-1", "us-west-2", "eu-west-1", "eu-central-1",
             "ca-central-1");
 
     private static final Map<String, double[]> REGION_GEO = Map.ofEntries(
-            Map.entry("us-east-1", new double[] { 38.8951, -77.0364 }),
-            Map.entry("us-east-2", new double[] { 40.0, -83.0 }),
-            Map.entry("us-west-1", new double[] { 37.3541, -121.9552 }),
-            Map.entry("us-west-2", new double[] { 45.5231, -122.6765 }),
-            Map.entry("ca-central-1", new double[] { 45.4112, -75.6984 }),
-            Map.entry("eu-west-1", new double[] { 53.3498, -6.2603 }),
-            Map.entry("eu-west-2", new double[] { 51.5074, -0.1278 }),
-            Map.entry("eu-west-3", new double[] { 48.8566, 2.3522 }),
-            Map.entry("eu-central-1", new double[] { 50.1109, 8.6821 }),
-            Map.entry("eu-north-1", new double[] { 59.3293, 18.0686 }),
-            Map.entry("ap-southeast-1", new double[] { 1.3521, 103.8198 }),
-            Map.entry("ap-southeast-2", new double[] { -33.8688, 151.2093 }),
-            Map.entry("ap-northeast-1", new double[] { 35.6895, 139.6917 }),
-            Map.entry("ap-northeast-2", new double[] { 37.5665, 126.9780 }),
-            Map.entry("ap-northeast-3", new double[] { 34.6937, 135.5023 }),
-            Map.entry("ap-south-1", new double[] { 19.0760, 72.8777 }),
-            Map.entry("sa-east-1", new double[] { -23.5505, -46.6333 }));
+            Map.entry("us-east-1", new double[]{38.8951, -77.0364}),
+            Map.entry("us-east-2", new double[]{40.0, -83.0}),
+            Map.entry("us-west-1", new double[]{37.3541, -121.9552}),
+            Map.entry("us-west-2", new double[]{45.5231, -122.6765}),
+            Map.entry("ca-central-1", new double[]{45.4112, -75.6984}),
+            Map.entry("eu-west-1", new double[]{53.3498, -6.2603}),
+            Map.entry("eu-west-2", new double[]{51.5074, -0.1278}),
+            Map.entry("eu-west-3", new double[]{48.8566, 2.3522}),
+            Map.entry("eu-central-1", new double[]{50.1109, 8.6821}),
+            Map.entry("eu-north-1", new double[]{59.3293, 18.0686}),
+            Map.entry("ap-southeast-1", new double[]{1.3521, 103.8198}),
+            Map.entry("ap-southeast-2", new double[]{-33.8688, 151.2093}),
+            Map.entry("ap-northeast-1", new double[]{35.6895, 139.6917}),
+            Map.entry("ap-northeast-2", new double[]{37.5665, 126.9780}),
+            Map.entry("ap-northeast-3", new double[]{34.6937, 135.5023}),
+            Map.entry("ap-south-1", new double[]{19.0760, 72.8777}),
+            Map.entry("sa-east-1", new double[]{-23.5505, -46.6333}));
 
     public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda,
-            CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co,
-            PricingService pricingService, RdsClient rdsClient, S3Client s3Client,
-            ElasticLoadBalancingV2Client elbv2Client, AutoScalingClient autoScalingClient,
-            ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient,
-            Route53Client route53Client) {
+                          CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co,
+                          PricingService pricingService, RdsClient rdsClient, S3Client s3Client,
+                          ElasticLoadBalancingV2Client elbv2Client, AutoScalingClient autoScalingClient,
+                          ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient,
+                          Route53Client route53Client, CloudTrailClient cloudTrailClient, AcmClient acmClient,
+                          CloudWatchLogsClient cloudWatchLogsClient) {
         this.ec2Client = ec2;
         this.iamClient = iam;
         this.ecsClient = ecs;
@@ -129,8 +141,13 @@ public class AwsDataService {
         this.dynamoDbClient = dynamoDbClient;
         this.ecrClient = ecrClient;
         this.route53Client = route53Client;
+        this.cloudTrailClient = cloudTrailClient;
+        this.acmClient = acmClient;
+        this.cloudWatchLogsClient = cloudWatchLogsClient;
+        // Set the region explicitly or via configuration
+        this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
     }
-
+    
     public DashboardData getDashboardData() throws ExecutionException, InterruptedException {
         logger.info("--- LAUNCHING ASYNC DATA FETCH FROM AWS ---");
 
@@ -180,6 +197,8 @@ public class AwsDataService {
         data.setSelectedAccount(mainAccount);
         return data;
     }
+
+
 
     @Async("awsTaskExecutor")
     @Cacheable("allRecommendations")
@@ -243,11 +262,10 @@ public class AwsDataService {
 
         return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, coords[0], coords[1]);
     }
-
     @Async("awsTaskExecutor")
     @Cacheable("cloudlistResources")
     public CompletableFuture<List<ResourceDto>> getAllResources() {
-        logger.info("Fetching all resources for Cloudlist...");
+        logger.info("Fetching all resources for Cloudlist (flat list)...");
 
         List<CompletableFuture<List<ResourceDto>>> resourceFutures = List.of(
                 fetchEc2InstancesForCloudlist(),
@@ -262,7 +280,11 @@ public class AwsDataService {
                 fetchElastiCacheClustersForCloudlist(),
                 fetchDynamoDbTablesForCloudlist(),
                 fetchEcrRepositoriesForCloudlist(),
-                fetchRoute53HostedZonesForCloudlist());
+                fetchRoute53HostedZonesForCloudlist(),
+                fetchCloudTrailsForCloudlist(),
+                fetchAcmCertificatesForCloudlist(),
+                fetchCloudWatchLogGroupsForCloudlist() // ADDED
+        );
 
         return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
                 .thenApply(v -> resourceFutures.stream()
@@ -270,6 +292,42 @@ public class AwsDataService {
                         .flatMap(Collection::stream)
                         .collect(Collectors.toList()));
     }
+
+        @CacheEvict(value = {
+            "cloudlistResources", "groupedCloudlistResources", // Add the new cache to the evict list
+            "wastedResources", "regionStatus", "inventory",
+            "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
+            "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
+            "billingSummary", "iamResources", "costHistory", "allRecommendations"
+    }, allEntries = true)
+    public void clearAllCaches() {
+        logger.info("All dashboard caches have been evicted.");
+    }
+
+        @Async("awsTaskExecutor")
+    @Cacheable("groupedCloudlistResources") // Use a new cache name
+    public CompletableFuture<List<ServiceGroupDto>> getAllResourcesGrouped() {
+        logger.info("Fetching and grouping all resources for Cloudlist...");
+
+        // Call the original method that returns a flat list
+        return getAllResources().thenApply(flatResourceList -> {
+            logger.info("Grouping {} resources by service type...", flatResourceList.size());
+
+            // Group the flat list of resources by their 'type' property
+            Map<String, List<ResourceDto>> groupedByType = flatResourceList.stream()
+                    .collect(Collectors.groupingBy(ResourceDto::getType));
+
+            // Convert the grouped map into a list of ServiceGroupDto objects
+            return groupedByType.entrySet().stream()
+                    .map(entry -> new ServiceGroupDto(entry.getKey(), entry.getValue()))
+                     // Optional: Sort the groups alphabetically by service type
+                    .sorted((g1, g2) -> g1.getServiceType().compareTo(g2.getServiceType()))
+                    .collect(Collectors.toList());
+        });
+    }
+
+
+    
 
     private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
@@ -292,6 +350,78 @@ public class AwsDataService {
                         .collect(Collectors.toList());
             } catch (Exception e) {
                 logger.error("Cloudlist sub-task failed: EC2 instances.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+        private CompletableFuture<List<ResourceDto>> fetchCloudTrailsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching CloudTrails...");
+                return cloudTrailClient.describeTrails().trailList().stream()
+                        .map(t -> new ResourceDto(
+                                t.trailARN(),
+                                t.name(),
+                                "CloudTrail",
+                                t.homeRegion(),
+                                "Active", // Trails are generally just active
+                                null, // Creation time not in this response
+                                Map.of(
+                                        "IsMultiRegion", t.isMultiRegionTrail().toString(),
+                                        "S3Bucket", t.s3BucketName()
+                                )))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: CloudTrails.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+        private CompletableFuture<List<ResourceDto>> fetchAcmCertificatesForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching ACM Certificates...");
+                return acmClient.listCertificates().certificateSummaryList().stream()
+                        .map(c -> new ResourceDto(
+                                c.certificateArn(),
+                                c.domainName(),
+                                "Certificate Manager",
+                                "Global", // ACM certs in us-east-1 are global for CloudFront
+                                c.statusAsString(),
+                                c.createdAt(),
+                                Map.of(
+                                        "Type", c.typeAsString(),
+                                        "InUse", c.inUse().toString()
+                                )))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: ACM Certificates.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchCloudWatchLogGroupsForCloudlist() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.info("Cloudlist: Fetching CloudWatch Log Groups...");
+                return cloudWatchLogsClient.describeLogGroups().logGroups().stream()
+                        .map(lg -> new ResourceDto(
+                                lg.arn(),
+                                lg.logGroupName(),
+                                "CloudWatch Log Group",
+                                getRegionFromArn(lg.arn()), // CORRECTED
+                                "Active",
+                                Instant.ofEpochMilli(lg.creationTime()),
+                                Map.of(
+                                        "Retention (Days)", lg.retentionInDays() != null ? lg.retentionInDays().toString() : "Never Expire",
+                                        "Stored Bytes", String.format("%,d", lg.storedBytes())
+                                )))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Cloudlist sub-task failed: CloudWatch Log Groups.", e);
                 return Collections.emptyList();
             }
         });
@@ -384,7 +514,7 @@ public class AwsDataService {
                                 v.vpcId(),
                                 getTagName(v.tags(), v.vpcId()),
                                 "VPC",
-                                "Regional",
+                                this.configuredRegion, // CORRECTED
                                 v.stateAsString(),
                                 null,
                                 Map.of(
@@ -407,7 +537,7 @@ public class AwsDataService {
                                 sg.groupId(),
                                 sg.groupName(),
                                 "Security Group",
-                                "Regional",
+                                this.configuredRegion, // CORRECTED
                                 "Available",
                                 null,
                                 Map.of(
@@ -422,14 +552,27 @@ public class AwsDataService {
         });
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist() {
+
+     private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 logger.info("Cloudlist: Fetching S3 Buckets...");
                 return s3Client.listBuckets().buckets().stream()
-                        .map(b -> new ResourceDto(
-                                b.name(), b.name(), "S3 Bucket", "Global", "Available", b.creationDate(),
-                                Collections.emptyMap()))
+                        .map(b -> {
+                            // CORRECTED: Fetch the actual bucket location
+                            String bucketRegion = "us-east-1"; // Default for older buckets
+                            try {
+                                bucketRegion = s3Client.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
+                                if (bucketRegion == null || bucketRegion.isEmpty()) {
+                                    bucketRegion = "us-east-1"; // Null or empty response also means us-east-1
+                                }
+                            } catch (Exception e) {
+                                logger.warn("Could not get location for bucket {}: {}", b.name(), e.getMessage());
+                            }
+                            return new ResourceDto(
+                                    b.name(), b.name(), "S3 Bucket", bucketRegion, "Available", b.creationDate(),
+                                    Collections.emptyMap());
+                        })
                         .collect(Collectors.toList());
             } catch (Exception e) {
                 logger.error("Cloudlist sub-task failed: S3 Buckets.", e);
@@ -437,7 +580,6 @@ public class AwsDataService {
             }
         });
     }
-
     private CompletableFuture<List<ResourceDto>> fetchLoadBalancersForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -518,8 +660,12 @@ public class AwsDataService {
                         .map(tableName -> {
                             var tableDesc = dynamoDbClient.describeTable(b -> b.tableName(tableName)).table();
                             return new ResourceDto(
-                                    tableName, tableName, "DynamoDB Table", "Regional",
-                                    tableDesc.tableStatusAsString(), tableDesc.creationDateTime(),
+                                    tableName,
+                                    tableName,
+                                    "DynamoDB Table",
+                                    getRegionFromArn(tableDesc.tableArn()), // CORRECTED
+                                    tableDesc.tableStatusAsString(),
+                                    tableDesc.creationDateTime(),
                                     Map.of(
                                             "Items", tableDesc.itemCount().toString(),
                                             "Size (Bytes)", tableDesc.tableSizeBytes().toString()));
@@ -541,7 +687,7 @@ public class AwsDataService {
                                 r.repositoryName(),
                                 r.repositoryName(),
                                 "ECR Repository",
-                                "Regional",
+                                getRegionFromArn(r.repositoryArn()), // CORRECTED
                                 "Available",
                                 r.createdAt(),
                                 Map.of("URI", r.repositoryUri())))
@@ -552,6 +698,8 @@ public class AwsDataService {
             }
         });
     }
+
+    
 
     private CompletableFuture<List<ResourceDto>> fetchRoute53HostedZonesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
@@ -574,6 +722,20 @@ public class AwsDataService {
                 return Collections.emptyList();
             }
         });
+    }
+
+        private String getRegionFromArn(String arn) {
+        if (arn == null || arn.isBlank()) {
+            return "Unknown";
+        }
+        try {
+            // ARN format: arn:partition:service:region:account-id:resource
+            String region = arn.split(":")[3];
+            return region.isEmpty() ? "Global" : region;
+        } catch (Exception e) {
+            logger.warn("Could not parse region from ARN: {}", arn);
+            return this.configuredRegion; // Fallback to the service's configured region
+        }
     }
 
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String instanceId) {
@@ -1311,15 +1473,6 @@ public class AwsDataService {
         }
     }
 
-    @CacheEvict(value = {
-            "cloudlistResources", "wastedResources", "regionStatus", "inventory",
-            "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
-            "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
-            "billingSummary", "iamResources", "costHistory", "allRecommendations"
-    }, allEntries = true)
-    public void clearAllCaches() {
-        logger.info("All dashboard caches have been evicted.");
-    }
 
 @Async("awsTaskExecutor")
 @Cacheable(value = "graphData", key = "#vpcId")

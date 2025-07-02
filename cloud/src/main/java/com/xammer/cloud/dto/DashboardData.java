@@ -182,4 +182,12 @@ public class DashboardData {
         private double monthlySavings;
         private String reason;
     }
+
+        @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ServiceGroupDto {
+        private String serviceType;
+        private List<ResourceDto> resources;
+    }
 }
