@@ -489,7 +489,7 @@ public class AwsDataService {
                                     f.functionName(),
                                     f.functionName(),
                                     "Lambda Function",
-                                    "Global",
+                                    getRegionFromArn(f.functionArn()), // CORRECTED
                                     "Active",
                                     lastModified,
                                     Map.of(
@@ -724,17 +724,20 @@ public class AwsDataService {
         });
     }
 
-        private String getRegionFromArn(String arn) {
+    private String getRegionFromArn(String arn) {
         if (arn == null || arn.isBlank()) {
             return "Unknown";
         }
         try {
-            // ARN format: arn:partition:service:region:account-id:resource
-            String region = arn.split(":")[3];
-            return region.isEmpty() ? "Global" : region;
+            String[] parts = arn.split(":");
+            if (parts.length > 3) {
+                String region = parts[3];
+                return region.isEmpty() ? "Global" : region;
+            }
+            return "Global";
         } catch (Exception e) {
             logger.warn("Could not parse region from ARN: {}", arn);
-            return this.configuredRegion; // Fallback to the service's configured region
+            return this.configuredRegion;
         }
     }
 
