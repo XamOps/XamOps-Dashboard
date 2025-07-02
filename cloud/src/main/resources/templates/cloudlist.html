@@ -10,71 +10,91 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* A lighter gray for the body */
+        }
         .hidden { display: none !important; }
-        .rotate-180 { transform: rotate(180deg); }
-        .transition-all { transition: all 0.2s ease-in-out; }
+        .rotate-90 { transform: rotate(90deg); }
+        .transition-all { transition: all 0.3s ease-in-out; }
+
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Styling for the main content area */
+        main {
+             background-color: #ffffff;
+        }
+        
+        /* Custom styles for input fields */
+        .form-input, .form-select {
+            transition: all 0.2s ease;
+        }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="antialiased">
 
-<div class="flex h-screen bg-white">
+<div class="flex h-screen">
     <!-- Sidebar -->
     <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
 
     <!-- Main Content -->
     <main class="flex-1 flex flex-col">
         <!-- Header -->
-        <header class="h-16 flex-shrink-0 flex items-center justify-between border-b bg-white px-6">
+        <header class="h-16 flex-shrink-0 flex items-center justify-between border-b border-gray-200 bg-white px-8">
             <div class="flex items-center">
-                <h1 class="text-xl font-semibold text-gray-800">Cloudlist</h1>
+                <h1 class="text-2xl font-bold text-gray-800">Cloudlist</h1>
             </div>
             <div class="flex items-center gap-4">
                 <span id="update-status" class="text-sm text-gray-500"></span>
-                <button id="refresh-button" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">
-                    <i class="fas fa-sync-alt mr-1"></i>Refresh now
+                <button id="refresh-button" class="group flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+                    <i class="fas fa-sync-alt transition-transform group-hover:rotate-90"></i>
+                    <span>Refresh now</span>
                 </button>
             </div>
         </header>
 
         <!-- Page Content -->
-        <div class="flex-1 overflow-y-auto p-6">
+        <div class="flex-1 overflow-y-auto p-8">
             <!-- Control Bar -->
-            <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div class="flex items-center gap-4 flex-1">
-                    <select id="region-filter" class="form-select w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <select id="region-filter" class="form-select w-full max-w-xs rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                         <option value="">All Regions</option>
                         <option value="ap-south-1">Asia Pacific (Mumbai)</option>
                         <option value="us-east-1">US East (N. Virginia)</option>
                         <option value="Global">Global</option>
                         <option value="Regional">Regional</option>
                     </select>
-                    <div class="relative flex-1 min-w-[300px]">
-                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" id="search-input" placeholder="Search by any field..." class="form-input w-full pl-10 rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <div class="relative flex-1 min-w-[350px]">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" id="search-input" placeholder="Search resources..." class="form-input w-full pl-12 pr-4 py-2.5 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button class="px-4 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
-                        <i class="fas fa-filter mr-2 text-gray-500"></i>Filter
+                <div class="flex items-center gap-3">
+                    <button class="px-4 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 hover:border-indigo-500 hover:text-indigo-600 transition-all">
+                        <i class="fas fa-filter mr-2 text-gray-400"></i>Filter
                     </button>
-                    <button class="px-4 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
-                        <i class="fas fa-file-excel mr-2 text-green-600"></i>Save To Excel
+                    <button class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 border border-transparent rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-file-excel mr-2"></i>Save To Excel
                     </button>
                 </div>
             </div>
 
             <!-- Resource List Container -->
-            <div id="resource-list-container" class="space-y-2">
+            <div id="resource-list-container" class="space-y-3">
                 <!-- Loading State -->
-                <div id="loading-state" class="w-full text-center p-12">
+                <div id="loading-state" class="w-full text-center p-16">
                     <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
-                    <p class="mt-4 text-gray-600 font-semibold">Fetching AWS Resources...</p>
+                    <p class="mt-4 text-gray-600 font-semibold tracking-wide">Fetching AWS Resources...</p>
                 </div>
             </div>
             
             <!-- Empty State -->
-            <div id="empty-state" class="hidden text-center py-12 px-4 border-2 border-dashed rounded-lg mt-4">
+            <div id="empty-state" class="hidden text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-xl mt-4">
                 <i class="fas fa-box-open fa-3x text-gray-400"></i>
                 <h3 class="mt-4 text-lg font-medium text-gray-900">No Resources Found</h3>
                 <p class="mt-1 text-sm text-gray-500">Try adjusting your search or filter criteria.</p>
@@ -103,12 +123,21 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         setupEventListeners() {
-            this.dom.searchInput.addEventListener('input', () => this.render());
+            this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
             this.dom.regionFilter.addEventListener('change', () => this.render());
             this.dom.refreshButton.addEventListener('click', () => {
                 this.dom.listContainer.innerHTML = ''; 
                 this.fetchResources();
             });
+        },
+
+        debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
         },
 
         fetchResources() {
@@ -158,9 +187,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const searchTerm = this.dom.searchInput.value.toLowerCase();
             const region = this.dom.regionFilter.value;
 
-            if (!searchTerm && !region) {
-                return this.allGroups;
-            }
+            if (!searchTerm && !region) return this.allGroups;
 
             return this.allGroups.map(group => {
                 const matchingResources = group.resources.filter(res => {
@@ -170,31 +197,30 @@ document.addEventListener('DOMContentLoaded', function() {
                         (res.id && res.id.toLowerCase().includes(searchTerm));
                     return regionMatch && searchMatch;
                 });
-                // Return a new group object with filtered resources, but only if there are matches
                 return { ...group, resources: matchingResources };
-            }).filter(group => group.resources.length > 0); // Filter out groups with no matching resources
+            }).filter(group => group.resources.length > 0);
         },
         
         createGroupElement(group) {
             const container = document.createElement('div');
-            container.className = 'bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200';
+            container.className = 'bg-white rounded-xl shadow-md overflow-hidden border border-gray-200/80 transition-all hover:shadow-lg hover:border-indigo-300';
             const groupId = `group-content-${group.serviceType.replace(/[^a-zA-Z0-9]/g, '')}`;
 
             container.innerHTML = `
-                <div class="flex items-center justify-between p-3 border-b cursor-pointer hover:bg-gray-50 toggle-button" data-target="#${groupId}">
-                    <div class="flex items-center gap-3 flex-1">
+                <div class="flex items-center justify-between p-4 cursor-pointer toggle-button" data-target="#${groupId}">
+                    <div class="flex items-center gap-4 flex-1">
                         <i class="fas fa-chevron-right text-gray-400 w-4 text-center transition-all"></i>
                         <input type="checkbox" class="form-checkbox h-4 w-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500">
-                        <i class="${this.getServiceIcon(group.serviceType)} w-5 text-center text-gray-600"></i>
-                        <span class="font-semibold text-gray-800">${group.serviceType}</span>
-                        <span class="text-xs font-medium text-gray-500 bg-gray-200 rounded-full px-2 py-0.5">${group.resources.length}</span>
+                        <i class="${this.getServiceIcon(group.serviceType)} w-6 h-6 flex items-center justify-center text-lg ${this.getServiceIconColor(group.serviceType)}"></i>
+                        <span class="font-bold text-gray-800 text-base">${group.serviceType}</span>
+                        <span class="text-xs font-semibold text-gray-500 bg-gray-200 rounded-full px-2.5 py-1">${group.resources.length}</span>
                     </div>
-                    <div class="flex items-center gap-2 w-auto justify-end">
-                        <span class="text-xs text-gray-500 font-semibold pr-4">ACTION</span>
-                        <button class="px-3 py-1 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Details</button>
+                    <div class="flex items-center gap-3 w-auto justify-end">
+                        <span class="text-xs text-gray-400 font-bold tracking-wider">ACTION</span>
+                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
                     </div>
                 </div>
-                <div id="${groupId}" class="resource-content hidden">
+                <div id="${groupId}" class="resource-content hidden bg-gray-50/50">
                     ${group.resources.map(res => this.createResourceRow(res)).join('')}
                 </div>
             `;
@@ -206,31 +232,31 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasDetails = resource.details && Object.keys(resource.details).length > 0;
 
             const detailsHtml = hasDetails ? Object.entries(resource.details)
-                .map(([key, value]) => `<div class="text-xs"><span class="font-semibold">${key}:</span> <span class="font-mono">${value}</span></div>`)
+                .map(([key, value]) => `<div class="text-xs py-1"><span class="font-semibold text-gray-600">${key}:</span> <span class="font-mono text-gray-800">${value}</span></div>`)
                 .join('') : '';
 
             return `
-                <div class="bg-white border-t">
-                    <div class="grid grid-cols-12 items-center p-3 pl-8 text-sm hover:bg-indigo-50/50">
-                        <div class="col-span-6 flex items-center gap-3">
+                <div class="border-t border-gray-200/80">
+                    <div class="grid grid-cols-12 items-center p-4 pl-10 text-sm hover:bg-indigo-100/30">
+                        <div class="col-span-6 flex items-center gap-4">
                             <i class="fas fa-chevron-right text-gray-400 w-4 text-center transition-all ${hasDetails ? 'cursor-pointer' : 'invisible'} details-toggle" data-target="#${detailsId}"></i>
                             <input type="checkbox" class="form-checkbox h-4 w-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500">
                             <div class="flex-1">
-                                <p class="font-medium text-gray-900">${resource.name || 'N/A'}</p>
+                                <p class="font-semibold text-gray-800">${resource.name || 'N/A'}</p>
                                 <p class="font-mono text-xs text-gray-500">${resource.id || 'N/A'}</p>
                             </div>
                         </div>
-                        <div class="col-span-2 font-medium text-gray-700">${resource.region || 'Global'}</div>
+                        <div class="col-span-2 font-semibold text-gray-600">${resource.region || 'Global'}</div>
                         <div class="col-span-2">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${this.getStateClass(resource.state)}">
+                            <span class="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full capitalize ${this.getStateClass(resource.state)}">
                                 ${resource.state || 'Unknown'}
                             </span>
                         </div>
-                        <div class="col-span-2 text-right pr-6">
-                            <button class="px-3 py-1 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Details</button>
+                        <div class="col-span-2 text-right pr-4">
+                            <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
                         </div>
                     </div>
-                    ${hasDetails ? `<div id="${detailsId}" class="hidden p-3 pl-20 bg-gray-50 border-t">${detailsHtml}</div>` : ''}
+                    ${hasDetails ? `<div id="${detailsId}" class="hidden p-4 pl-24 bg-indigo-50/30 border-t border-indigo-200/50">${detailsHtml}</div>` : ''}
                 </div>
             `;
         },
@@ -282,6 +308,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left'
             };
             return map[serviceType] || 'fas fa-cloud';
+        },
+
+        getServiceIconColor(serviceType) {
+            const map = {
+                'EC2 Instance': 'text-orange-500', 'EBS Volume': 'text-purple-500',
+                'RDS Instance': 'text-blue-500', 'Lambda Function': 'text-yellow-500',
+                'S3 Bucket': 'text-red-500', 'Load Balancer': 'text-teal-500',
+                'VPC': 'text-green-500', 'Security Group': 'text-red-600',
+                'CloudTrail': 'text-blue-600', 'Certificate Manager': 'text-green-600',
+                'CloudWatch Log Group': 'text-indigo-500'
+            };
+            return map[serviceType] || 'text-gray-500';
         }
     };
     
