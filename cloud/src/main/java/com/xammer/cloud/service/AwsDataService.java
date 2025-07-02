@@ -12,6 +12,8 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatch.model.Datapoint;
@@ -43,11 +45,9 @@ import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
 
-import software.amazon.awssdk.services.acm.AcmClient; // ADDED
-import software.amazon.awssdk.services.cloudtrail.CloudTrailClient; // ADDED
-import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient; // ADDED
-
-
+import software.amazon.awssdk.services.acm.AcmClient;
+import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
+import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -199,6 +199,85 @@ public class AwsDataService {
     }
 
 
+    /**
+     * Checks if a given AWS region has any active resources across a range of services.
+     * This method is designed to be efficient, returning true as soon as the first resource is found.
+     *
+     * @param region The AWS region to check.
+     * @return true if any resource (EC2, EBS, RDS, Lambda, ECS) is found, false otherwise.
+     */
+    private boolean isRegionActive(software.amazon.awssdk.regions.Region region) {
+        logger.debug("Performing activity check for region: {}", region.id());
+        try {
+            // Check for EC2 Instances (any state) or EBS Volumes
+            Ec2Client regionEc2 = Ec2Client.builder().region(region).build();
+            if (regionEc2.describeInstances().hasReservations() && !regionEc2.describeInstances().reservations().isEmpty()) return true;
+            if (regionEc2.describeVolumes().hasVolumes() && !regionEc2.describeVolumes().volumes().isEmpty()) return true;
+
+            // Check for RDS Instances
+            RdsClient regionRds = RdsClient.builder().region(region).build();
+            if (regionRds.describeDBInstances().hasDbInstances() && !regionRds.describeDBInstances().dbInstances().isEmpty()) return true;
+
+            // Check for Lambda Functions
+            LambdaClient regionLambda = LambdaClient.builder().region(region).build();
+            if (regionLambda.listFunctions().hasFunctions() && !regionLambda.listFunctions().functions().isEmpty()) return true;
+
+            // Check for ECS Clusters
+            EcsClient regionEcs = EcsClient.builder().region(region).build();
+            if (regionEcs.listClusters().hasClusterArns() && !regionEcs.listClusters().clusterArns().isEmpty()) return true;
+
+        } catch (AwsServiceException | SdkClientException e) {
+            // This can happen if a region is not enabled for the account. It's safe to ignore.
+            logger.warn("Could not perform active check for region {}: {}. Assuming inactive.", region.id(), e.getMessage());
+            return false;
+        }
+
+        logger.debug("No activity found in region: {}", region.id());
+        return false;
+    }
+
+
+    @Async("awsTaskExecutor")
+    @Cacheable("regionStatus")
+    public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForAccount() {
+        logger.info("Fetching status for all available and active AWS regions...");
+        try {
+            // Get all regions the account can access, regardless of opt-in status initially.
+            List<Region> allRegions = ec2Client.describeRegions().regions();
+            logger.info("Found {} total regions available to the account. Now checking for activity.", allRegions.size());
+
+            return CompletableFuture.completedFuture(
+                allRegions.parallelStream() // Use parallel stream for faster checking
+                    .filter(region -> !"not-opted-in".equals(region.optInStatus())) // Filter out non-opted-in regions
+                    .filter(region -> {
+                        // Ensure the region has geographic coordinates defined for map plotting
+                        if (!REGION_GEO.containsKey(region.regionName())) {
+                            logger.warn("Region {} is available but has no geographic coordinates defined. It will be excluded from the map.", region.regionName());
+                            return false;
+                        }
+                        return true;
+                    })
+                    .filter(region -> isRegionActive(software.amazon.awssdk.regions.Region.of(region.regionName()))) // Check for any active resources
+                    .map(this::mapRegionToStatus) // Convert active regions to DTOs
+                    .collect(Collectors.toList())
+            );
+        } catch (Exception e) {
+            logger.error("Could not fetch and process AWS regions.", e);
+            return CompletableFuture.completedFuture(new ArrayList<>());
+        }
+    }
+
+
+    private DashboardData.RegionStatus mapRegionToStatus(Region region) {
+        double[] coords = REGION_GEO.get(region.regionName());
+        String status = "ACTIVE"; // If it passed the filter, it's active
+
+        if (SUSTAINABLE_REGIONS.contains(region.regionName())) {
+            status = "SUSTAINABLE"; // Override status if it's also a sustainable region
+        }
+
+        return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, coords[0], coords[1]);
+    }
 
     @Async("awsTaskExecutor")
     @Cacheable("allRecommendations")
@@ -215,53 +294,6 @@ public class AwsDataService {
                         .collect(Collectors.toList()));
     }
 
-    @Async("awsTaskExecutor")
-    @Cacheable("regionStatus")
-    public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForAccount() {
-        logger.info("Fetching status for active regions (regions with running EC2 instances)...");
-        try {
-            return CompletableFuture.completedFuture(ec2Client.describeRegions().regions().stream()
-                    .filter(region -> {
-                        if (!REGION_GEO.containsKey(region.regionName())
-                                || "not-opted-in".equals(region.optInStatus())) {
-                            return false;
-                        }
-                        try {
-                            Ec2Client regionClient = Ec2Client.builder()
-                                    .region(software.amazon.awssdk.regions.Region.of(region.regionName())).build();
-                            software.amazon.awssdk.services.ec2.model.Filter runningFilter = software.amazon.awssdk.services.ec2.model.Filter
-                                    .builder()
-                                    .name("instance-state-name")
-                                    .values("running")
-                                    .build();
-                            DescribeInstancesRequest request = DescribeInstancesRequest.builder()
-                                    .filters(runningFilter)
-                                    .build();
-                            return regionClient.describeInstances(request).hasReservations();
-                        } catch (Exception e) {
-                            logger.warn("Could not perform active check for region {}: {}", region.regionName(),
-                                    e.getMessage());
-                            return false;
-                        }
-                    })
-                    .map(this::mapRegionToStatus)
-                    .collect(Collectors.toList()));
-        } catch (Exception e) {
-            logger.error("Could not fetch EC2 regions.", e);
-            return CompletableFuture.completedFuture(new ArrayList<>());
-        }
-    }
-
-    private DashboardData.RegionStatus mapRegionToStatus(Region region) {
-        double[] coords = REGION_GEO.get(region.regionName());
-        String status = "ACTIVE";
-
-        if (SUSTAINABLE_REGIONS.contains(region.regionName())) {
-            status = "SUSTAINABLE";
-        }
-
-        return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, coords[0], coords[1]);
-    }
     @Async("awsTaskExecutor")
     @Cacheable("cloudlistResources")
     public CompletableFuture<List<ResourceDto>> getAllResources() {
@@ -294,12 +326,12 @@ public class AwsDataService {
     }
 
         @CacheEvict(value = {
-            "cloudlistResources", "groupedCloudlistResources", // Add the new cache to the evict list
-            "wastedResources", "regionStatus", "inventory",
-            "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
-            "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
-            "billingSummary", "iamResources", "costHistory", "allRecommendations"
-    }, allEntries = true)
+                "cloudlistResources", "groupedCloudlistResources", // Add the new cache to the evict list
+                "wastedResources", "regionStatus", "inventory",
+                "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
+                "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
+                "billingSummary", "iamResources", "costHistory", "allRecommendations"
+        }, allEntries = true)
     public void clearAllCaches() {
         logger.info("All dashboard caches have been evicted.");
     }
@@ -328,7 +360,6 @@ public class AwsDataService {
 
 
     
-
     private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -554,32 +585,32 @@ public class AwsDataService {
 
 
      private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist() {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                logger.info("Cloudlist: Fetching S3 Buckets...");
-                return s3Client.listBuckets().buckets().stream()
-                        .map(b -> {
-                            // CORRECTED: Fetch the actual bucket location
-                            String bucketRegion = "us-east-1"; // Default for older buckets
-                            try {
-                                bucketRegion = s3Client.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
-                                if (bucketRegion == null || bucketRegion.isEmpty()) {
-                                    bucketRegion = "us-east-1"; // Null or empty response also means us-east-1
-                                }
-                            } catch (Exception e) {
-                                logger.warn("Could not get location for bucket {}: {}", b.name(), e.getMessage());
-                            }
-                            return new ResourceDto(
-                                    b.name(), b.name(), "S3 Bucket", bucketRegion, "Available", b.creationDate(),
-                                    Collections.emptyMap());
-                        })
-                        .collect(Collectors.toList());
-            } catch (Exception e) {
-                logger.error("Cloudlist sub-task failed: S3 Buckets.", e);
-                return Collections.emptyList();
-            }
-        });
-    }
+         return CompletableFuture.supplyAsync(() -> {
+             try {
+                 logger.info("Cloudlist: Fetching S3 Buckets...");
+                 return s3Client.listBuckets().buckets().stream()
+                         .map(b -> {
+                             // CORRECTED: Fetch the actual bucket location
+                             String bucketRegion = "us-east-1"; // Default for older buckets
+                             try {
+                                 bucketRegion = s3Client.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
+                                 if (bucketRegion == null || bucketRegion.isEmpty()) {
+                                     bucketRegion = "us-east-1"; // Null or empty response also means us-east-1
+                                 }
+                             } catch (Exception e) {
+                                 logger.warn("Could not get location for bucket {}: {}", b.name(), e.getMessage());
+                             }
+                             return new ResourceDto(
+                                     b.name(), b.name(), "S3 Bucket", bucketRegion, "Available", b.creationDate(),
+                                     Collections.emptyMap());
+                         })
+                         .collect(Collectors.toList());
+             } catch (Exception e) {
+                 logger.error("Cloudlist sub-task failed: S3 Buckets.", e);
+                 return Collections.emptyList();
+             }
+         });
+     }
     private CompletableFuture<List<ResourceDto>> fetchLoadBalancersForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -933,9 +964,9 @@ public class AwsDataService {
                                             .estimatedMonthlySavings() != null
                                     && r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings()
                                             .value() != null
-                                                    ? r.recommendationOptions().get(0).savingsOpportunity()
-                                                            .estimatedMonthlySavings().value()
-                                                    : 0.0,
+                                            ? r.recommendationOptions().get(0).savingsOpportunity()
+                                                    .estimatedMonthlySavings().value()
+                                            : 0.0,
                             r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", "))))
                     .collect(Collectors.toList()));
         } catch (Exception e) {
@@ -990,8 +1021,8 @@ public class AwsDataService {
                                 opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB",
                                 opt.savingsOpportunity() != null
                                         && opt.savingsOpportunity().estimatedMonthlySavings() != null
-                                                ? opt.savingsOpportunity().estimatedMonthlySavings().value()
-                                                : 0.0,
+                                        ? opt.savingsOpportunity().estimatedMonthlySavings().value()
+                                        : 0.0,
                                 r.finding().toString());
                     })
                     .collect(Collectors.toList()));
@@ -1020,8 +1051,8 @@ public class AwsDataService {
                                 r.currentMemorySize() + " MB", opt.memorySize() + " MB",
                                 opt.savingsOpportunity() != null
                                         && opt.savingsOpportunity().estimatedMonthlySavings() != null
-                                                ? opt.savingsOpportunity().estimatedMonthlySavings().value()
-                                                : 0.0,
+                                        ? opt.savingsOpportunity().estimatedMonthlySavings().value()
+                                        : 0.0,
                                 r.findingReasonCodes().stream().map(Object::toString)
                                         .collect(Collectors.joining(", ")));
                     })
