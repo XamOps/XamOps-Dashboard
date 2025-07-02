@@ -9,18 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
-        #cy {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1; /* Behind the info panel */
-        }
-        #info-panel {
-            transition: transform 0.3s ease-in-out;
-            z-index: 10;
-        }
+        #cy { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        #info-panel { transition: transform 0.3s ease-in-out; z-index: 10; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -29,23 +19,34 @@
     <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
 
     <main class="flex-1 flex flex-col">
-        <header class="h-16 flex items-center justify-between border-b bg-white px-6">
-            <h1 class="text-xl font-semibold text-gray-800">Cloudmap - Infrastructure Visualization</h1>
+        <header class="h-auto flex-col sm:flex-row flex items-center justify-between border-b bg-white px-6 py-2 gap-4">
+            <h1 class="text-xl font-semibold text-gray-800">Cloudmap</h1>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label for="vpc-selector" class="text-sm font-medium text-gray-700">VPC:</label>
+                    <select id="vpc-selector" class="form-select text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">Loading VPCs...</option>
+                    </select>
+                </div>
+                <button id="save-btn" class="px-3 py-1.5 text-sm font-semibold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 rounded-md flex items-center gap-2">
+                    <i class="fas fa-save"></i>
+                    <span>Save to Png</span>
+                </button>
+            </div>
         </header>
 
         <div class="flex-1 relative" id="cloudmap-container">
-            <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-white z-20">
-                <i class="fas fa-spinner fa-spin fa-3x text-indigo-600"></i>
+            <div id="graph-container" class="w-full h-full">
+                <div id="message-overlay" class="absolute inset-0 flex items-center justify-center bg-white z-20">
+                    <p class="text-gray-500">Please select a VPC to begin.</p>
+                </div>
+                <div id="cy"></div>
             </div>
-            
-            <div id="cy"></div>
-
             <div id="info-panel" class="absolute top-0 right-0 h-full w-96 bg-white shadow-lg p-6 border-l transform translate-x-full">
                 <button id="close-panel-btn" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800">
                     <i class="fas fa-times fa-lg"></i>
                 </button>
-                <div id="info-content">
-                    </div>
+                <div id="info-content"></div>
             </div>
         </div>
     </main>
@@ -53,95 +54,148 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const loadingSpinner = document.getElementById('loading-spinner');
+    const vpcSelector = document.getElementById('vpc-selector');
+    const messageOverlay = document.getElementById('message-overlay');
     const infoPanel = document.getElementById('info-panel');
     const infoContent = document.getElementById('info-content');
     const closePanelBtn = document.getElementById('close-panel-btn');
+    const saveBtn = document.getElementById('save-btn');
     let cy;
 
-    closePanelBtn.addEventListener('click', () => infoPanel.classList.add('translate-x-full'));
+    const icons = {
+        'VPC': '/icons/vpc.png',
+        'EC2 Instance': '/icons/ec2-instances.png',
+        'RDS Instance': '/icons/rds-instance.png',
+        'Load Balancer': '/icons/load-balancer.png',
+        'S3 Bucket': '/icons/s3-bucket.png',
+        'Security Group': '/icons/security-group.png',
+        'Internet Gateway': '/icons/internet-gateway.png',
+        'NAT Gateway': '/icons/nat-gateway.png',
+        'Auto Scaling Group': '/icons/autoscaling.png'
+    };
 
-    fetch('/api/cloudmap/graph-data')
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.json();
-        })
-        .then(data => {
-            loadingSpinner.style.display = 'none';
-            renderGraph(data);
-        })
-        .catch(error => {
-            console.error('Error fetching graph data:', error);
-            loadingSpinner.innerHTML = '<div class="text-center"><i class="fas fa-exclamation-triangle fa-2x text-red-500"></i><p class="mt-2 text-red-600 font-semibold">Could not load graph data.</p><p class="text-xs text-gray-500">Please check backend logs for details.</p></div>';
-        });
+    closePanelBtn.addEventListener('click', () => infoPanel.classList.add('translate-x-full'));
+    vpcSelector.addEventListener('change', () => loadGraphForVpc(vpcSelector.value));
+    saveBtn.addEventListener('click', () => {
+        if(cy) {
+            const png64 = cy.png({ output: 'base64uri', bg: '#fff', full: true });
+            const link = document.createElement('a');
+            link.download = `cloudmap-${vpcSelector.value || 'global'}.png`;
+            link.href = png64;
+            link.click();
+        }
+    });
+
+    function initialize() {
+        fetch('/api/cloudmap/vpcs')
+            .then(response => response.json())
+            .then(vpcs => {
+                vpcSelector.innerHTML = '<option value="">-- Global & S3 --</option>';
+                vpcs.forEach(vpc => {
+                    const option = document.createElement('option');
+                    option.value = vpc.id;
+                    option.textContent = `${vpc.name} (${vpc.id})`;
+                    vpcSelector.appendChild(option);
+                });
+                loadGraphForVpc("");
+            })
+            .catch(error => console.error('Error fetching VPCs:', error));
+    }
+
+    function loadGraphForVpc(vpcId) {
+        if (cy) cy.destroy();
+        infoPanel.classList.add('translate-x-full');
+        const url = `/api/cloudmap/graph-data?vpcId=${vpcId}`;
+        messageOverlay.innerHTML = '<i class="fas fa-spinner fa-spin fa-3x text-indigo-600"></i>';
+        messageOverlay.style.display = 'flex';
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                messageOverlay.style.display = 'none';
+                renderGraph(data);
+            })
+            .catch(error => {
+                console.error('Error fetching graph data:', error);
+                messageOverlay.innerHTML = '<div class="text-center"><i class="fas fa-exclamation-triangle fa-2x text-red-500"></i><p class="mt-2 text-red-600 font-semibold">Could not load graph data.</p></div>';
+            });
+    }
 
     function renderGraph(graphData) {
-        // --- Define our color palette ---
-        const colors = {
-            green: '#22C55E', // Green 500
-            red: '#EF4444',   // Red 500
-            amber: '#F59E0B', // Amber 500
-            grey: '#6B7281',  // Gray 500
-            blue: '#3B82F6'   // Blue 500
-        };
-
         cy = cytoscape({
             container: document.getElementById('cy'),
             elements: graphData,
+            layout: {
+                name: 'breadthfirst',
+                directed: true,
+                padding: 30,
+                spacingFactor: 1.25,
+                grid: true
+            },
             style: [
                 {
                     selector: 'node',
                     style: {
-                        'label': 'data(label)', 'width': '60px', 'height': '60px',
-                        'font-size': '10px', 'text-valign': 'bottom', 'text-halign': 'center',
-                        'color': '#fff', 'text-outline-color': '#888', 'text-outline-width': 2,
-                        'transition-property': 'background-color, border-color, border-width',
-                        'transition-duration': '0.3s'
+                        'shape': 'rectangle',
+                        'label': 'data(label)',
+                        'font-size': '10px',
+                        'text-valign': 'bottom',
+                        'text-halign': 'center',
+                        'color': '#374151',
+                        'text-margin-y': 5,
+                        'width': 50, 'height': 50,
+                        'background-opacity': 0,
+                        'background-image': (node) => icons[node.data('type')] || 'none',
+                        'background-fit': 'contain',
+                        'background-clip': 'none'
                     }
                 },
                 {
                     selector: 'edge',
-                    style: { 'width': 2, 'line-color': '#ccc', 'target-arrow-color': '#ccc', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' }
+                    style: { 'width': 1, 'line-color': '#9ca3af', 'target-arrow-color': '#9ca3af', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' }
                 },
                 {
                     selector: ':parent',
-                    style: { 'background-opacity': 0.2, 'border-color': '#666', 'border-width': 1, 'text-valign': 'top', 'font-weight': 'bold' }
-                },
-                // --- Static Node Shapes and Base Colors ---
-                { selector: 'node[type="EC2 Instance"]',   style: { 'shape': 'ellipse',       'background-color': colors.grey } },
-                { selector: 'node[type="RDS Instance"]',   style: { 'shape': 'barrel',        'background-color': colors.grey } },
-                { selector: 'node[type="Load Balancer"]',  style: { 'shape': 'round-octagon', 'background-color': colors.blue } },
-                { selector: 'node[type="S3 Bucket"]',      style: { 'shape': 'round-rectangle', 'width': '80px', 'background-color': colors.green } },
-                { selector: 'node[type="Security Group"]', style: { 'shape': 'diamond',       'width':'25px', 'height':'25px', 'background-color': '#DD4444' } },
-                { selector: 'node[type="VPC"]',            style: { 'background-color': '#232F3E', 'background-opacity': 0.3 } },
-                { selector: 'node[type="Subnet"]',         style: { 'background-color': '#527FFF', 'background-opacity': 0.2 } },
-
-                // --- DYNAMIC STYLES based on 'displayState' ---
-                {
-                    selector: 'node[displayState="running"], node[displayState="available"], node[displayState="active"]',
-                    style: { 'background-color': colors.green }
-                },
-                {
-                    selector: 'node[displayState="stopped"], node[displayState="terminated"]',
-                    style: { 'background-color': colors.red }
-                },
-                {
-                    selector: 'node[displayState*="pending"], node[displayState*="stopping"], node[displayState*="creating"]',
                     style: {
-                        'background-color': colors.amber,
-                        'border-color': colors.amber,
-                        'border-width': '4px',
-                        'border-style': 'double'
+                        'text-valign': 'top', 
+                        'text-halign': 'center', 
+                        'font-weight': 'bold',
+                        'color': '#1f2937',
+                        'font-size': '14px',
+                        'background-opacity': 1,
+                        'background-image': 'none'
                     }
-                }
-            ],
-            layout: {
-                name: 'cose',
-                idealEdgeLength: 100, nodeOverlap: 20, refresh: 20, fit: true, padding: 30,
-                randomize: false, componentSpacing: 100, nodeRepulsion: 400000,
-                edgeElasticity: 100, nestingFactor: 5, gravity: 80, numIter: 1000,
-                initialTemp: 200, coolingFactor: 0.95, minTemp: 1.0
-            }
+                },
+                {
+                    selector: 'node[type="VPC"]',
+                    style: {
+                        'background-color': '#f9fafb',
+                        'border-width': 2,
+                        'border-color': '#10b981'
+                    }
+                },
+                {
+                    selector: 'node[type="Availability Zone"]',
+                    style: {
+                        'background-color': '#f9fafb',
+                        'border-width': 1,
+                        'border-color': '#60a5fa',
+                        'border-style': 'dashed'
+                    }
+                },
+                {
+                    selector: 'node[type="Subnet"]',
+                    style: {
+                        'background-color': '#f0fdf4',
+                        'border-width': 1,
+                        'border-color': '#a7f3d0'
+                    }
+                },
+                 { 
+                    selector: 'node[type="Security Group"]', 
+                    style: { 'width':30, 'height':30 } 
+                 }, 
+            ]
         });
 
         cy.on('tap', 'node', evt => displayNodeInfo(evt.target.data()));
@@ -162,11 +216,12 @@ document.addEventListener('DOMContentLoaded', function () {
                                 </div>`;
             }
         }
-
         contentHtml += `</div>`;
         infoContent.innerHTML = contentHtml;
         infoPanel.classList.remove('translate-x-full');
     }
+
+    initialize();
 });
 </script>
 

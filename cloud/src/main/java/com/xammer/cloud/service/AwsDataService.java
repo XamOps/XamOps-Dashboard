@@ -3,6 +3,7 @@ package com.xammer.cloud.service;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ResourceDto;
+
 import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1249,7 +1250,7 @@ public class AwsDataService {
                 : snapshot.snapshotId();
     }
 
-    private String getTagName(List<Tag> tags, String defaultName) {
+    public String getTagName(List<Tag> tags, String defaultName) {
         return tags.stream()
                 .filter(t -> t.key().equalsIgnoreCase("Name"))
                 .findFirst()
@@ -1321,14 +1322,14 @@ public class AwsDataService {
     }
 
 @Async("awsTaskExecutor")
-@Cacheable("graphData")
-public CompletableFuture<List<Map<String, Object>>> getGraphData() {
-    logger.info("Fetching data for infrastructure graph...");
+@Cacheable(value = "graphData", key = "#vpcId")
+public CompletableFuture<List<Map<String, Object>>> getGraphData(String vpcId) {
+    logger.info("Fetching graph data for VPC ID: {}", vpcId);
     return CompletableFuture.supplyAsync(() -> {
         List<Map<String, Object>> elements = new ArrayList<>();
 
         try {
-            // 1. Add S3 Buckets
+            // ALWAYS ADD S3 Buckets first, as they are global
             s3Client.listBuckets().buckets().forEach(bucket -> {
                 Map<String, Object> bucketNode = new HashMap<>();
                 Map<String, Object> bucketData = new HashMap<>();
@@ -1340,69 +1341,79 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                 elements.add(bucketNode);
             });
 
-            // 2. Process resources within each VPC
-            ec2Client.describeVpcs().vpcs().forEach(vpc -> {
-                Map<String, Object> vpcNode = new HashMap<>();
-                Map<String, Object> vpcData = new HashMap<>();
-                vpcData.put("id", vpc.vpcId());
-                vpcData.put("label", getTagName(vpc.tags(), vpc.vpcId()));
-                vpcData.put("type", "VPC");
-                vpcData.put("CidrBlock", vpc.cidrBlock());
-                vpcData.put("IsDefault", vpc.isDefault().toString());
-                vpcNode.put("data", vpcData);
-                elements.add(vpcNode);
+            // If no VPC is selected, just return the S3 buckets
+            if (vpcId == null || vpcId.isBlank()) {
+                return elements;
+            }
 
-                // Fetch Subnets, Security Groups, Load Balancers
-                DescribeSubnetsRequest subnetsRequest = DescribeSubnetsRequest.builder()
-                        .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
-                        .build();
-                ec2Client.describeSubnets(subnetsRequest).subnets().forEach(subnet -> {
-                    Map<String, Object> subnetNode = new HashMap<>();
-                    Map<String, Object> subnetData = new HashMap<>();
-                    subnetData.put("id", subnet.subnetId());
-                    subnetData.put("label", getTagName(subnet.tags(), subnet.subnetId()));
-                    subnetData.put("type", "Subnet");
-                    subnetData.put("parent", vpc.vpcId());
-                    subnetData.put("AvailabilityZone", subnet.availabilityZone());
-                    subnetData.put("CidrBlock", subnet.cidrBlock());
-                    subnetNode.put("data", subnetData);
-                    elements.add(subnetNode);
-                });
+            // Process the selected VPC and its resources
+            Vpc vpc = ec2Client.describeVpcs(r -> r.vpcIds(vpcId)).vpcs().get(0);
+            Map<String, Object> vpcNode = new HashMap<>();
+            Map<String, Object> vpcData = new HashMap<>();
+            vpcData.put("id", vpc.vpcId());
+            vpcData.put("label", getTagName(vpc.tags(), vpc.vpcId()));
+            vpcData.put("type", "VPC");
+            vpcData.put("CidrBlock", vpc.cidrBlock());
+            vpcData.put("IsDefault", vpc.isDefault().toString());
+            vpcNode.put("data", vpcData);
+            elements.add(vpcNode);
 
-                DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder()
-                        .filters(f -> f.name("vpc-id").values(vpc.vpcId()))
-                        .build();
-                ec2Client.describeSecurityGroups(sgsRequest).securityGroups().forEach(sg -> {
-                    Map<String, Object> sgNode = new HashMap<>();
-                    Map<String, Object> sgData = new HashMap<>();
-                    sgData.put("id", sg.groupId());
-                    sgData.put("label", sg.groupName());
-                    sgData.put("type", "Security Group");
-                    sgData.put("parent", vpc.vpcId());
-                    sgData.put("Description", sg.description());
-                    sgNode.put("data", sgData);
-                    elements.add(sgNode);
-                });
-
-                elbv2Client.describeLoadBalancers().loadBalancers().stream()
-                    .filter(lb -> vpc.vpcId().equals(lb.vpcId()))
-                    .forEach(lb -> {
-                        Map<String, Object> lbNode = new HashMap<>();
-                        Map<String, Object> lbData = new HashMap<>();
-                        lbData.put("id", lb.loadBalancerArn());
-                        lbData.put("label", lb.loadBalancerName());
-                        lbData.put("type", "Load Balancer");
-                        lb.availabilityZones().stream().findFirst().ifPresent(az -> lbData.put("parent", az.subnetId()));
-                        lbData.put("State", lb.state().codeAsString());
-                        lbData.put("Scheme", lb.schemeAsString());
-                        lbData.put("LBType", lb.typeAsString());
-                        lbNode.put("data", lbData);
-                        elements.add(lbNode);
-                    });
+            // ... (The rest of the method for fetching Subnets, SGs, EC2, RDS, etc., remains the same)
+            // Subnets
+            DescribeSubnetsRequest subnetsRequest = DescribeSubnetsRequest.builder()
+                    .filters(f -> f.name("vpc-id").values(vpcId))
+                    .build();
+            ec2Client.describeSubnets(subnetsRequest).subnets().forEach(subnet -> {
+                Map<String, Object> subnetNode = new HashMap<>();
+                Map<String, Object> subnetData = new HashMap<>();
+                subnetData.put("id", subnet.subnetId());
+                subnetData.put("label", getTagName(subnet.tags(), subnet.subnetId()));
+                subnetData.put("type", "Subnet");
+                subnetData.put("parent", vpc.vpcId());
+                subnetData.put("AvailabilityZone", subnet.availabilityZone());
+                subnetData.put("CidrBlock", subnet.cidrBlock());
+                subnetNode.put("data", subnetData);
+                elements.add(subnetNode);
             });
 
-            // 3. Process EC2 instances
-            ec2Client.describeInstances().reservations().stream()
+            // Security Groups
+            DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder()
+                    .filters(f -> f.name("vpc-id").values(vpcId))
+                    .build();
+            ec2Client.describeSecurityGroups(sgsRequest).securityGroups().forEach(sg -> {
+                Map<String, Object> sgNode = new HashMap<>();
+                Map<String, Object> sgData = new HashMap<>();
+                sgData.put("id", sg.groupId());
+                sgData.put("label", sg.groupName());
+                sgData.put("type", "Security Group");
+                sgData.put("parent", vpc.vpcId());
+                sgData.put("Description", sg.description());
+                sgNode.put("data", sgData);
+                elements.add(sgNode);
+            });
+            
+            // Load Balancers
+            elbv2Client.describeLoadBalancers().loadBalancers().stream()
+                .filter(lb -> vpcId.equals(lb.vpcId()))
+                .forEach(lb -> {
+                    Map<String, Object> lbNode = new HashMap<>();
+                    Map<String, Object> lbData = new HashMap<>();
+                    lbData.put("id", lb.loadBalancerArn());
+                    lbData.put("label", lb.loadBalancerName());
+                    lbData.put("type", "Load Balancer");
+                    lb.availabilityZones().stream().findFirst().ifPresent(az -> lbData.put("parent", az.subnetId()));
+                    lbData.put("State", lb.state().codeAsString());
+                    lbData.put("Scheme", lb.schemeAsString());
+                    lbData.put("LBType", lb.typeAsString());
+                    lbNode.put("data", lbData);
+                    elements.add(lbNode);
+                });
+
+            // EC2 Instances
+            DescribeInstancesRequest instancesRequest = DescribeInstancesRequest.builder()
+                    .filters(f -> f.name("vpc-id").values(vpcId))
+                    .build();
+            ec2Client.describeInstances(instancesRequest).reservations().stream()
                 .flatMap(r -> r.instances().stream())
                 .filter(instance -> instance.subnetId() != null)
                 .forEach(instance -> {
@@ -1429,30 +1440,39 @@ public CompletableFuture<List<Map<String, Object>>> getGraphData() {
                     });
                 });
 
-            // 4. Process RDS Instances
-            rdsClient.describeDBInstances().dbInstances().forEach(db -> {
-                if (db.dbSubnetGroup() != null && !db.dbSubnetGroup().subnets().isEmpty()) {
-                    Map<String, Object> dbNode = new HashMap<>();
-                    Map<String, Object> dbData = new HashMap<>();
-                    dbData.put("id", db.dbInstanceArn());
-                    dbData.put("label", db.dbInstanceIdentifier());
-                    dbData.put("type", "RDS Instance");
-                    dbData.put("parent", db.dbSubnetGroup().subnets().get(0).subnetIdentifier());
-                    dbData.put("Status", db.dbInstanceStatus());
-                    dbData.put("Engine", db.engine());
-                    dbData.put("EngineVersion", db.engineVersion());
-                    dbData.put("InstanceClass", db.dbInstanceClass());
-                    dbNode.put("data", dbData);
-                    elements.add(dbNode);
-                }
-            });
+            // RDS Instances
+            rdsClient.describeDBInstances().dbInstances().stream()
+                .filter(db -> db.dbSubnetGroup() != null && vpcId.equals(db.dbSubnetGroup().vpcId()))
+                .forEach(db -> {
+                    if (!db.dbSubnetGroup().subnets().isEmpty()) {
+                        Map<String, Object> dbNode = new HashMap<>();
+                        Map<String, Object> dbData = new HashMap<>();
+                        dbData.put("id", db.dbInstanceArn());
+                        dbData.put("label", db.dbInstanceIdentifier());
+                        dbData.put("type", "RDS Instance");
+                        dbData.put("parent", db.dbSubnetGroup().subnets().get(0).subnetIdentifier());
+                        dbData.put("Status", db.dbInstanceStatus());
+                        dbData.put("Engine", db.engine());
+                        dbData.put("EngineVersion", db.engineVersion());
+                        dbData.put("InstanceClass", db.dbInstanceClass());
+                        dbNode.put("data", dbData);
+                        elements.add(dbNode);
+                    }
+                });
+
 
         } catch (Exception e) {
-            logger.error("Failed to build graph data", e);
+            logger.error("Failed to build graph data for VPC {}", vpcId, e);
             throw new RuntimeException("Failed to fetch graph data from AWS", e);
         }
 
         return elements;
     });
+}
+@Async("awsTaskExecutor")
+@Cacheable("vpcList")
+public CompletableFuture<List<Vpc>> getVpcList() {
+    logger.info("Fetching list of VPCs...");
+    return CompletableFuture.supplyAsync(() -> ec2Client.describeVpcs().vpcs());
 }
 }
