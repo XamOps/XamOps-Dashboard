@@ -12,6 +12,7 @@
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
         .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+        .clickable-row { cursor: pointer; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -28,10 +29,16 @@
                     <h1 class="text-xl font-semibold text-gray-800">Security Dashboard</h1>
                     <p class="text-xs text-gray-500">Active monitoring of security posture</p>
                 </div>
-                <button @click="loadFindings(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
-                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
-                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
-                </button>
+                <div class="flex items-center gap-4">
+                    <button @click="exportToExcel()" class="flex items-center text-sm text-green-600 hover:text-green-800" :disabled="isLoading || findings.length === 0">
+                        <i class="fas fa-file-excel mr-2"></i>
+                        <span>Save to Excel</span>
+                    </button>
+                    <button @click="loadFindings(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                        <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
+                        <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                    </button>
+                </div>
             </header>
 
             <div class="flex-1 p-6 space-y-6">
@@ -91,7 +98,7 @@
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 <template x-for="finding in filteredFindings" :key="finding.resourceId + finding.description">
-                                    <tr class="hover:bg-gray-50">
+                                    <tr @click="showRemediation(finding)" class="hover:bg-gray-50 clickable-row">
                                         <td class="px-6 py-4">
                                             <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full" :class="getSeverityColor(finding.severity, 'badge')" x-text="finding.severity"></span>
                                         </td>
@@ -106,6 +113,27 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Remediation Modal -->
+            <div x-show="isModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-40" @click.away="isModalOpen = false">
+                <div class="relative mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+                    <div class="flex justify-between items-center pb-3 border-b">
+                        <p class="text-2xl font-bold">Remediation Guidance</p>
+                        <div class="cursor-pointer z-50" @click="isModalOpen = false">
+                            <i class="fas fa-times"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h3 class="text-lg font-semibold" x-text="modalContent.description"></h3>
+                        <p class="text-sm text-gray-500 mt-1">Resource: <span class="font-mono" x-text="modalContent.resourceId"></span></p>
+                        <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                            <h4 class="font-semibold text-gray-800 mb-2">Steps to Remediate:</h4>
+                            <div class="text-sm text-gray-700 prose" x-html="modalContent.remediation"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 </div>
@@ -115,6 +143,12 @@ function securityDashboard() {
     return {
         isLoading: true,
         findings: [],
+        isModalOpen: false,
+        modalContent: {
+            description: '',
+            resourceId: '',
+            remediation: ''
+        },
         
         init() {
             this.loadFindings();
@@ -138,6 +172,10 @@ function securityDashboard() {
                 });
         },
 
+        exportToExcel() {
+            window.location.href = '/api/security/export';
+        },
+
         get filteredFindings() {
             // Placeholder for future filtering logic
             return this.findings;
@@ -156,6 +194,53 @@ function securityDashboard() {
                 'Informational': { text: 'text-gray-600', bg: 'bg-gray-100', icon: 'text-gray-500', badge: 'bg-gray-100 text-gray-800' }
             };
             return (colors[severity] && colors[severity][type]) || 'text-gray-600';
+        },
+
+        showRemediation(finding) {
+            this.modalContent.description = finding.description;
+            this.modalContent.resourceId = finding.resourceId;
+            this.modalContent.remediation = this.getRemediationSteps(finding);
+            this.isModalOpen = true;
+        },
+
+        getRemediationSteps(finding) {
+            const desc = finding.description.toLowerCase();
+            if (desc.includes('mfa is not enabled')) {
+                return `<ol class="list-decimal list-inside space-y-2">
+                            <li>Navigate to the IAM console.</li>
+                            <li>Select the user: <strong>${finding.resourceId}</strong>.</li>
+                            <li>Go to the 'Security credentials' tab.</li>
+                            <li>Click 'Manage' next to 'Assigned MFA device' and follow the prompts.</li>
+                        </ol>`;
+            }
+            if (desc.includes('public access block')) {
+                return `<ol class="list-decimal list-inside space-y-2">
+                            <li>Navigate to the S3 console.</li>
+                            <li>Select the bucket: <strong>${finding.resourceId}</strong>.</li>
+                            <li>Go to the 'Permissions' tab.</li>
+                            <li>Click 'Edit' under 'Block public access (bucket settings)'.</li>
+                            <li>Check all four boxes to block all public access and save changes.</li>
+                        </ol>`;
+            }
+            if (desc.includes('unrestricted') && desc.includes('security group')) {
+                 return `<ol class="list-decimal list-inside space-y-2">
+                            <li>Navigate to the VPC console > Security Groups.</li>
+                            <li>Select the Security Group: <strong>${finding.resourceId}</strong>.</li>
+                            <li>Go to the 'Inbound rules' tab and click 'Edit inbound rules'.</li>
+                            <li>Identify the rule with source '0.0.0.0/0' or '::/0'.</li>
+                            <li>Modify the source to a specific IP range or another security group. Avoid allowing unrestricted access, especially for sensitive ports like SSH (22) or RDP (3389).</li>
+                        </ol>`;
+            }
+             if (desc.includes('flow logs enabled')) {
+                return `<ol class="list-decimal list-inside space-y-2">
+                            <li>Navigate to the VPC console.</li>
+                            <li>Select the VPC: <strong>${finding.resourceId}</strong>.</li>
+                            <li>In the details pane, select the 'Flow Logs' tab.</li>
+                            <li>Click 'Create flow log'.</li>
+                            <li>Configure the flow log to send data to a CloudWatch Logs log group or an S3 bucket.</li>
+                        </ol>`;
+            }
+            return '<p>Remediation steps for this finding are not yet available.</p>';
         }
     }
 }
