@@ -37,4 +37,14 @@ public class PageController {
     public String cloudmapPage() {
         return "cloudmap";
     }
+
+    @GetMapping("/security")
+    public String securityPage() {
+        return "security";
+    }
+
+    @GetMapping("/performance")
+    public String performancePage() {
+        return "performance";
+    }
 }

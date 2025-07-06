@@ -115,7 +115,6 @@ public class DashboardData {
         private double currentMonthlyCost;
         private double recommendedMonthlyCost;
         private double estimatedMonthlySavings;
-        private String recommendationReason;
         private List<RightsizingOption> recommendationOptions;
     }
 
@@ -183,11 +182,22 @@ public class DashboardData {
         private String reason;
     }
 
-        @Data
+    @Data
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ServiceGroupDto {
         private String serviceType;
         private List<ResourceDto> resources;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class SecurityFinding {
+        private String resourceId;
+        private String region;
+        private String category;
+        private String severity;
+        private String description;
     }
 }

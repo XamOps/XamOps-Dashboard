@@ -3,6 +3,7 @@
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.dto.DashboardData.SecurityFinding;
 import com.xammer.cloud.dto.DashboardData.ServiceGroupDto;
 import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ResourceDto;
@@ -15,9 +16,11 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
+import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
+import software.amazon.awssdk.services.cloudtrail.model.Trail;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.Datapoint;
 import software.amazon.awssdk.services.cloudwatch.model.Dimension;
 import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
 import software.amazon.awssdk.services.cloudwatch.model.Metric;
@@ -25,6 +28,7 @@ import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
 import software.amazon.awssdk.services.cloudwatch.model.MetricDataResult;
 import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
 import software.amazon.awssdk.services.cloudwatch.model.ScanBy;
+import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
 import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
 import software.amazon.awssdk.services.computeoptimizer.model.*;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
@@ -38,16 +42,19 @@ import software.amazon.awssdk.services.eks.EksClient;
 import software.amazon.awssdk.services.elasticache.ElastiCacheClient;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.iam.IamClient;
+import software.amazon.awssdk.services.iam.model.ListMfaDevicesRequest;
 import software.amazon.awssdk.services.iam.model.NoSuchEntityException;
 import software.amazon.awssdk.services.iam.model.PasswordPolicy;
 import software.amazon.awssdk.services.iam.model.PolicyScopeType;
+import software.amazon.awssdk.services.iam.model.Role;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.acm.AcmClient;
-import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
-import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
+import software.amazon.awssdk.services.s3.model.Bucket;
+import software.amazon.awssdk.services.s3.model.GetPublicAccessBlockRequest;
+import software.amazon.awssdk.services.s3.model.Permission;
+import software.amazon.awssdk.services.s3.model.PublicAccessBlockConfiguration;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
@@ -334,11 +341,12 @@ public class AwsDataService {
     }
 
         @CacheEvict(value = {
-                "cloudlistResources", "groupedCloudlistResources", // Add the new cache to the evict list
+                "cloudlistResources", "groupedCloudlistResources",
                 "wastedResources", "regionStatus", "inventory",
                 "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies",
                 "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs",
-                "billingSummary", "iamResources", "costHistory", "allRecommendations"
+                "billingSummary", "iamResources", "costHistory", "allRecommendations",
+                "securityFindings" // Evict new security cache
         }, allEntries = true)
     public void clearAllCaches() {
         logger.info("All dashboard caches have been evicted.");
@@ -1046,9 +1054,9 @@ public class AwsDataService {
                             a.anomalyId(),
                             getServiceNameFromAnomaly(a),
                             a.impact().totalImpact(),
-                            LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract YYYY-MM-DD
+                            LocalDate.parse(a.anomalyStartDate().substring(0, 10)), // Extract yyyy-MM-dd
                             a.anomalyEndDate() != null ? LocalDate.parse(a.anomalyEndDate().substring(0, 10))
-                                    : LocalDate.now() // Extract YYYY-MM-DD
+                                    : LocalDate.now() // Extract yyyy-MM-dd
                     ))
                     .collect(Collectors.toList()));
         } catch (Exception e) {
@@ -1749,4 +1757,199 @@ public CompletableFuture<List<Vpc>> getVpcList() {
     logger.info("Fetching list of VPCs...");
     return CompletableFuture.supplyAsync(() -> ec2Client.describeVpcs().vpcs());
 }
+
+    // --- NEW SECURITY METHODS ---
+
+    @Async("awsTaskExecutor")
+    @Cacheable("securityFindings")
+    public CompletableFuture<List<SecurityFinding>> getComprehensiveSecurityFindings() {
+        logger.info("Starting comprehensive security scan...");
+
+        List<CompletableFuture<List<SecurityFinding>>> futures = List.of(
+            findUsersWithoutMfa(),
+            findPublicS3Buckets(),
+            findUnrestrictedSecurityGroups(),
+            findVpcsWithoutFlowLogs(),
+            checkCloudTrailStatus(),
+            findUnusedIamRoles()
+        );
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .flatMap(List::stream)
+                .collect(Collectors.toList()));
+    }
+
+    private CompletableFuture<List<SecurityFinding>> findUsersWithoutMfa() {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan: Checking for IAM users without MFA...");
+            List<SecurityFinding> findings = new ArrayList<>();
+            try {
+                iamClient.listUsers().users().forEach(user -> {
+                    // Heuristic: Check for users who can sign in to the console
+                    if (user.passwordLastUsed() != null || iamClient.getLoginProfile(r -> r.userName(user.userName())).sdkHttpResponse().isSuccessful()) {
+                        software.amazon.awssdk.services.iam.model.ListMfaDevicesResponse mfaDevicesResponse = iamClient.listMFADevices(
+                            r -> r.userName(user.userName())
+                        );
+                        if (!mfaDevicesResponse.hasMfaDevices() || mfaDevicesResponse.mfaDevices().isEmpty()) {
+                            findings.add(new SecurityFinding(user.userName(), "Global", "IAM", "High", "User has console access but MFA is not enabled."));
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                logger.error("Security Scan failed: Could not check for MFA on users.", e);
+            }
+            return findings;
+        });
+    }
+
+    private CompletableFuture<List<SecurityFinding>> findPublicS3Buckets() {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan: Checking for public S3 buckets...");
+            List<SecurityFinding> findings = new ArrayList<>();
+            try {
+                for (Bucket bucket : s3Client.listBuckets().buckets()) {
+                    String bucketName = bucket.name();
+                    String region = s3Client.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
+                    if (region == null) region = "us-east-1";
+
+                    boolean isPublic = false;
+                    String reason = "";
+
+                    // 1. Check Public Access Block
+                    try {
+                        GetPublicAccessBlockRequest pabRequest = GetPublicAccessBlockRequest.builder().bucket(bucketName).build();
+                        PublicAccessBlockConfiguration pab = s3Client.getPublicAccessBlock(pabRequest).publicAccessBlockConfiguration();
+                        if (!pab.blockPublicAcls() || !pab.ignorePublicAcls() || !pab.blockPublicPolicy() || !pab.restrictPublicBuckets()) {
+                            isPublic = true;
+                            reason = "Public Access Block is not fully enabled.";
+                        }
+                    } catch (Exception e) {
+                        // If no PAB is configured, it's default (not public), but we check ACLs to be sure.
+                    }
+
+                    // 2. Check ACLs if PAB isn't definitively blocking
+                    if (!isPublic) {
+                         boolean hasPublicAcl = s3Client.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
+                            .anyMatch(grant -> {
+                                String granteeUri = grant.grantee().uri();
+                                return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
+                                    && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
+                            });
+                        if (hasPublicAcl) {
+                            isPublic = true;
+                            reason = "Bucket ACL grants public access.";
+                        }
+                    }
+                    
+                    if (isPublic) {
+                        findings.add(new SecurityFinding(bucketName, region, "S3", "Critical", reason));
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Security Scan failed: Could not check S3 bucket permissions.", e);
+            }
+            return findings;
+        });
+    }
+
+    private CompletableFuture<List<SecurityFinding>> findUnrestrictedSecurityGroups() {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan: Checking for unrestricted security groups...");
+            List<SecurityFinding> findings = new ArrayList<>();
+            try {
+                ec2Client.describeSecurityGroups().securityGroups().forEach(sg -> {
+                    sg.ipPermissions().forEach(perm -> {
+                        boolean openToWorld = perm.ipRanges().stream().anyMatch(ip -> "0.0.0.0/0".equals(ip.cidrIp()));
+                        if (openToWorld) {
+                            String description = String.format("Allows inbound traffic from anywhere (0.0.0.0/0) on port(s) %s",
+                                    perm.fromPort() == null ? "ALL" : (Objects.equals(perm.fromPort(), perm.toPort()) ? perm.fromPort().toString() : perm.fromPort() + "-" + perm.toPort())
+                            );
+                            findings.add(new SecurityFinding(sg.groupId(), this.configuredRegion, "VPC", "Critical", description));
+                        }
+                    });
+                });
+            } catch (Exception e) {
+                logger.error("Security Scan failed: Could not check security groups.", e);
+            }
+            return findings;
+        });
+    }
+
+    private CompletableFuture<List<SecurityFinding>> findVpcsWithoutFlowLogs() {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan: Checking for VPCs without Flow Logs...");
+            try {
+                Set<String> vpcsWithFlowLogs = ec2Client.describeFlowLogs().flowLogs().stream()
+                        .map(FlowLog::resourceId)
+                        .collect(Collectors.toSet());
+
+                return ec2Client.describeVpcs().vpcs().stream()
+                        .filter(vpc -> !vpcsWithFlowLogs.contains(vpc.vpcId()))
+                        .map(vpc -> new SecurityFinding(vpc.vpcId(), this.configuredRegion, "VPC", "Medium", "VPC does not have Flow Logs enabled."))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Security Scan failed: Could not check for VPC flow logs.", e);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    private CompletableFuture<List<SecurityFinding>> checkCloudTrailStatus() {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan: Checking CloudTrail status...");
+            List<SecurityFinding> findings = new ArrayList<>();
+            try {
+                List<Trail> trails = cloudTrailClient.describeTrails().trailList();
+                if (trails.isEmpty()) {
+                    findings.add(new SecurityFinding("Account", "Global", "CloudTrail", "Critical", "No CloudTrail trails are configured for the account."));
+                    return findings;
+                }
+
+                boolean hasActiveMultiRegionTrail = trails.stream().anyMatch(t -> {
+                    boolean isLogging = cloudTrailClient.getTrailStatus(r -> r.name(t.name())).isLogging();
+                    return t.isMultiRegionTrail() && isLogging;
+                });
+
+                if (!hasActiveMultiRegionTrail) {
+                    findings.add(new SecurityFinding("Account", "Global", "CloudTrail", "High", "No active, multi-region CloudTrail trail found."));
+                }
+            } catch (Exception e) {
+                logger.error("Security Scan failed: Could not check CloudTrail status.", e);
+            }
+            return findings;
+        });
+    }
+
+    private CompletableFuture<List<SecurityFinding>> findUnusedIamRoles() {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan: Checking for unused IAM roles...");
+            List<SecurityFinding> findings = new ArrayList<>();
+            Instant ninetyDaysAgo = Instant.now().minus(90, ChronoUnit.DAYS);
+            try {
+                iamClient.listRoles().roles().stream()
+                    // Filter out common AWS service-linked roles to reduce noise
+                    .filter(role -> !role.path().startsWith("/aws-service-role/"))
+                    .forEach(role -> {
+                        try {
+                            Role lastUsed = iamClient.getRole(r -> r.roleName(role.roleName())).role();
+                            if (lastUsed.roleLastUsed() == null || lastUsed.roleLastUsed().lastUsedDate() == null) {
+                                // Never used, but check creation date to avoid flagging new roles
+                                if (role.createDate().isBefore(ninetyDaysAgo)) {
+                                    findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Medium", "Role has never been used and was created over 90 days ago."));
+                                }
+                            } else if (lastUsed.roleLastUsed().lastUsedDate().isBefore(ninetyDaysAgo)) {
+                                findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Low", "Role has not been used in over 90 days."));
+                            }
+                        } catch (Exception e) {
+                             logger.warn("Could not get last used info for role {}: {}", role.roleName(), e.getMessage());
+                        }
+                    });
+            } catch (Exception e) {
+                logger.error("Security Scan failed: Could not check for unused IAM roles.", e);
+            }
+            return findings;
+        });
+    }
 }

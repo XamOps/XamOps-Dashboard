@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Security</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="securityDashboard()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">Security Dashboard</h1>
+                    <p class="text-xs text-gray-500">Active monitoring of security posture</p>
+                </div>
+                <button @click="loadFindings(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
+                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                </button>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-gray-500 text-sm font-medium">Total Findings</h3>
+                                <p class="text-3xl font-bold text-gray-800 mt-1" x-text="filteredFindings.length"></p>
+                            </div>
+                            <div class="bg-blue-100 p-3 rounded-lg"><i class="fas fa-exclamation-circle text-blue-500 text-xl"></i></div>
+                        </div>
+                    </div>
+                    <template x-for="severity in ['Critical', 'High', 'Medium']" :key="severity">
+                        <div class="bg-white rounded-xl p-5 card-shadow">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-gray-500 text-sm font-medium" x-text="severity + ' Findings'"></h3>
+                                    <p class="text-3xl font-bold mt-1" x-text="getSeverityCount(severity)" :class="getSeverityColor(severity, 'text')"></p>
+                                </div>
+                                <div class="p-3 rounded-lg" :class="getSeverityColor(severity, 'bg')"><i class="fas fa-shield-alt text-xl" :class="getSeverityColor(severity, 'icon')"></i></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Findings Table -->
+                <div class="bg-white rounded-xl p-6 card-shadow">
+                    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+                        <div>
+                            <h2 class="text-lg font-semibold text-gray-800">Security Findings</h2>
+                            <p class="text-sm text-gray-500">Prioritized list of security vulnerabilities and misconfigurations</p>
+                        </div>
+                    </div>
+
+                    <div x-show="isLoading" class="text-center p-8">
+                        <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i>
+                    </div>
+                    
+                    <div x-show="!isLoading && filteredFindings.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                        <i class="fas fa-check-circle fa-4x text-green-500"></i>
+                        <h3 class="mt-4 text-lg font-medium text-gray-900">No Findings</h3>
+                        <p class="mt-1 text-sm text-gray-500">Excellent! No security issues were found based on the current checks.</p>
+                    </div>
+
+                    <div x-show="!isLoading && filteredFindings.length > 0" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Severity</th>
+                                    <th class="px-6 py-3">Category</th>
+                                    <th class="px-6 py-3">Description</th>
+                                    <th class="px-6 py-3">Resource</th>
+                                    <th class="px-6 py-3">Region</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template x-for="finding in filteredFindings" :key="finding.resourceId + finding.description">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4">
+                                            <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full" :class="getSeverityColor(finding.severity, 'badge')" x-text="finding.severity"></span>
+                                        </td>
+                                        <td class="px-6 py-4 font-medium text-gray-700" x-text="finding.category"></td>
+                                        <td class="px-6 py-4" x-text="finding.description"></td>
+                                        <td class="px-6 py-4 font-mono text-xs text-gray-800" x-text="finding.resourceId"></td>
+                                        <td class="px-6 py-4" x-text="finding.region"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function securityDashboard() {
+    return {
+        isLoading: true,
+        findings: [],
+        
+        init() {
+            this.loadFindings();
+        },
+
+        loadFindings(forceRefresh = false) {
+            this.isLoading = true;
+            const url = forceRefresh ? '/api/security/findings?force=true' : '/api/security/findings';
+            
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    this.findings = data;
+                })
+                .catch(err => {
+                    console.error('Failed to load security findings:', err);
+                    this.findings = [];
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
+        },
+
+        get filteredFindings() {
+            // Placeholder for future filtering logic
+            return this.findings;
+        },
+
+        getSeverityCount(severity) {
+            return this.findings.filter(f => f.severity === severity).length;
+        },
+
+        getSeverityColor(severity, type) {
+            const colors = {
+                'Critical': { text: 'text-red-600', bg: 'bg-red-100', icon: 'text-red-500', badge: 'bg-red-100 text-red-800' },
+                'High': { text: 'text-orange-600', bg: 'bg-orange-100', icon: 'text-orange-500', badge: 'bg-orange-100 text-orange-800' },
+                'Medium': { text: 'text-yellow-600', bg: 'bg-yellow-100', icon: 'text-yellow-500', badge: 'bg-yellow-100 text-yellow-800' },
+                'Low': { text: 'text-blue-600', bg: 'bg-blue-100', icon: 'text-blue-500', badge: 'bg-blue-100 text-blue-800' },
+                'Informational': { text: 'text-gray-600', bg: 'bg-gray-100', icon: 'text-gray-500', badge: 'bg-gray-100 text-gray-800' }
+            };
+            return (colors[severity] && colors[severity][type]) || 'text-gray-600';
+        }
+    }
+}
+</script>
+
+</body>
+</html>
