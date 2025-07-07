@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Cost Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="costManagement()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">Cost Management</h1>
+                    <p class="text-xs text-gray-500">Analyze and manage your cloud costs</p>
+                </div>
+                <button @click="loadCostData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
+                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                </button>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <!-- Cost Breakdown Section -->
+                <div class="bg-white rounded-lg p-6 shadow-sm border">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Cost Breakdown</h2>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <span class="text-sm font-medium">Group by:</span>
+                        <select x-model="groupBy" @change="loadCostData()" class="form-select text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                            <option value="SERVICE">Service</option>
+                            <option value="REGION">Region</option>
+                            <option value="TAG">Tag</option>
+                        </select>
+                        <input type="text" x-show="groupBy === 'TAG'" x-model="tagKey" @input.debounce.500ms="loadCostData()" placeholder="Enter Tag Key" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div x-show="isLoading" class="text-center p-8"> <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                    <div x-show="!isLoading && costData.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">No cost data found.</h3>
+                        <p class="mt-1 text-sm text-gray-500">There is no cost data for the selected criteria, or the tag key is invalid.</p>
+                    </div>
+                    <div x-show="!isLoading && costData.length > 0" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3" x-text="groupBy === 'TAG' ? 'Tag: ' + tagKey : groupBy.charAt(0).toUpperCase() + groupBy.slice(1).toLowerCase()"></th>
+                                    <th class="px-6 py-3 text-right">Cost (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template x-for="item in costData" :key="item.name">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium text-gray-800" x-text="item.name || '(No Value)'"></td>
+                                        <td class="px-6 py-4 text-right font-mono text-gray-800" x-text="'$' + item.amount.toFixed(2)"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function costManagement() {
+    return {
+        isLoading: true,
+        costData: [],
+        groupBy: 'SERVICE',
+        tagKey: 'Name',
+
+        init() {
+            this.loadCostData();
+        },
+
+        loadCostData(forceRefresh = false) {
+            this.isLoading = true;
+            let url = `/api/costs/breakdown?groupBy=${this.groupBy}`;
+            if (this.groupBy === 'TAG') {
+                // Only add tag parameter if tagKey is not empty
+                if(this.tagKey) {
+                    url += `&tag=${this.tagKey}`;
+                } else {
+                    this.costData = [];
+                    this.isLoading = false;
+                    return;
+                }
+            }
+            
+            if(forceRefresh) sessionStorage.removeItem('costData' + this.groupBy + this.tagKey);
+            const cachedData = sessionStorage.getItem('costData' + this.groupBy + this.tagKey);
+
+            if(cachedData && !forceRefresh) {
+                this.costData = JSON.parse(cachedData);
+                this.isLoading = false;
+                return;
+            }
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    this.costData = data;
+                    sessionStorage.setItem('costData' + this.groupBy + this.tagKey, JSON.stringify(data));
+                })
+                .catch(err => {
+                    console.error('Failed to load cost data:', err);
+                    this.costData = [];
+                })
+                .finally(() => this.isLoading = false);
+        },
+    }
+}
+</script>
+
+</body>
+</html>

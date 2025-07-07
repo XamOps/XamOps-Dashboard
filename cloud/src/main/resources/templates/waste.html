@@ -25,20 +25,10 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
-        /* Custom scrollbar for the sidebar */
-        .sidebar-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-        .sidebar-scroll::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .sidebar-scroll::-webkit-scrollbar-thumb {
-            background: #d1d5db;
-            border-radius: 3px;
-        }
-        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af;
-        }
+        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -151,7 +141,14 @@
                                         <td class="px-6 py-4" x-text="resource.reason"></td>
                                         <td class="px-6 py-4 text-center">
                                             <div class="flex justify-center gap-2">
-                                                <button disabled title="Delete action will be enabled in a future phase" class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-trash-alt mr-1"></i>Remove</button>
+                                                <!-- UPDATED: Added click handler and enabled button for specific types -->
+                                                <button 
+                                                    @click="handleAction('delete', resource)"
+                                                    :disabled="!isActionable(resource, 'delete')"
+                                                    title="Delete this resource" 
+                                                    class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <i class="fas fa-trash-alt mr-1"></i>Remove
+                                                </button>
                                                 <button disabled class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-archive mr-1"></i>Archive</button>
                                             </div>
                                         </td>
@@ -172,12 +169,9 @@ function wasteManagement() {
         isLoading: true,
         filter: 'All',
         wastedResources: [],
-        filteredResources: [],
-
+        
         init() {
             this.loadWastedResources();
-            // Use $watch to reactively call applyFilter whenever 'filter' changes.
-            this.$watch('filter', () => this.applyFilter());
         },
 
         loadWastedResources(forceRefresh = false) {
@@ -185,7 +179,6 @@ function wasteManagement() {
 
             if (!forceRefresh && cachedData) {
                 this.wastedResources = JSON.parse(cachedData);
-                this.applyFilter();
                 this.isLoading = false;
                 return;
             }
@@ -199,24 +192,21 @@ function wasteManagement() {
                 .then(data => {
                     sessionStorage.setItem('wasteData', JSON.stringify(data));
                     this.wastedResources = data;
-                    this.applyFilter();
                 })
                 .catch(err => {
                     console.error('Failed to load waste data', err);
                     this.wastedResources = [];
-                    this.applyFilter();
                 })
                 .finally(() => {
                     this.isLoading = false;
                 });
         },
 
-        applyFilter() {
+        get filteredResources() {
             if (this.filter === 'All') {
-                this.filteredResources = this.wastedResources;
-            } else {
-                this.filteredResources = this.wastedResources.filter(r => r.resourceType === this.filter);
+                return this.wastedResources;
             }
+            return this.wastedResources.filter(r => r.resourceType === this.filter);
         },
 
         get potentialSavings() {
@@ -250,6 +240,44 @@ function wasteManagement() {
                 'ENI': 'bg-pink-100 text-pink-800'
             };
             return colors[type] || 'bg-gray-100 text-gray-800';
+        },
+
+        isActionable(resource, action) {
+            if (action === 'delete') {
+                // Only allow deleting unattached EBS volumes for now
+                return resource.resourceType === 'EBS Volume' && resource.reason === 'Unattached Volume';
+            }
+            return false;
+        },
+
+        handleAction(action, resource) {
+            const confirmation = confirm(`Are you sure you want to ${action} the ${resource.resourceType} "${resource.resourceId}"? This action cannot be undone.`);
+            if (!confirmation) return;
+
+            let endpoint = '';
+            if (resource.resourceType === 'EBS Volume' && action === 'delete') {
+                endpoint = `/api/actions/ebs/${resource.resourceId}/delete`;
+            } else {
+                alert('This action is not yet supported for this resource type.');
+                return;
+            }
+
+            fetch(endpoint, { method: 'POST' })
+                .then(res => {
+                    if (!res.ok) {
+                        return res.json().then(err => { throw new Error(err.error || 'Action failed') });
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    alert(`Success: ${data.message}`);
+                    // Remove the item from the list visually
+                    this.wastedResources = this.wastedResources.filter(r => r.resourceId !== resource.resourceId);
+                })
+                .catch(err => {
+                    alert(`Error: ${err.message}`);
+                    console.error('Action failed:', err);
+                });
         }
     }
 }

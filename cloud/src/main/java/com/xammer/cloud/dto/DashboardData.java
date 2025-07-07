@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -12,6 +13,36 @@ import java.util.List;
 public class DashboardData {
     private List<Account> availableAccounts;
     private Account selectedAccount;
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class BudgetDetails {
+        private String budgetName;
+        private BigDecimal budgetLimit;
+        private String budgetUnit;
+        private BigDecimal actualSpend;
+        private BigDecimal forecastedSpend;
+    }
+    
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class TaggingCompliance {
+        private double compliancePercentage;
+        private int totalResourcesScanned;
+        private int untaggedResourcesCount;
+        private List<UntaggedResource> untaggedResources;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class UntaggedResource {
+        private String resourceId;
+        private String resourceType;
+        private String region;
+        private List<String> missingTags;
+    }
     
     @Data @NoArgsConstructor @AllArgsConstructor
     public static class Account {

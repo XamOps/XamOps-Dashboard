@@ -17,6 +17,8 @@
     <properties>
         <java.version>17</java.version>
         <aws.java.sdk.version>2.20.0</aws.java.sdk.version>
+        <!-- ADDED: OpenAPI/Swagger Version -->
+        <springdoc.version>1.6.12</springdoc.version>
     </properties>
 
     <dependencyManagement>
@@ -53,6 +55,26 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- ADDED: Spring Data JPA for Database Access -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- ADDED: H2 Database for in-memory persistence -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ADDED: SpringDoc OpenAPI for API Documentation -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- Lombok -->
@@ -143,9 +165,6 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sqs</artifactId>
         </dependency>
-
-
-        <!-- ADDED: Dependencies for CloudTrail and ACM -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>cloudtrail</artifactId>
@@ -155,7 +174,17 @@
             <artifactId>acm</artifactId>
         </dependency>
         
-        <!-- ADDED: Dependency for Excel Export -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>budgets</artifactId>
+        </dependency>
+
+        <dependency>
+    <groupId>software.amazon.awssdk</groupId>
+    <artifactId>sts</artifactId>
+</dependency>
+
+        <!-- Dependency for Excel Export -->
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>

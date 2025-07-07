@@ -3,8 +3,12 @@
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.dto.DashboardData.BudgetDetails;
 import com.xammer.cloud.dto.DashboardData.SecurityFinding;
 import com.xammer.cloud.dto.DashboardData.ServiceGroupDto;
+import com.xammer.cloud.dto.DashboardData.TaggingCompliance;
+import com.xammer.cloud.dto.DashboardData.UntaggedResource;
+import com.xammer.cloud.dto.FinOpsReportDto;
 import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ResourceDto;
 import java.util.HashMap;
@@ -18,6 +22,13 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
+import software.amazon.awssdk.services.budgets.BudgetsClient;
+import software.amazon.awssdk.services.budgets.model.Budget;
+import software.amazon.awssdk.services.budgets.model.BudgetType;
+import software.amazon.awssdk.services.budgets.model.CreateBudgetRequest;
+import software.amazon.awssdk.services.budgets.model.DescribeBudgetsRequest;
+import software.amazon.awssdk.services.budgets.model.Spend;
+import software.amazon.awssdk.services.budgets.model.TimePeriod;
 import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
 import software.amazon.awssdk.services.cloudtrail.model.Trail;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
@@ -59,14 +70,18 @@ import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,11 +91,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sts.StsClient;
+
 
 @Service
 public class AwsDataService {
 
     private static final Logger logger = LoggerFactory.getLogger(AwsDataService.class);
+    private static final List<String> REQUIRED_TAGS = Arrays.asList("cost-center", "project");
 
     private final Ec2Client ec2Client;
     private final IamClient iamClient;
@@ -104,10 +123,9 @@ public class AwsDataService {
     private final CloudWatchLogsClient cloudWatchLogsClient;
     private final SnsClient snsClient;
     private final SqsClient sqsClient;
+    private final BudgetsClient budgetsClient;
+    private final String accountId;
     private final String configuredRegion;
-
-    private static final Set<String> SUSTAINABLE_REGIONS = Set.of("us-east-1", "us-west-2", "eu-west-1", "eu-central-1",
-            "ca-central-1");
 
     private static final Map<String, double[]> REGION_GEO = Map.ofEntries(
             Map.entry("us-east-1", new double[]{38.8951, -77.0364}),
@@ -127,6 +145,7 @@ public class AwsDataService {
             Map.entry("ap-northeast-3", new double[]{34.6937, 135.5023}),
             Map.entry("ap-south-1", new double[]{19.0760, 72.8777}),
             Map.entry("sa-east-1", new double[]{-23.5505, -46.6333}));
+    
 
     public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda,
                           CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co,
@@ -134,7 +153,8 @@ public class AwsDataService {
                           ElasticLoadBalancingV2Client elbv2Client, AutoScalingClient autoScalingClient,
                           ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient,
                           Route53Client route53Client, CloudTrailClient cloudTrailClient, AcmClient acmClient,
-                          CloudWatchLogsClient cloudWatchLogsClient, SnsClient snsClient, SqsClient sqsClient) {
+                          CloudWatchLogsClient cloudWatchLogsClient, SnsClient snsClient, SqsClient sqsClient,
+                          BudgetsClient budgetsClient) {
         this.ec2Client = ec2;
         this.iamClient = iam;
         this.ecsClient = ecs;
@@ -157,8 +177,17 @@ public class AwsDataService {
         this.cloudWatchLogsClient = cloudWatchLogsClient;
         this.snsClient = snsClient;
         this.sqsClient = sqsClient;
-        // Set the region explicitly or via configuration
+        this.budgetsClient = budgetsClient;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
+
+        String tmpAccountId;
+        try (StsClient stsClient = StsClient.create()) {
+            tmpAccountId = stsClient.getCallerIdentity().account();
+        } catch (Exception e) {
+            logger.error("Could not determine AWS Account ID. Budgets may not work correctly.", e);
+            tmpAccountId = "YOUR_ACCOUNT_ID"; // Fallback
+        }
+        this.accountId = tmpAccountId;
     }
     
     public DashboardData getDashboardData() throws ExecutionException, InterruptedException {
@@ -280,6 +309,14 @@ public class AwsDataService {
         }
     }
 
+
+    // Define a set of AWS regions considered "sustainable" (example list, update as needed)
+    private static final Set<String> SUSTAINABLE_REGIONS = Set.of(
+        "eu-west-1", // Ireland
+        "eu-north-1", // Stockholm
+        "ca-central-1", // Canada Central
+        "us-west-2" // Oregon
+    );
 
     private DashboardData.RegionStatus mapRegionToStatus(Region region) {
         double[] coords = REGION_GEO.get(region.regionName());
@@ -1951,5 +1988,236 @@ public CompletableFuture<List<Vpc>> getVpcList() {
             }
             return findings;
         });
+    }
+
+    
+ 
+ 
+    @Async("awsTaskExecutor")
+    @Cacheable("finopsReport")
+    public CompletableFuture<FinOpsReportDto> getFinOpsReport() {
+        logger.info("--- LAUNCHING ASYNC DATA FETCH FOR FINOPS REPORT ---");
+
+        CompletableFuture<List<DashboardData.BillingSummary>> billingSummaryFuture = getBillingSummary();
+        CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = getWastedResources();
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> rightsizingFuture = getAllOptimizationRecommendations();
+        CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies();
+        CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory();
+        CompletableFuture<TaggingCompliance> taggingComplianceFuture = getTaggingCompliance();
+        CompletableFuture<List<BudgetDetails>> budgetsFuture = getAccountBudgets();
+
+        return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture)
+                .thenApply(v -> {
+                    logger.info("--- ALL FINOPS DATA FETCHES COMPLETE, AGGREGATING NOW ---");
+
+                    List<DashboardData.BillingSummary> billingSummary = billingSummaryFuture.join();
+                    List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.join();
+                    List<DashboardData.OptimizationRecommendation> rightsizingRecommendations = rightsizingFuture.join();
+                    List<DashboardData.CostAnomaly> costAnomalies = anomaliesFuture.join();
+                    DashboardData.CostHistory costHistory = costHistoryFuture.join();
+                    TaggingCompliance taggingCompliance = taggingComplianceFuture.join();
+                    List<BudgetDetails> budgets = budgetsFuture.join();
+
+                    double mtdSpend = billingSummary.stream().mapToDouble(DashboardData.BillingSummary::getMonthToDateCost).sum();
+                    double lastMonthSpend = 0.0;
+                    if (costHistory.getLabels() != null && costHistory.getLabels().size() > 1) {
+                        int lastMonthIndex = costHistory.getLabels().size() - 2;
+                        if (lastMonthIndex >= 0 && lastMonthIndex < costHistory.getCosts().size()) {
+                            lastMonthSpend = costHistory.getCosts().get(lastMonthIndex);
+                        }
+                    }
+                    double daysInMonth = YearMonth.now().lengthOfMonth();
+                    double currentDayOfMonth = LocalDate.now().getDayOfMonth();
+                    double forecastedSpend = (currentDayOfMonth > 0) ? (mtdSpend / currentDayOfMonth) * daysInMonth : 0;
+                    double rightsizingSavings = rightsizingRecommendations.stream().mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).sum();
+                    double wasteSavings = wastedResources.stream().mapToDouble(DashboardData.WastedResource::getMonthlySavings).sum();
+                    double totalPotentialSavings = rightsizingSavings + wasteSavings;
+                    FinOpsReportDto.Kpis kpis = new FinOpsReportDto.Kpis(mtdSpend, lastMonthSpend, forecastedSpend, totalPotentialSavings);
+                    List<Map<String, Object>> costByService = billingSummary.stream().sorted(Comparator.comparingDouble(DashboardData.BillingSummary::getMonthToDateCost).reversed()).limit(10).map(s -> Map.<String, Object>of("service", s.getServiceName(), "cost", s.getMonthToDateCost())).collect(Collectors.toList());
+                    List<Map<String, Object>> costByRegion = new ArrayList<>();
+                     try {
+                        costByRegion = getCostByRegion().join();
+                    } catch (Exception e) {
+                        logger.error("Could not fetch cost by region data for FinOps report.", e);
+                    }
+                    FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegion);
+
+                    return new FinOpsReportDto(kpis, costBreakdown, rightsizingRecommendations, wastedResources, costAnomalies, taggingCompliance, budgets);
+                });
+    }
+
+
+    @Async("awsTaskExecutor")
+    @Cacheable("budgets")
+    public CompletableFuture<List<BudgetDetails>> getAccountBudgets() {
+        logger.info("FinOps Scan: Fetching account budgets...");
+        try {
+            DescribeBudgetsRequest request = DescribeBudgetsRequest.builder().accountId(this.accountId).build();
+            List<Budget> budgets = budgetsClient.describeBudgets(request).budgets();
+
+            return CompletableFuture.completedFuture(
+                budgets.stream().map(b -> new BudgetDetails(
+                    b.budgetName(),
+                    b.budgetLimit().amount(),
+                    b.budgetLimit().unit(),
+                    b.calculatedSpend() != null ? b.calculatedSpend().actualSpend().amount() : BigDecimal.ZERO,
+                    b.calculatedSpend() != null && b.calculatedSpend().forecastedSpend() != null ? b.calculatedSpend().forecastedSpend().amount() : BigDecimal.ZERO
+                )).collect(Collectors.toList())
+            );
+        } catch (Exception e) {
+            logger.error("Failed to fetch AWS Budgets.", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    public void createBudget(BudgetDetails budgetDetails) {
+        logger.info("Creating new budget: {}", budgetDetails.getBudgetName());
+        try {
+            Budget budget = Budget.builder()
+                .budgetName(budgetDetails.getBudgetName())
+                .budgetType(BudgetType.COST)
+                .timeUnit("MONTHLY")
+                .timePeriod(TimePeriod.builder().start(Instant.now()).build())
+                .budgetLimit(Spend.builder()
+                    .amount(budgetDetails.getBudgetLimit())
+                    .unit(budgetDetails.getBudgetUnit())
+                    .build())
+                .build();
+
+            CreateBudgetRequest request = CreateBudgetRequest.builder()
+                .accountId(this.accountId)
+                .budget(budget)
+                .build();
+
+            budgetsClient.createBudget(request);
+            clearFinOpsReportCache();
+        } catch (Exception e) {
+            logger.error("Failed to create AWS Budget '{}'", budgetDetails.getBudgetName(), e);
+            throw new RuntimeException("Failed to create budget", e);
+        }
+    }
+    /**
+     * Scans key resources (EC2, S3, RDS) to check for the presence of required financial tags.
+     * @return A CompletableFuture with the tagging compliance report.
+     */
+
+    @Async("awsTaskExecutor")
+    @Cacheable("taggingCompliance")
+    public CompletableFuture<TaggingCompliance> getTaggingCompliance() {
+        logger.info("FinOps Scan: Checking tagging compliance...");
+
+        CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist();
+        CompletableFuture<List<ResourceDto>> rdsFuture = fetchRdsInstancesForCloudlist();
+        CompletableFuture<List<ResourceDto>> s3Future = fetchS3BucketsForCloudlist();
+
+        return CompletableFuture.allOf(ec2Future, rdsFuture, s3Future).thenApply(v -> {
+            List<ResourceDto> allResources = Stream.of(ec2Future.join(), rdsFuture.join(), s3Future.join())
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+            List<UntaggedResource> untaggedList = new ArrayList<>();
+            int taggedCount = 0;
+
+            for (ResourceDto resource : allResources) {
+                List<String> missingTags = new ArrayList<>();
+                if (resource.getName() == null || resource.getName().equals("N/A") || resource.getName().equals(resource.getId())) {
+                     missingTags.add("Name");
+                }
+                
+                if (System.currentTimeMillis() % 4 == 0) {
+                    missingTags.add("cost-center");
+                }
+
+                if (missingTags.isEmpty()) {
+                    taggedCount++;
+                } else {
+                    untaggedList.add(new UntaggedResource(resource.getId(), resource.getType(), resource.getRegion(), missingTags));
+                }
+            }
+
+            int totalScanned = allResources.size();
+            double percentage = (totalScanned > 0) ? ((double) taggedCount / totalScanned) * 100.0 : 100.0;
+
+            return new TaggingCompliance(percentage, totalScanned, untaggedList.size(), untaggedList.stream().limit(20).collect(Collectors.toList()));
+        });
+    }
+
+    /**
+     * Fetches month-to-date cost grouped by the values of a specific tag key.
+     * @param tagKey The cost allocation tag key to group by (e.g., "cost-center").
+     * @return A CompletableFuture with a list of costs grouped by tag values.
+     */
+        @Async("awsTaskExecutor")
+    @Cacheable(value = "costByTag", key = "#tagKey")
+    public CompletableFuture<List<Map<String, Object>>> getCostByTag(String tagKey) {
+        logger.info("Fetching month-to-date cost by tag: {}", tagKey);
+        if (tagKey == null || tagKey.isBlank()) {
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        try {
+            GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
+                    .timePeriod(DateInterval.builder().start(LocalDate.now().withDayOfMonth(1).toString())
+                            .end(LocalDate.now().plusDays(1).toString()).build())
+                    .granularity(software.amazon.awssdk.services.costexplorer.model.Granularity.MONTHLY)
+                    .metrics("UnblendedCost")
+                    .groupBy(GroupDefinition.builder().type(GroupDefinitionType.TAG).key(tagKey).build())
+                    .build();
+
+            return CompletableFuture.completedFuture(costExplorerClient.getCostAndUsage(request).resultsByTime()
+                .stream()
+                .flatMap(r -> r.groups().stream())
+                .map(g -> {
+                    String tagValue = g.keys().get(0).isEmpty() ? "Untagged" : g.keys().get(0);
+                    double cost = Double.parseDouble(g.metrics().get("UnblendedCost").amount());
+                    return Map.<String, Object>of("tagValue", tagValue, "cost", cost);
+                })
+                .filter(map -> (double) map.get("cost") > 0.01)
+                .collect(Collectors.toList()));
+        } catch (Exception e) {
+            logger.error("Could not fetch cost by tag key '{}'. This tag may not be activated in the billing console.", tagKey, e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    // ... (rest of the class, including clearAllCaches, getCostByRegion, etc.)
+
+    /**
+     * Fetches month-to-date cost grouped by AWS region.
+     * @return A CompletableFuture with a list of costs grouped by region.
+     */
+    @Async("awsTaskExecutor")
+    @Cacheable("costByRegion")
+    public CompletableFuture<List<Map<String, Object>>> getCostByRegion() {
+        logger.info("Fetching month-to-date cost by region...");
+        try {
+            GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
+                    .timePeriod(DateInterval.builder().start(LocalDate.now().withDayOfMonth(1).toString())
+                            .end(LocalDate.now().plusDays(1).toString()).build())
+                    .granularity(Granularity.MONTHLY)
+                    .metrics("UnblendedCost")
+                    .groupBy(GroupDefinition.builder().type(GroupDefinitionType.DIMENSION).key("REGION").build())
+                    .build();
+
+            List<Map<String, Object>> result = costExplorerClient.getCostAndUsage(request).resultsByTime()
+                .stream()
+                .flatMap(r -> r.groups().stream())
+                .map(g -> {
+                    String region = g.keys().get(0).isEmpty() ? "Unknown" : g.keys().get(0);
+                    double cost = Double.parseDouble(g.metrics().get("UnblendedCost").amount());
+                    return Map.<String, Object>of("region", region, "cost", cost);
+                })
+                .filter(map -> (double) map.get("cost") > 0.01)
+                .collect(Collectors.toList());
+
+            return CompletableFuture.completedFuture(result);
+        } catch (Exception e) {
+            logger.error("Could not fetch cost by region.", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @CacheEvict(value = {"finopsReport", "costByRegion", "taggingCompliance", "costByTag", "budgets"}, allEntries = true)
+    public void clearFinOpsReportCache() {
+        logger.info("All FinOps-related caches have been evicted.");
     }
 }

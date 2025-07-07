@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - FinOps Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+        .progress-bar { background-color: #e5e7eb; border-radius: 9999px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; border-radius: 9999px; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="finopsReport()">
+            <!-- Header -->
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">FinOps Report</h1>
+                    <p class="text-xs text-gray-500">Centralized dashboard for cloud financial operations</p>
+                </div>
+                <button @click="loadReport(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
+                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                </button>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <!-- KPIs -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <template x-for="kpi in kpis" :key="kpi.label">
+                        <div class="bg-white rounded-xl p-5 card-shadow">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-gray-500 text-sm font-medium" x-text="kpi.label"></h3>
+                                    <div x-show="isLoading" class="skeleton h-8 w-24 mt-2 rounded"></div>
+                                    <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="kpi.value"></p>
+                                </div>
+                                <div class="p-3 rounded-lg" :class="kpi.color"><i class="fas text-lg" :class="kpi.icon"></i></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- NEW: Budgets & Alerts Section -->
+                <div class="bg-white rounded-xl p-6 card-shadow">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-semibold text-gray-800">Budgets & Alerts</h3>
+                        <button @click="isBudgetModalOpen = true" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                            <i class="fas fa-plus mr-2"></i>Create Budget
+                        </button>
+                    </div>
+                    <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="skeleton h-24 w-full rounded-lg"></div>
+                        <div class="skeleton h-24 w-full rounded-lg"></div>
+                    </div>
+                    <div x-show="!isLoading && reportData.budgets.length === 0" class="text-center py-8 border-2 border-dashed rounded-lg">
+                        <i class="fas fa-wallet fa-2x text-gray-400"></i>
+                        <h4 class="mt-2 font-semibold">No Budgets Found</h4>
+                        <p class="text-sm text-gray-500">Click 'Create Budget' to start tracking your spend.</p>
+                    </div>
+                    <div x-show="!isLoading && reportData.budgets.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <template x-for="budget in reportData.budgets" :key="budget.budgetName">
+                            <div class="border rounded-lg p-4 space-y-2">
+                                <p class="font-bold text-gray-800" x-text="budget.budgetName"></p>
+                                <div class="w-full">
+                                    <div class="progress-bar h-4">
+                                        <div class="progress-bar-fill bg-green-500" :style="`width: ${(budget.actualSpend / budget.budgetLimit) * 100}%`"></div>
+                                    </div>
+                                    <div class="flex justify-between text-xs font-semibold mt-1">
+                                        <span class="text-green-700" x-text="`Spent: ${formatCurrency(budget.actualSpend)}`"></span>
+                                        <span class="text-gray-600" x-text="`Limit: ${formatCurrency(budget.budgetLimit)}`"></span>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-500">Forecasted Spend: <span class="font-semibold text-yellow-600" x-text="formatCurrency(budget.forecastedSpend)"></span></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Governance Section -->
+                <div class="bg-white rounded-xl p-6 card-shadow">
+                    <h3 class="font-semibold text-gray-800 mb-4">Governance & Cost Allocation</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Tagging Compliance -->
+                        <div>
+                            <h4 class="text-md font-semibold text-gray-700 mb-2">Tagging Compliance</h4>
+                            <div x-show="isLoading" class="skeleton h-48 w-full rounded"></div>
+                            <div x-show="!isLoading" class="space-y-3">
+                                <div class="flex items-center gap-4">
+                                    <p class="text-3xl font-bold text-indigo-600" x-text="reportData.taggingCompliance.compliancePercentage.toFixed(1) + '%'"></p>
+                                    <div class="w-full">
+                                        <p class="text-sm text-gray-600">Compliance Rate</p>
+                                        <div class="progress-bar h-2.5 mt-1">
+                                            <div class="progress-bar-fill bg-indigo-600" :style="`width: ${reportData.taggingCompliance.compliancePercentage}%`"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-500">
+                                    <span x-text="reportData.taggingCompliance.untaggedResourcesCount"></span> untagged resources found out of 
+                                    <span x-text="reportData.taggingCompliance.totalResourcesScanned"></span> scanned.
+                                </p>
+                                <div class="border-t pt-3 mt-3">
+                                    <h5 class="text-sm font-semibold text-gray-600 mb-2">Example Untagged Resources:</h5>
+                                    <ul class="text-xs space-y-1 max-h-40 overflow-y-auto">
+                                        <template x-for="res in reportData.taggingCompliance.untaggedResources" :key="res.resourceId">
+                                            <li class="font-mono p-1 rounded hover:bg-gray-100">
+                                                <i class="fas fa-tag text-red-500 mr-2"></i>
+                                                <span x-text="res.resourceId"></span> 
+                                                <span class="text-gray-500" x-text="`(${res.resourceType})`"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Cost Allocation (Showback) -->
+                        <div>
+                            <h4 class="text-md font-semibold text-gray-700 mb-2">Cost Allocation by Tag</h4>
+                            <div class="flex items-center gap-2 mb-4">
+                                <input type="text" x-model="tagKey" placeholder="Enter tag key (e.g. cost-center)" class="form-input w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring-indigo-200">
+                                <button @click="getCostByTag()" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700" :disabled="isTagLoading">
+                                    <i class="fas fa-search" :class="{ 'fa-spin': isTagLoading }"></i>
+                                </button>
+                            </div>
+                            <div x-show="isTagLoading" class="skeleton h-48 w-full rounded"></div>
+                            <div x-show="!isTagLoading"><canvas id="costByTagChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cost Breakdown Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                   <div class="bg-white rounded-xl p-6 card-shadow">
+                        <h3 class="font-semibold text-gray-800 mb-4">Cost Breakdown by Service (Top 10)</h3>
+                        <div x-show="isLoading" class="skeleton h-64 w-full rounded"></div>
+                        <div x-show="!isLoading"><canvas id="costByServiceChart"></canvas></div>
+                    </div>
+                    <div class="bg-white rounded-xl p-6 card-shadow">
+                        <h3 class="font-semibold text-gray-800 mb-4">Cost Breakdown by Region</h3>
+                         <div x-show="isLoading" class="skeleton h-64 w-full rounded"></div>
+                        <div x-show="!isLoading"><canvas id="costByRegionChart"></canvas></div>
+                    </div>
+                </div>
+                
+                <!-- Optimization Tables -->
+                <div class="bg-white rounded-xl p-6 card-shadow" x-show="!isLoading && (reportData.rightsizingRecommendations.length > 0 || reportData.wastedResources.length > 0)">
+                    <h3 class="font-semibold text-gray-800 mb-4">Optimization Opportunities</h3>
+                    <!-- Rightsizing -->
+                    <div x-show="reportData.rightsizingRecommendations.length > 0">
+                        <h4 class="text-md font-semibold text-gray-700 mb-2">Rightsizing Recommendations</h4>
+                         <div class="overflow-x-auto max-h-96">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3">Resource ID</th><th class="px-6 py-3">Service</th>
+                                        <th class="px-6 py-3">Current</th><th class="px-6 py-3">Recommended</th>
+                                        <th class="px-6 py-3">Savings</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <template x-for="rec in reportData.rightsizingRecommendations" :key="rec.resourceId">
+                                        <tr>
+                                            <td class="px-6 py-3 font-mono text-xs" x-text="rec.resourceId"></td>
+                                            <td class="px-6 py-3" x-text="rec.service"></td>
+                                            <td class="px-6 py-3" x-text="rec.currentType"></td>
+                                            <td class="px-6 py-3 text-green-700 font-semibold" x-text="rec.recommendedType"></td>
+                                            <td class="px-6 py-3 text-green-700 font-semibold" x-text="formatCurrency(rec.estimatedMonthlySavings)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                     <!-- Waste -->
+                    <div x-show="reportData.wastedResources.length > 0" class="mt-6">
+                        <h4 class="text-md font-semibold text-gray-700 mb-2">Wasted Resources</h4>
+                         <div class="overflow-x-auto max-h-96">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3">Resource ID</th><th class="px-6 py-3">Type</th>
+                                        <th class="px-6 py-3">Region</th><th class="px-6 py-3">Reason</th>
+                                        <th class="px-6 py-3">Savings</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <template x-for="res in reportData.wastedResources" :key="res.resourceId">
+                                        <tr>
+                                            <td class="px-6 py-3 font-mono text-xs" x-text="res.resourceId"></td>
+                                            <td class="px-6 py-3" x-text="res.resourceType"></td>
+                                            <td class="px-6 py-3" x-text="res.region"></td>
+                                            <td class="px-6 py-3" x-text="res.reason"></td>
+                                            <td class="px-6 py-3 text-red-600 font-semibold" x-text="formatCurrency(res.monthlySavings)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- NEW: Budget Creation Modal -->
+            <div x-show="isBudgetModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isBudgetModalOpen = false">
+                <div class="bg-white rounded-lg p-8 w-full max-w-md" @click.stop>
+                    <h3 class="text-lg font-bold mb-4">Create New Budget</h3>
+                    <form @submit.prevent="createBudget()">
+                        <div class="space-y-4">
+                            <div>
+                                <label for="budgetName" class="block text-sm font-medium text-gray-700">Budget Name</label>
+                                <input type="text" id="budgetName" x-model="newBudget.budgetName" class="mt-1 form-input w-full rounded-md" required>
+                            </div>
+                            <div>
+                                <label for="budgetLimit" class="block text-sm font-medium text-gray-700">Budget Limit (USD)</label>
+                                <input type="number" id="budgetLimit" x-model="newBudget.budgetLimit" class="mt-1 form-input w-full rounded-md" required min="1">
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-end gap-3">
+                            <button type="button" @click="isBudgetModalOpen = false" class="px-4 py-2 text-sm bg-gray-200 rounded-md">Cancel</button>
+                            <button type="submit" class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-md" :disabled="isBudgetCreating">
+                                <span x-show="!isBudgetCreating">Create</span>
+                                <span x-show="isBudgetCreating"><i class="fas fa-spinner fa-spin"></i> Creating...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<script>
+function finopsReport() {
+    return {
+        isLoading: true,
+        isTagLoading: false,
+        isBudgetModalOpen: false,
+        isBudgetCreating: false,
+        tagKey: 'cost-center',
+        reportData: { kpis: {}, costBreakdown: { byService: [], byRegion: [] }, rightsizingRecommendations: [], wastedResources: [], costAnomalies: [], taggingCompliance: { compliancePercentage: 0, untaggedResources: [] }, budgets: [] },
+        newBudget: { budgetName: '', budgetLimit: null, budgetUnit: 'USD' },
+        charts: { byService: null, byRegion: null, byTag: null },
+        
+        init() {
+            this.loadReport();
+        },
+        loadReport(forceRefresh = false) {
+            this.isLoading = true;
+            const url = `/api/finops/report?forceRefresh=${forceRefresh}`;
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    this.reportData = data;
+                    this.renderCharts();
+                    this.getCostByTag(); // Initial load for default tag
+                })
+                .catch(err => console.error("Failed to load FinOps report:", err))
+                .finally(() => this.isLoading = false);
+        },
+        formatCurrency(value) {
+            return (value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+        },
+        get kpis() {
+            const k = this.reportData.kpis;
+            return [
+                { label: 'Month-to-Date Spend', value: this.formatCurrency(k.monthToDateSpend), icon: 'fa-dollar-sign', color: 'bg-blue-100 text-blue-500' },
+                { label: 'Forecasted Spend', value: this.formatCurrency(k.forecastedSpend), icon: 'fa-chart-line', color: 'bg-yellow-100 text-yellow-500' },
+                { label: 'Last Month Spend', value: this.formatCurrency(k.lastMonthSpend), icon: 'fa-calendar-alt', color: 'bg-gray-100 text-gray-500' },
+                { label: 'Potential Savings', value: this.formatCurrency(k.potentialSavings), icon: 'fa-piggy-bank', color: 'bg-green-100 text-green-500' },
+            ];
+        },
+        renderCharts() {
+            this.renderServiceChart();
+            this.renderRegionChart();
+        },
+        renderServiceChart() {
+            const ctx = document.getElementById('costByServiceChart').getContext('2d');
+            if (this.charts.byService) this.charts.byService.destroy();
+            const data = this.reportData.costBreakdown.byService;
+            this.charts.byService = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(d => d.service),
+                    datasets: [{ data: data.map(d => d.cost), backgroundColor: ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#60a5fa', '#38bdf8', '#22d3ee', '#67e8f9'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+        },
+        renderRegionChart() {
+            const ctx = document.getElementById('costByRegionChart').getContext('2d');
+            if (this.charts.byRegion) this.charts.byRegion.destroy();
+            const data = this.reportData.costBreakdown.byRegion;
+            this.charts.byRegion = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.region),
+                    datasets: [{ label: 'Cost by Region', data: data.map(d => d.cost), backgroundColor: '#fb923c' }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } }
+            });
+        },
+        getCostByTag() {
+            if (!this.tagKey) return;
+            this.isTagLoading = true;
+            fetch(`/api/finops/cost-by-tag?tagKey=${this.tagKey}`)
+                .then(res => res.json())
+                .then(data => {
+                    this.renderTagChart(data);
+                })
+                .catch(err => console.error("Failed to load cost by tag:", err))
+                .finally(() => this.isTagLoading = false);
+        },
+        renderTagChart(data) {
+            const ctx = document.getElementById('costByTagChart').getContext('2d');
+            if (this.charts.byTag) this.charts.byTag.destroy();
+            this.charts.byTag = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: data.map(d => d.tagValue),
+                    datasets: [{ data: data.map(d => d.cost), backgroundColor: ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c', '#facc15'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+        },
+        createBudget() {
+            if (!this.newBudget.budgetName || !this.newBudget.budgetLimit) {
+                alert('Please fill out all fields.');
+                return;
+            }
+            this.isBudgetCreating = true;
+            fetch('/api/finops/budgets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.newBudget)
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to create budget.');
+                this.isBudgetModalOpen = false;
+                this.newBudget = { budgetName: '', budgetLimit: null, budgetUnit: 'USD' };
+                this.loadReport(true); // Refresh data to show new budget
+            })
+            .catch(err => alert(err.message))
+            .finally(() => this.isBudgetCreating = false);
+        }
+    }
+}
+</script>
+
+</body>
+</html>

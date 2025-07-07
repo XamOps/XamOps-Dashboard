@@ -21,13 +21,11 @@ public class PageController {
         return "login";
     }
 
-    // ADDED: Mapping for the new Cloudlist page
     @GetMapping("/cloudlist")
     public String cloudlistPage() {
         return "cloudlist";
     }
 
-    // ADDED: Mapping for the new Rightsizing page
     @GetMapping("/rightsizing")
     public String rightsizingPage() {
         return "rightsizing";
@@ -46,5 +44,11 @@ public class PageController {
     @GetMapping("/performance")
     public String performancePage() {
         return "performance";
+    }
+
+    // ADDED: Mapping for the new FinOps Report page
+    @GetMapping("/finops")
+    public String finopsReportPage() {
+        return "finops";
     }
 }

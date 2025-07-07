@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Resource Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="resourceDetail()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div x-show="!isLoading">
+                    <h1 class="text-xl font-semibold text-gray-800" x-text="resource.name || 'Resource Details'"></h1>
+                    <p class="text-xs text-gray-500" x-text="resource.id"></p>
+                </div>
+                <div x-show="isLoading" class="h-8 w-64 bg-gray-200 rounded animate-pulse"></div>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <!-- Loading State -->
+                <div x-show="isLoading" class="text-center p-16">
+                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
+                    <p class="mt-4 text-gray-600 font-semibold tracking-wide">Fetching Resource Details...</p>
+                </div>
+
+                <!-- Content -->
+                <div x-show="!isLoading" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Left Column: Details & Tags -->
+                    <div class="lg:col-span-1 space-y-6">
+                        <div class="bg-white rounded-lg p-6 shadow-sm border">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Core Details</h3>
+                            <div class="space-y-3 text-sm">
+                                <template x-for="([key, value]) in Object.entries(resource.details || {})" :key="key">
+                                    <div class="flex justify-between border-b pb-2">
+                                        <span class="font-medium text-gray-600" x-text="key.replace(/([A-Z])/g, ' $1').trim()"></span>
+                                        <span class="font-mono text-gray-800 text-right" x-text="value"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg p-6 shadow-sm border">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Tags</h3>
+                            <div class="space-y-3 text-sm">
+                                <template x-if="resource.tags && resource.tags.length > 0">
+                                    <template x-for="tag in resource.tags" :key="tag.key">
+                                        <div class="flex justify-between border-b pb-2">
+                                            <span class="font-medium text-gray-600" x-text="tag.key"></span>
+                                            <span class="font-mono text-gray-800 text-right" x-text="tag.value"></span>
+                                        </div>
+                                    </template>
+                                </template>
+                                <template x-if="!resource.tags || resource.tags.length === 0">
+                                    <p class="text-gray-500">No tags found for this resource.</p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Metrics & Events -->
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="bg-white rounded-lg p-6 shadow-sm border">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Performance Metrics (Last 30 Days)</h3>
+                            <canvas id="metricsChart"></canvas>
+                        </div>
+                        <div class="bg-white rounded-lg p-6 shadow-sm border">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Recent Activity (CloudTrail)</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left text-gray-600">
+                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-2">Time</th>
+                                            <th class="px-4 py-2">Event Name</th>
+                                            <th class="px-4 py-2">User</th>
+                                            <th class="px-4 py-2">Source IP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        <template x-for="event in resource.events" :key="event.eventId">
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-4 py-2 whitespace-nowrap" x-text="new Date(event.eventTime).toLocaleString()"></td>
+                                                <td class="px-4 py-2 font-mono" x-text="event.eventName"></td>
+                                                <td class="px-4 py-2" x-text="event.username"></td>
+                                                <td class="px-4 py-2" x-text="event.sourceIpAddress"></td>
+                                            </tr>
+                                        </template>
+                                        <template x-if="!resource.events || resource.events.length === 0">
+                                            <tr>
+                                                <td colspan="4" class="text-center py-4 text-gray-500">No recent events found.</td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function resourceDetail() {
+    return {
+        isLoading: true,
+        resource: {},
+        metricsChartInstance: null,
+
+        init() {
+            const pathParts = window.location.pathname.split('/');
+            const service = pathParts[2];
+            const resourceId = pathParts[3];
+            this.loadResourceDetails(service, resourceId);
+        },
+
+        loadResourceDetails(service, resourceId) {
+            this.isLoading = true;
+            fetch(`/api/cloudlist/resource/${service}/${resourceId}`)
+                .then(res => {
+                    if (!res.ok) throw new Error('Resource not found');
+                    return res.json();
+                })
+                .then(data => {
+                    this.resource = data;
+                    // Use a timeout to ensure the canvas is visible before rendering the chart
+                    setTimeout(() => this.renderMetricsChart(data.metrics), 0);
+                })
+                .catch(err => {
+                    console.error('Failed to load resource details:', err);
+                    this.resource = { name: 'Error', id: 'Could not load resource details.' };
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
+        },
+
+        renderMetricsChart(metrics) {
+            const ctx = document.getElementById('metricsChart');
+            if (!ctx || !metrics) return;
+
+            if (this.metricsChartInstance) {
+                this.metricsChartInstance.destroy();
+            }
+
+            const datasets = Object.entries(metrics).map(([name, data], index) => {
+                const colors = ['rgb(79, 70, 229)', 'rgb(34, 197, 94)'];
+                return {
+                    label: name,
+                    data: data.map(dp => ({ x: new Date(dp.timestamp), y: dp.average })),
+                    borderColor: colors[index % colors.length],
+                    tension: 0.1,
+                    yAxisID: name.toLowerCase().includes('cpu') ? 'y' : 'y1',
+                };
+            });
+            
+            this.metricsChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'day' } },
+                        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'CPU (%)' } },
+                        y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Network (Bytes)' } }
+                    }
+                }
+            });
+        }
+    }
+}
+</script>
+
+</body>
+</html>

@@ -5,9 +5,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.acm.AcmClient; // ADDED
+import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
-import software.amazon.awssdk.services.cloudtrail.CloudTrailClient; // ADDED
+import software.amazon.awssdk.services.budgets.BudgetsClient; // ADDED
+import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
 import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
@@ -31,8 +32,18 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 @Configuration
 public class AwsConfig {
 
-    private final String region = "ap-south-1"; // Region is now set here
+    private final String region = "ap-south-1";
 
+    // ... (existing beans)
+
+    // ADDED: Bean for BudgetsClient
+    @Bean
+    public BudgetsClient budgetsClient() {
+        // AWS Budgets is a global service, but the SDK requires a region for the endpoint.
+        // us-east-1 is the standard for global services.
+        return BudgetsClient.builder().region(Region.US_EAST_1).build();
+    }
+    
     @Bean("awsTaskExecutor")
     public TaskExecutor threadPoolTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -140,9 +151,6 @@ public class AwsConfig {
         return SqsClient.builder().region(Region.of(region)).build();
     }
 
-
-
-    // --- ADDED: New clients for service expansion ---
     @Bean
     public CloudTrailClient cloudTrailClient() {
         return CloudTrailClient.builder().region(Region.of(region)).build();
@@ -157,5 +165,4 @@ public class AwsConfig {
     public CloudWatchLogsClient cloudWatchLogsClient() {
         return CloudWatchLogsClient.builder().region(Region.of(region)).build();
     }
-
 }
