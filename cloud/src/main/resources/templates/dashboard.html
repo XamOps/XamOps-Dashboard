@@ -80,6 +80,17 @@
                             <span>Refresh</span>
                         </button>
                     </header>
+
+                    <div id="quotaAlertBox" class="hidden bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+                            </div>
+                            <div id="quotaAlertContent" class="ml-3">
+                                </div>
+                        </div>
+                    </div>
+
                     <div class="bg-white p-6 rounded-lg shadow-sm">
                         <h3 id="regionsTitle" class="font-semibold mb-4 text-gray-700"></h3>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -182,6 +193,7 @@
         populateRegionList(account.regionStatus);
         populateResourceInventory(account.resourceInventory);
         populateCloudWatchStatus(account.cloudWatchStatus);
+        populateQuotaAlertBox(account.serviceQuotas);
         populateOptimizationHub(account.optimizationSummary);
         populateRecTable('ec2RecSection', 'EC2 Instance Right-Sizing', ['Instance ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ec2Recommendations);
         populateRecTable('ebsRecSection', 'EBS Volume Optimization', ['Volume ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ebsRecommendations);
@@ -238,6 +250,28 @@
     function populateSavingsSummary(summary) { if(summary) document.getElementById('savingsSummary').innerHTML = `<div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600">${formatCurrency(summary.potential)}</p><p class="text-xs text-gray-500">Potential Savings</p></div><table class="w-full text-sm mt-4"><thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead><tbody>${summary.suggestions.map(s => `<tr><td>${s.service}</td><td class="text-right font-mono text-green-600">${formatCurrency(s.suggested)}</td></tr>`).join('')}</tbody></table>`;}
     
     function populateRiAnalysis(analysis) { if(analysis) document.getElementById('riAnalysisSection').innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Reserved Instance Analysis (Last 30 Days)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-gray-50 p-4 rounded-lg"><h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5><p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p><div class="flex items-center gap-4"><p class="text-3xl font-bold text-indigo-600">${analysis.utilizationPercentage.toFixed(1)}%</p><div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-indigo-500" style="width: ${analysis.utilizationPercentage}%;"></div></div></div></div></div><div class="bg-gray-50 p-4 rounded-lg"><h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5><p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p><div class="flex items-center gap-4"><p class="text-3xl font-bold text-green-600">${analysis.coveragePercentage.toFixed(1)}%</p><div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-green-500" style="width: ${analysis.coveragePercentage}%;"></div></div></div></div></div></div>`;}
+
+    function populateQuotaAlertBox(quotas) {
+        const alertBox = document.getElementById('quotaAlertBox');
+        const alertContent = document.getElementById('quotaAlertContent');
+        if (!alertBox || !alertContent || !quotas) return;
+
+        const criticalQuotas = quotas.filter(q => q.status === 'CRITICAL' || q.status === 'WARN');
+
+        if (criticalQuotas.length > 0) {
+            const topQuota = criticalQuotas[0];
+            let contentHtml = `<p class="text-sm text-yellow-700">
+                <b>Service Quota Warning:</b> You are using ${topQuota.usage} of ${topQuota.limit} for <b>${topQuota.quotaName}</b>.
+                <a href="/cloudguard/alerts" class="font-medium underline text-yellow-700 hover:text-yellow-600">
+                    View all ${criticalQuotas.length} alerts.
+                </a>
+            </p>`;
+            alertContent.innerHTML = contentHtml;
+            alertBox.classList.remove('hidden');
+        } else {
+            alertBox.classList.add('hidden');
+        }
+    }
 
     function renderCostHistoryChart(costHistory) { 
         if (!costHistory || !costHistory.labels) return;

@@ -91,6 +91,11 @@
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
+            <artifactId>servicequotas</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
             <artifactId>costexplorer</artifactId>
         </dependency>
         <dependency>
@@ -173,16 +178,16 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>acm</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>budgets</artifactId>
         </dependency>
 
         <dependency>
-    <groupId>software.amazon.awssdk</groupId>
-    <artifactId>sts</artifactId>
-</dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
+        </dependency>
 
         <!-- Dependency for Excel Export -->
         <dependency>

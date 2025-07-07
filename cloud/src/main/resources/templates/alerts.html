@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Service Quota Alerts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="quotaAlerts()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">Service Quota Alerts</h1>
+                    <p class="text-xs text-gray-500">Detailed view of your AWS service limits and usage.</p>
+                </div>
+            </header>
+
+            <div class="flex-1 p-6">
+                 <div x-show="isLoading" class="text-center p-16">
+                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
+                    <p class="mt-4 text-gray-600">Fetching Quota Details...</p>
+                </div>
+
+                <div x-show="!isLoading" x-cloak class="bg-white rounded-lg p-6 shadow-sm border">
+                    <table class="w-full text-sm text-left text-gray-600">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3">Service</th>
+                                <th class="px-6 py-3">Quota Name</th>
+                                <th class="px-6 py-3 text-right">Limit</th>
+                                <th class="px-6 py-3 text-right">Usage</th>
+                                <th class="px-6 py-3 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            <template x-for="quota in quotas" :key="quota.quotaName">
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-semibold" x-text="quota.serviceName"></td>
+                                    <td class="px-6 py-4" x-text="quota.quotaName"></td>
+                                    <td class="px-6 py-4 text-right font-mono" x-text="quota.limit"></td>
+                                    <td class="px-6 py-4 text-right font-mono" x-text="quota.usage"></td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full"
+                                              :class="{
+                                                'bg-green-100 text-green-800': quota.status === 'OK',
+                                                'bg-yellow-100 text-yellow-800': quota.status === 'WARN',
+                                                'bg-red-100 text-red-800': quota.status === 'CRITICAL'
+                                              }"
+                                              x-text="quota.status">
+                                        </span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function quotaAlerts() {
+    return {
+        isLoading: true,
+        quotas: [],
+        init() {
+            fetch('/api/cloudguard/quotas')
+                .then(res => res.json())
+                .then(data => {
+                    this.quotas = data.sort((a, b) => b.usage - a.usage); // Sort by usage
+                    this.isLoading = false;
+                })
+                .catch(err => {
+                    console.error('Failed to load quota data', err);
+                    this.isLoading = false;
+                });
+        }
+    }
+}
+</script>
+
+</body>
+</html>

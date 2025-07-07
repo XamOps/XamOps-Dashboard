@@ -13,6 +13,18 @@ import java.util.List;
 public class DashboardData {
     private List<Account> availableAccounts;
     private Account selectedAccount;
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ServiceQuotaInfo {
+        private String serviceName;
+        private String quotaName;
+        private double limit;
+        private double usage;
+        private String status; // e.g., "OK", "WARN", "CRITICAL"
+    }
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -64,6 +76,7 @@ public class DashboardData {
         private List<ReservationPurchaseRecommendation> reservationPurchaseRecommendations;
         private OptimizationSummary optimizationSummary;
         private List<WastedResource> wastedResources;
+        private List<ServiceQuotaInfo> serviceQuotas;
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor
@@ -158,7 +171,6 @@ public class DashboardData {
         private double estimatedMonthlySavings;
         private String usage;
     }
-
 
     @Data
     @AllArgsConstructor

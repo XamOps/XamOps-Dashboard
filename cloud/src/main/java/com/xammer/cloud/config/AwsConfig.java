@@ -26,6 +26,7 @@ import software.amazon.awssdk.services.pricing.PricingClient;
 import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.servicequotas.ServiceQuotasClient;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
@@ -164,5 +165,9 @@ public class AwsConfig {
     @Bean
     public CloudWatchLogsClient cloudWatchLogsClient() {
         return CloudWatchLogsClient.builder().region(Region.of(region)).build();
+    }
+    @Bean
+    public ServiceQuotasClient serviceQuotasClient() {
+        return ServiceQuotasClient.builder().region(Region.of(region)).build();
     }
 }
