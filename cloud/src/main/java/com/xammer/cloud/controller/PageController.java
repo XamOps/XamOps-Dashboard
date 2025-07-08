@@ -51,4 +51,10 @@ public class PageController {
     public String finopsReportPage() {
         return "finops";
     }
+
+    // ADDED: Mapping for the new Reservation page
+    @GetMapping("/reservation")
+    public String reservationPage() {
+        return "reservation";
+    }
 }

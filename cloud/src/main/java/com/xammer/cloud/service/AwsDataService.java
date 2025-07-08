@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.xammer.cloud.dto.CostByTagDto;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.DashboardData.BudgetDetails;
 import com.xammer.cloud.dto.DashboardData.SecurityFinding;
@@ -7,7 +8,11 @@ import com.xammer.cloud.dto.DashboardData.ServiceGroupDto;
 import com.xammer.cloud.dto.DashboardData.TaggingCompliance;
 import com.xammer.cloud.dto.DashboardData.UntaggedResource;
 import com.xammer.cloud.dto.FinOpsReportDto;
+import com.xammer.cloud.dto.HistoricalReservationDataDto;
 import com.xammer.cloud.dto.MetricDto;
+import com.xammer.cloud.dto.ReservationDto;
+import com.xammer.cloud.dto.ReservationInventoryDto;
+import com.xammer.cloud.dto.ReservationModificationRecommendationDto;
 import com.xammer.cloud.dto.ResourceDto;
 import java.util.HashMap;
 import org.slf4j.Logger;
@@ -89,6 +94,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+// import java.util.logging.Filter; // Removed because it conflicts with EC2 Filter
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -358,7 +364,8 @@ public class AwsDataService {
             "regionStatus", "inventory", "cloudwatchStatus", "securityInsights", 
             "ec2Recs", "costAnomalies", "ebsRecs", "lambdaRecs", "reservationAnalysis", 
             "reservationPurchaseRecs", "billingSummary", "iamResources", "costHistory", 
-            "allRecommendations", "securityFindings", "serviceQuotas"
+            "allRecommendations", "securityFindings", "serviceQuotas", "reservationPageData",
+            "reservationInventory", "historicalReservationData", "reservationModificationRecs"
     }, allEntries = true)
     public void clearAllCaches() {
         logger.info("All dashboard caches have been evicted.");
@@ -1028,7 +1035,7 @@ public class AwsDataService {
         logger.info("Fetching IAM resources...");
         int users = 0, groups = 0, policies = 0, roles = 0;
         try { users = iamClient.listUsers().users().size(); } catch (Exception e) { logger.error("IAM check failed for Users", e); }
-        try { groups = iamClient.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Groups", e); }
+        try { groups = iamClient.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Policies", e); }
         try { policies = iamClient.listPolicies(r -> r.scope(PolicyScopeType.LOCAL)).policies().size(); } catch (Exception e) { logger.error("IAM check failed for Policies", e); }
         try { roles = iamClient.listRoles().roles().size(); } catch (Exception e) { logger.error("IAM check failed for Roles", e); }
         return CompletableFuture.completedFuture(new DashboardData.IamResources(users, groups, policies, roles));
@@ -1814,4 +1821,189 @@ public class AwsDataService {
         
         return CompletableFuture.completedFuture(quotaInfos);
     }
+    
+    @Async("awsTaskExecutor")
+    @Cacheable("reservationPageData")
+    public CompletableFuture<ReservationDto> getReservationPageData() {
+        logger.info("--- LAUNCHING ASYNC DATA FETCH FOR RESERVATION PAGE ---");
+        CompletableFuture<DashboardData.ReservationAnalysis> analysisFuture = getReservationAnalysis();
+        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations();
+        CompletableFuture<List<ReservationInventoryDto>> inventoryFuture = getReservationInventory();
+        CompletableFuture<HistoricalReservationDataDto> historicalDataFuture = getHistoricalReservationData();
+        CompletableFuture<List<ReservationModificationRecommendationDto>> modificationRecsFuture = getReservationModificationRecommendations();
+
+        return CompletableFuture.allOf(analysisFuture, purchaseRecsFuture, inventoryFuture, historicalDataFuture, modificationRecsFuture).thenApply(v -> {
+            logger.info("--- RESERVATION PAGE DATA FETCH COMPLETE, COMBINING NOW ---");
+            DashboardData.ReservationAnalysis analysis = analysisFuture.join();
+            List<DashboardData.ReservationPurchaseRecommendation> recommendations = purchaseRecsFuture.join();
+            List<ReservationInventoryDto> inventory = inventoryFuture.join();
+            HistoricalReservationDataDto historicalData = historicalDataFuture.join();
+            List<ReservationModificationRecommendationDto> modificationRecs = modificationRecsFuture.join();
+            return new ReservationDto(analysis, recommendations, inventory, historicalData, modificationRecs);
+        });
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable("reservationInventory")
+    public CompletableFuture<List<ReservationInventoryDto>> getReservationInventory() {
+        logger.info("Fetching reservation inventory...");
+        try {
+            software.amazon.awssdk.services.ec2.model.Filter activeFilter = software.amazon.awssdk.services.ec2.model.Filter.builder().name("state").values("active").build();
+            DescribeReservedInstancesRequest request = DescribeReservedInstancesRequest.builder()
+                    .filters(activeFilter)
+                    .build();
+            
+            List<ReservedInstances> reservedInstances = ec2Client.describeReservedInstances(request).reservedInstances();
+
+            return CompletableFuture.completedFuture(
+                reservedInstances.stream()
+                    .map(ri -> new ReservationInventoryDto(
+                        ri.reservedInstancesId(),
+                        ri.offeringTypeAsString(),
+                        ri.instanceTypeAsString(),
+                        ri.scopeAsString(),
+                        ri.availabilityZone(),
+                        ri.duration(),
+                        ri.start(),
+                        ri.end(),
+                        ri.instanceCount(),
+                        ri.stateAsString()
+                    ))
+                    .collect(Collectors.toList())
+            );
+        } catch (Exception e) {
+            logger.error("Could not fetch reservation inventory.", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable("historicalReservationData")
+    public CompletableFuture<HistoricalReservationDataDto> getHistoricalReservationData() {
+        logger.info("Fetching historical reservation data for the last 6 months...");
+        try {
+            LocalDate endDate = LocalDate.now();
+            LocalDate startDate = endDate.minusMonths(6).withDayOfMonth(1);
+            DateInterval period = DateInterval.builder()
+                    .start(startDate.toString())
+                    .end(endDate.toString())
+                    .build();
+
+            // Fetch Utilization
+            GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder()
+                    .timePeriod(period)
+                    .granularity(Granularity.MONTHLY)
+                    .build();
+            List<UtilizationByTime> utilizations = costExplorerClient.getReservationUtilization(utilRequest).utilizationsByTime();
+
+            // Fetch Coverage
+            GetReservationCoverageRequest covRequest = GetReservationCoverageRequest.builder()
+                    .timePeriod(period)
+                    .granularity(Granularity.MONTHLY)
+                    .build();
+            List<CoverageByTime> coverages = costExplorerClient.getReservationCoverage(covRequest).coveragesByTime();
+
+            // Process data
+            List<String> labels = utilizations.stream()
+                    .map(u -> LocalDate.parse(u.timePeriod().start()).format(DateTimeFormatter.ofPattern("MMM uuuu")))
+                    .collect(Collectors.toList());
+
+            List<Double> utilPercentages = utilizations.stream()
+                    .map(u -> Double.parseDouble(u.total().utilizationPercentage()))
+                    .collect(Collectors.toList());
+            
+            List<Double> covPercentages = coverages.stream()
+                    .map(c -> Double.parseDouble(c.total().coverageHours().coverageHoursPercentage()))
+                    .collect(Collectors.toList());
+
+            return CompletableFuture.completedFuture(new HistoricalReservationDataDto(labels, utilPercentages, covPercentages));
+
+        } catch (Exception e) {
+            logger.error("Could not fetch historical reservation data.", e);
+            return CompletableFuture.completedFuture(new HistoricalReservationDataDto(Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
+        }
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable("reservationModificationRecs")
+    public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations() {
+        logger.info("Fetching reservation modification recommendations...");
+        List<ReservationModificationRecommendationDto> recommendations = new ArrayList<>();
+        try {
+            List<ReservationInventoryDto> inventory = getReservationInventory().get();
+            for (ReservationInventoryDto ri : inventory) {
+                // Simple mock logic: if an RI is for an xlarge instance, recommend a large one.
+                if (ri.getInstanceType().contains("xlarge")) {
+                    String currentType = ri.getInstanceType();
+                    String recommendedType = currentType.replace("xlarge", "large");
+                    recommendations.add(new ReservationModificationRecommendationDto(
+                        ri.getReservationId(),
+                        currentType,
+                        recommendedType,
+                        "Low Utilization",
+                        75.50 // Mocked savings
+                    ));
+                }
+                 // Simple mock logic: if an RI is for a 2xlarge instance, recommend an xlarge one.
+                 if (ri.getInstanceType().contains("2xlarge")) {
+                    String currentType = ri.getInstanceType();
+                    String recommendedType = currentType.replace("2xlarge", "xlarge");
+                    recommendations.add(new ReservationModificationRecommendationDto(
+                        ri.getReservationId(),
+                        currentType,
+                        recommendedType,
+                        "Low Utilization",
+                        150.00 // Mocked savings
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Could not generate reservation modification recommendations.", e);
+        }
+        return CompletableFuture.completedFuture(recommendations);
+    }
+        @Async("awsTaskExecutor")
+    @Cacheable(value = "reservationCostByTag", key = "#tagKey")
+    public CompletableFuture<List<CostByTagDto>> getReservationCostByTag(String tagKey) {
+        logger.info("Fetching reservation cost by tag: {}", tagKey);
+        if (tagKey == null || tagKey.isBlank()) {
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        try {
+            LocalDate start = LocalDate.now().withDayOfMonth(1);
+            LocalDate end = LocalDate.now().plusMonths(1).withDayOfMonth(1);
+            DateInterval period = DateInterval.builder().start(start.toString()).end(end.toString()).build();
+
+            Expression filter = Expression.builder().dimensions(DimensionValues.builder()
+                .key(software.amazon.awssdk.services.costexplorer.model.Dimension.PURCHASE_TYPE) // <-- FIXED
+                .values("Reserved Instances")
+                .build()).build();
+
+            GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
+                .timePeriod(period)
+                .granularity(Granularity.MONTHLY)
+                .metrics("AmortizedCost")
+                .filter(filter)
+                .groupBy(GroupDefinition.builder().type(GroupDefinitionType.TAG).key(tagKey).build())
+                .build();
+
+            List<ResultByTime> results = costExplorerClient.getCostAndUsage(request).resultsByTime();
+            
+            return CompletableFuture.completedFuture(
+                results.stream()
+                    .flatMap(r -> r.groups().stream())
+                    .map(g -> {
+                        String tagValue = g.keys().isEmpty() || g.keys().get(0).isEmpty() ? "Untagged" : g.keys().get(0);
+                        double cost = Double.parseDouble(g.metrics().get("AmortizedCost").amount());
+                        return new CostByTagDto(tagValue, cost);
+                    })
+                    .filter(dto -> dto.getCost() > 0.01)
+                    .collect(Collectors.toList())
+            );
+        } catch (Exception e) {
+            logger.error("Could not fetch reservation cost by tag key '{}'.", tagKey, e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
 }

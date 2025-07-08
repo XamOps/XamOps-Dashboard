@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Reservation Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+        .progress-bar { background-color: #e5e7eb; border-radius: 0.25rem; overflow: hidden; width: 100%; height: 1rem; }
+        .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="reservationManagement()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">Reservation Management</h1>
+                    <p class="text-xs text-gray-500">Analyze and manage your Reserved Instances and Savings Plans</p>
+                </div>
+                <button @click="loadReservationData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
+                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                </button>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <!-- Loading State -->
+                <div x-show="isLoading" class="text-center p-16">
+                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
+                    <p class="mt-4 text-gray-600 font-semibold">Fetching Reservation Data...</p>
+                </div>
+
+                <div x-show="!isLoading" x-cloak>
+                    <!-- Reservation Analysis & Charts -->
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <div class="lg:col-span-2 space-y-6">
+                             <!-- Reservation Analysis -->
+                            <div class="bg-white rounded-lg p-6 shadow-sm border">
+                                <h3 class="font-semibold text-gray-700 mb-4">Reservation Analysis (Last 30 Days)</h3>
+                                <div class="space-y-4">
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5>
+                                        <p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p>
+                                        <div class="flex items-center gap-4">
+                                            <p class="text-3xl font-bold text-indigo-600" x-text="data.analysis ? data.analysis.utilizationPercentage.toFixed(1) + '%' : '0.0%'"></p>
+                                            <div class="w-full">
+                                                <div class="progress-bar">
+                                                    <div class="progress-bar-fill bg-indigo-500" :style="`width: ${data.analysis ? data.analysis.utilizationPercentage : 0}%`"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5>
+                                        <p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p>
+                                        <div class="flex items-center gap-4">
+                                            <p class="text-3xl font-bold text-green-600" x-text="data.analysis ? data.analysis.coveragePercentage.toFixed(1) + '%' : '0.0%'"></p>
+                                            <div class="w-full">
+                                                <div class="progress-bar">
+                                                    <div class="progress-bar-fill bg-green-500" :style="`width: ${data.analysis ? data.analysis.coveragePercentage : 0}%`"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="lg:col-span-3 bg-white rounded-lg p-6 shadow-sm border">
+                             <h3 class="font-semibold text-gray-700 mb-4">Historical Utilization & Coverage (6 Months)</h3>
+                             <div class="relative h-72">
+                                <canvas id="historicalReservationChart"></canvas>
+                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Cost Allocation -->
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
+                        <h3 class="font-semibold text-gray-700 mb-4">Reservation Cost Allocation (Showback)</h3>
+                        <div class="flex items-center gap-2 mb-4">
+                            <input type="text" x-model="tagKey" placeholder="Enter tag key (e.g. cost-center)" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring-indigo-200">
+                            <button @click="getCostByTag()" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700" :disabled="isTagLoading">
+                                <span x-show="!isTagLoading">Show Breakdown</span>
+                                <span x-show="isTagLoading"><i class="fas fa-spinner fa-spin"></i> Loading...</span>
+                            </button>
+                        </div>
+                        <div x-show="isTagLoading" class="text-center p-8"><i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                        <div x-show="!isTagLoading && costByTagData.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                            <div class="relative h-64"><canvas id="costByTagChart"></canvas></div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left text-gray-600">
+                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3" x-text="`Tag: ` + activeTagKey"></th>
+                                            <th class="px-6 py-3 text-right">Amortized Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <template x-for="item in costByTagData" :key="item.tagValue">
+                                            <tr>
+                                                <td class="px-6 py-4 font-medium" x-text="item.tagValue"></td>
+                                                <td class="px-6 py-4 text-right font-mono" x-text="`$` + item.cost.toFixed(2)"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div x-show="!isTagLoading && costByTagData.length === 0 && activeTagKey" class="text-center py-8 border-2 border-dashed rounded-lg">
+                            <i class="fas fa-tag fa-2x text-gray-400"></i>
+                            <p class="mt-2 text-sm text-gray-500">No reservation cost data found for tag key: <strong x-text="activeTagKey"></strong>.</p>
+                        </div>
+                    </div>
+
+                    <!-- Reservation Inventory -->
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
+                        <h3 class="font-semibold text-gray-700 mb-4">Active Reservation Inventory</h3>
+                        <div x-show="!data.inventory || data.inventory.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                            <i class="fas fa-inbox fa-3x text-gray-400"></i>
+                            <h3 class="mt-2 text-sm font-medium text-gray-900">No active reservations found.</h3>
+                            <p class="mt-1 text-sm text-gray-500">You do not currently have any active Reserved Instances.</p>
+                        </div>
+                        <div x-show="data.inventory && data.inventory.length > 0" class="overflow-x-auto">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3">Type</th>
+                                        <th class="px-6 py-3">Scope</th>
+                                        <th class="px-6 py-3">Count</th>
+                                        <th class="px-6 py-3">Term</th>
+                                        <th class="px-6 py-3">Expires In</th>
+                                        <th class="px-6 py-3">State</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <template x-for="ri in data.inventory" :key="ri.reservationId">
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4">
+                                                <p class="font-semibold text-gray-800" x-text="ri.instanceType"></p>
+                                                <p class="text-xs text-gray-500" x-text="ri.offeringType"></p>
+                                            </td>
+                                            <td class="px-6 py-4" x-text="ri.scope === 'Region' ? configuredRegion : ri.availabilityZone"></td>
+                                            <td class="px-6 py-4 text-center" x-text="ri.instanceCount"></td>
+                                            <td class="px-6 py-4" x-text="formatDuration(ri.duration)"></td>
+                                            <td class="px-6 py-4" x-text="formatExpiry(ri.end)"></td>
+                                            <td class="px-6 py-4">
+                                                <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full capitalize"
+                                                      :class="ri.state === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                                      x-text="ri.state">
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Modification Recommendations -->
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
+                        <h3 class="font-semibold text-gray-700 mb-4">RI Modification Recommendations</h3>
+                        <div x-show="!data.modificationRecommendations || data.modificationRecommendations.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                            <i class="fas fa-thumbs-up fa-3x text-green-500"></i>
+                            <h3 class="mt-2 text-sm font-medium text-gray-900">No modification recommendations found.</h3>
+                            <p class="mt-1 text-sm text-gray-500">Your active reservations appear to be well-utilized.</p>
+                        </div>
+                        <div x-show="data.modificationRecommendations && data.modificationRecommendations.length > 0" class="overflow-x-auto">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3">Reservation ID</th>
+                                        <th class="px-6 py-3">Current Type</th>
+                                        <th class="px-6 py-3">Recommended Type</th>
+                                        <th class="px-6 py-3">Reason</th>
+                                        <th class="px-6 py-3 text-right">Est. Monthly Savings</th>
+                                        <th class="px-6 py-3 text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <template x-for="rec in data.modificationRecommendations" :key="rec.reservationId">
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 font-mono text-xs" x-text="rec.reservationId"></td>
+                                            <td class="px-6 py-4 font-semibold text-orange-600" x-text="rec.currentInstanceType"></td>
+                                            <td class="px-6 py-4 font-semibold text-green-600" x-text="rec.recommendedInstanceType"></td>
+                                            <td class="px-6 py-4" x-text="rec.reason"></td>
+                                            <td class="px-6 py-4 text-right font-mono text-green-600" x-text="`$` + rec.estimatedMonthlySavings.toFixed(2)"></td>
+                                            <td class="px-6 py-4 text-center">
+                                                <button disabled class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <i class="fas fa-wrench mr-2"></i>Apply
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Purchase Recommendations -->
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
+                        <h3 class="font-semibold text-gray-700 mb-4">RI Purchase Recommendations</h3>
+                        <div x-show="!data.purchaseRecommendations || data.purchaseRecommendations.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                            <i class="fas fa-check-circle fa-3x text-green-500"></i>
+                            <h3 class="mt-2 text-sm font-medium text-gray-900">No purchase recommendations found.</h3>
+                            <p class="mt-1 text-sm text-gray-500">Your instance usage appears to be well-covered by existing reservations.</p>
+                        </div>
+                        <div x-show="data.purchaseRecommendations && data.purchaseRecommendations.length > 0" class="overflow-x-auto">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3">Instance Family</th>
+                                        <th class="px-6 py-3">Term</th>
+                                        <th class="px-6 py-3 text-right">Recommended #</th>
+                                        <th class="px-6 py-3 text-right">Est. Monthly Savings</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <template x-for="rec in data.purchaseRecommendations" :key="rec.instanceFamily + rec.term">
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 font-medium text-gray-800" x-text="rec.instanceFamily"></td>
+                                            <td class="px-6 py-4" x-text="rec.term"></td>
+                                            <td class="px-6 py-4 text-right" x-text="rec.recommendedInstances"></td>
+                                            <td class="px-6 py-4 text-right font-mono text-green-600" x-text="'$' + rec.monthlySavings"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function reservationManagement() {
+    return {
+        isLoading: true,
+        isTagLoading: false,
+        tagKey: 'cost-center',
+        activeTagKey: '',
+        costByTagData: [],
+        data: {
+            analysis: null,
+            purchaseRecommendations: [],
+            inventory: [],
+            historicalData: null,
+            modificationRecommendations: []
+        },
+        configuredRegion: 'ap-south-1',
+        historicalChartInstance: null,
+        costByTagChartInstance: null,
+
+        init() {
+            this.loadReservationData();
+        },
+
+        loadReservationData(forceRefresh = false) {
+            this.isLoading = true;
+            if (forceRefresh) sessionStorage.removeItem('reservationData');
+            const cachedData = sessionStorage.getItem('reservationData');
+
+            if (cachedData && !forceRefresh) {
+                this.data = JSON.parse(cachedData);
+                this.isLoading = false;
+                setTimeout(() => this.renderHistoricalChart(), 0);
+                return;
+            }
+
+            fetch('/api/reservations')
+                .then(res => res.json())
+                .then(data => {
+                    this.data = data;
+                    sessionStorage.setItem('reservationData', JSON.stringify(data));
+                    setTimeout(() => this.renderHistoricalChart(), 0);
+                })
+                .catch(err => {
+                    console.error('Failed to load reservation data:', err);
+                    this.data = { analysis: null, purchaseRecommendations: [], inventory: [], historicalData: null, modificationRecommendations: [] };
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
+        },
+
+        getCostByTag() {
+            if (!this.tagKey) {
+                alert('Please enter a tag key.');
+                return;
+            }
+            this.isTagLoading = true;
+            this.activeTagKey = this.tagKey;
+            fetch(`/api/reservations/cost-by-tag?tagKey=${this.tagKey}`)
+                .then(res => res.json())
+                .then(data => {
+                    this.costByTagData = data;
+                    this.renderCostByTagChart();
+                })
+                .catch(err => {
+                    console.error('Failed to load cost by tag data:', err);
+                    this.costByTagData = [];
+                })
+                .finally(() => {
+                    this.isTagLoading = false;
+                });
+        },
+
+        renderCostByTagChart() {
+            const ctx = document.getElementById('costByTagChart');
+            if (!ctx) return;
+            if (this.costByTagChartInstance) {
+                this.costByTagChartInstance.destroy();
+            }
+            const backgroundColors = ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#60a5fa', '#38bdf8', '#22d3ee', '#67e8f9'];
+            this.costByTagChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: this.costByTagData.map(d => d.tagValue),
+                    datasets: [{
+                        data: this.costByTagData.map(d => d.cost),
+                        backgroundColor: backgroundColors
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        },
+
+        renderHistoricalChart() {
+            const ctx = document.getElementById('historicalReservationChart');
+            if (!ctx || !this.data.historicalData || !this.data.historicalData.labels) return;
+
+            if (this.historicalChartInstance) {
+                this.historicalChartInstance.destroy();
+            }
+
+            this.historicalChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: this.data.historicalData.labels,
+                    datasets: [
+                        {
+                            label: 'Utilization',
+                            data: this.data.historicalData.utilizationPercentages,
+                            borderColor: 'rgb(79, 70, 229)',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Coverage',
+                            data: this.data.historicalData.coveragePercentages,
+                            borderColor: 'rgb(22, 163, 74)',
+                            backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%'
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2) + '%';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        },
+
+        formatDuration(seconds) {
+            const years = seconds / (365 * 24 * 60 * 60);
+            return `${Math.round(years)} Year(s)`;
+        },
+
+        formatExpiry(endDate) {
+            const end = new Date(endDate);
+            const now = new Date();
+            const diffTime = end - now;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays <= 0) return "Expired";
+            return `${diffDays} days`;
+        }
+    }
+}
+</script>
+
+</body>
+</html>
