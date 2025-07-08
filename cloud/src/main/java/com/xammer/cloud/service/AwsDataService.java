@@ -13,6 +13,7 @@ import com.xammer.cloud.dto.MetricDto;
 import com.xammer.cloud.dto.ReservationDto;
 import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.dto.ReservationModificationRecommendationDto;
+import com.xammer.cloud.dto.ReservationModificationRequestDto;
 import com.xammer.cloud.dto.ResourceDto;
 import java.util.HashMap;
 import org.slf4j.Logger;
@@ -91,7 +92,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 // import java.util.logging.Filter; // Removed because it conflicts with EC2 Filter
@@ -250,6 +253,7 @@ public class AwsDataService {
     }
 
 
+
     private boolean isRegionActive(software.amazon.awssdk.regions.Region region) {
         logger.debug("Performing activity check for region: {}", region.id());
         try {
@@ -286,17 +290,17 @@ public class AwsDataService {
 
             return CompletableFuture.completedFuture(
                 allRegions.parallelStream() 
-                    .filter(region -> !"not-opted-in".equals(region.optInStatus()))
-                    .filter(region -> {
-                        if (!REGION_GEO.containsKey(region.regionName())) {
-                            logger.warn("Region {} is available but has no geographic coordinates defined. It will be excluded from the map.", region.regionName());
-                            return false;
-                        }
-                        return true;
-                    })
-                    .filter(region -> isRegionActive(software.amazon.awssdk.regions.Region.of(region.regionName())))
-                    .map(this::mapRegionToStatus)
-                    .collect(Collectors.toList())
+                        .filter(region -> !"not-opted-in".equals(region.optInStatus()))
+                        .filter(region -> {
+                            if (!REGION_GEO.containsKey(region.regionName())) {
+                                logger.warn("Region {} is available but has no geographic coordinates defined. It will be excluded from the map.", region.regionName());
+                                return false;
+                            }
+                            return true;
+                        })
+                        .filter(region -> isRegionActive(software.amazon.awssdk.regions.Region.of(region.regionName())))
+                        .map(this::mapRegionToStatus)
+                        .collect(Collectors.toList())
             );
         } catch (Exception e) {
             logger.error("Could not fetch and process AWS regions.", e);
@@ -1345,22 +1349,22 @@ public class AwsDataService {
                 });
 
                 ec2Client.describeInternetGateways(r -> r.filters(f -> f.name("attachment.vpc-id").values(vpcId)))
-                    .internetGateways().forEach(igw -> {
-                        Map<String, Object> igwNode = new HashMap<>();
-                        Map<String, Object> igwData = new HashMap<>();
-                        igwData.put("id", igw.internetGatewayId()); igwData.put("label", getTagName(igw.tags(), igw.internetGatewayId())); igwData.put("type", "Internet Gateway"); igwData.put("parent", vpc.vpcId());
-                        igwNode.put("data", igwData);
-                        elements.add(igwNode);
-                    });
+                        .internetGateways().forEach(igw -> {
+                            Map<String, Object> igwNode = new HashMap<>();
+                            Map<String, Object> igwData = new HashMap<>();
+                            igwData.put("id", igw.internetGatewayId()); igwData.put("label", getTagName(igw.tags(), igw.internetGatewayId())); igwData.put("type", "Internet Gateway"); igwData.put("parent", vpc.vpcId());
+                            igwNode.put("data", igwData);
+                            elements.add(igwNode);
+                        });
 
                 ec2Client.describeNatGateways(r -> r.filter(f -> f.name("vpc-id").values(vpcId)))
-                    .natGateways().forEach(nat -> {
-                        Map<String, Object> natNode = new HashMap<>();
-                        Map<String, Object> natData = new HashMap<>();
-                        natData.put("id", nat.natGatewayId()); natData.put("label", getTagName(nat.tags(), nat.natGatewayId())); natData.put("type", "NAT Gateway"); natData.put("parent", nat.subnetId());
-                        natNode.put("data", natData);
-                        elements.add(natNode);
-                    });
+                        .natGateways().forEach(nat -> {
+                            Map<String, Object> natNode = new HashMap<>();
+                            Map<String, Object> natData = new HashMap<>();
+                            natData.put("id", nat.natGatewayId()); natData.put("label", getTagName(nat.tags(), nat.natGatewayId())); natData.put("type", "NAT Gateway"); natData.put("parent", nat.subnetId());
+                            natNode.put("data", natData);
+                            elements.add(natNode);
+                        });
 
                 DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder().filters(f -> f.name("vpc-id").values(vpcId)).build();
                 ec2Client.describeSecurityGroups(sgsRequest).securityGroups().forEach(sg -> {
@@ -1372,54 +1376,54 @@ public class AwsDataService {
                 });
 
                 autoScalingClient.describeAutoScalingGroups().autoScalingGroups().stream()
-                    .filter(asg -> asg.vpcZoneIdentifier().contains(vpcId))
-                    .forEach(asg -> {
-                        Map<String, Object> asgNode = new HashMap<>();
-                        Map<String, Object> asgData = new HashMap<>();
-                        asgData.put("id", asg.autoScalingGroupARN()); asgData.put("label", asg.autoScalingGroupName()); asgData.put("type", "Auto Scaling Group"); asgData.put("parent", vpc.vpcId());
-                        asgNode.put("data", asgData);
-                        elements.add(asgNode);
-                        
-                        asg.instances().forEach(inst -> {
-                            Map<String, Object> edge = new HashMap<>();
-                            Map<String, Object> edgeData = new HashMap<>();
-                            edgeData.put("id", asg.autoScalingGroupARN() + "-" + inst.instanceId()); edgeData.put("source", asg.autoScalingGroupARN()); edgeData.put("target", inst.instanceId());
-                            edge.put("data", edgeData);
-                            elements.add(edge);
+                        .filter(asg -> asg.vpcZoneIdentifier().contains(vpcId))
+                        .forEach(asg -> {
+                            Map<String, Object> asgNode = new HashMap<>();
+                            Map<String, Object> asgData = new HashMap<>();
+                            asgData.put("id", asg.autoScalingGroupARN()); asgData.put("label", asg.autoScalingGroupName()); asgData.put("type", "Auto Scaling Group"); asgData.put("parent", vpc.vpcId());
+                            asgNode.put("data", asgData);
+                            elements.add(asgNode);
+                            
+                            asg.instances().forEach(inst -> {
+                                Map<String, Object> edge = new HashMap<>();
+                                Map<String, Object> edgeData = new HashMap<>();
+                                edgeData.put("id", asg.autoScalingGroupARN() + "-" + inst.instanceId()); edgeData.put("source", asg.autoScalingGroupARN()); edgeData.put("target", inst.instanceId());
+                                edge.put("data", edgeData);
+                                elements.add(edge);
+                            });
                         });
-                    });
 
                 DescribeInstancesRequest instancesRequest = DescribeInstancesRequest.builder().filters(f -> f.name("vpc-id").values(vpcId)).build();
                 ec2Client.describeInstances(instancesRequest).reservations().stream()
-                    .flatMap(r -> r.instances().stream())
-                    .filter(instance -> instance.subnetId() != null)
-                    .forEach(instance -> {
-                        Map<String, Object> instanceNode = new HashMap<>();
-                        Map<String, Object> instanceData = new HashMap<>();
-                        instanceData.put("id", instance.instanceId()); instanceData.put("label", getTagName(instance.tags(), instance.instanceId())); instanceData.put("type", "EC2 Instance"); instanceData.put("parent", instance.subnetId());
-                        instanceNode.put("data", instanceData);
-                        elements.add(instanceNode);
-                        
-                        instance.securityGroups().forEach(sg -> {
-                            Map<String, Object> edge = new HashMap<>();
-                            Map<String, Object> edgeData = new HashMap<>();
-                            edgeData.put("id", instance.instanceId() + "-" + sg.groupId()); edgeData.put("source", instance.instanceId()); edgeData.put("target", sg.groupId());
-                            edge.put("data", edgeData);
-                            elements.add(edge);
+                        .flatMap(r -> r.instances().stream())
+                        .filter(instance -> instance.subnetId() != null)
+                        .forEach(instance -> {
+                            Map<String, Object> instanceNode = new HashMap<>();
+                            Map<String, Object> instanceData = new HashMap<>();
+                            instanceData.put("id", instance.instanceId()); instanceData.put("label", getTagName(instance.tags(), instance.instanceId())); instanceData.put("type", "EC2 Instance"); instanceData.put("parent", instance.subnetId());
+                            instanceNode.put("data", instanceData);
+                            elements.add(instanceNode);
+                            
+                            instance.securityGroups().forEach(sg -> {
+                                Map<String, Object> edge = new HashMap<>();
+                                Map<String, Object> edgeData = new HashMap<>();
+                                edgeData.put("id", instance.instanceId() + "-" + sg.groupId()); edgeData.put("source", instance.instanceId()); edgeData.put("target", sg.groupId());
+                                edge.put("data", edgeData);
+                                elements.add(edge);
+                            });
                         });
-                    });
                 
                 rdsClient.describeDBInstances().dbInstances().stream()
-                    .filter(db -> db.dbSubnetGroup() != null && vpcId.equals(db.dbSubnetGroup().vpcId()))
-                    .forEach(db -> {
-                        if (!db.dbSubnetGroup().subnets().isEmpty()) {
-                            Map<String, Object> dbNode = new HashMap<>();
-                            Map<String, Object> dbData = new HashMap<>();
-                            dbData.put("id", db.dbInstanceArn()); dbData.put("label", db.dbInstanceIdentifier()); dbData.put("type", "RDS Instance"); dbData.put("parent", db.dbSubnetGroup().subnets().get(0).subnetIdentifier());
-                            dbNode.put("data", dbData);
-                            elements.add(dbNode);
-                        }
-                    });
+                        .filter(db -> db.dbSubnetGroup() != null && vpcId.equals(db.dbSubnetGroup().vpcId()))
+                        .forEach(db -> {
+                            if (!db.dbSubnetGroup().subnets().isEmpty()) {
+                                Map<String, Object> dbNode = new HashMap<>();
+                                Map<String, Object> dbData = new HashMap<>();
+                                dbData.put("id", db.dbInstanceArn()); dbData.put("label", db.dbInstanceIdentifier()); dbData.put("type", "RDS Instance"); dbData.put("parent", db.dbSubnetGroup().subnets().get(0).subnetIdentifier());
+                                dbNode.put("data", dbData);
+                                elements.add(dbNode);
+                            }
+                        });
 
             } catch (Exception e) {
                 logger.error("Failed to build graph data for VPC {}", vpcId, e);
@@ -1583,21 +1587,21 @@ public class AwsDataService {
             Instant ninetyDaysAgo = Instant.now().minus(90, ChronoUnit.DAYS);
             try {
                 iamClient.listRoles().roles().stream()
-                    .filter(role -> !role.path().startsWith("/aws-service-role/"))
-                    .forEach(role -> {
-                        try {
-                            Role lastUsed = iamClient.getRole(r -> r.roleName(role.roleName())).role();
-                            if (lastUsed.roleLastUsed() == null || lastUsed.roleLastUsed().lastUsedDate() == null) {
-                                if (role.createDate().isBefore(ninetyDaysAgo)) {
-                                    findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Medium", "Role has never been used and was created over 90 days ago."));
+                        .filter(role -> !role.path().startsWith("/aws-service-role/"))
+                        .forEach(role -> {
+                            try {
+                                Role lastUsed = iamClient.getRole(r -> r.roleName(role.roleName())).role();
+                                if (lastUsed.roleLastUsed() == null || lastUsed.roleLastUsed().lastUsedDate() == null) {
+                                    if (role.createDate().isBefore(ninetyDaysAgo)) {
+                                        findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Medium", "Role has never been used and was created over 90 days ago."));
+                                    }
+                                } else if (lastUsed.roleLastUsed().lastUsedDate().isBefore(ninetyDaysAgo)) {
+                                    findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Low", "Role has not been used in over 90 days."));
                                 }
-                            } else if (lastUsed.roleLastUsed().lastUsedDate().isBefore(ninetyDaysAgo)) {
-                                findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Low", "Role has not been used in over 90 days."));
+                            } catch (Exception e) {
+                                 logger.warn("Could not get last used info for role {}: {}", role.roleName(), e.getMessage());
                             }
-                        } catch (Exception e) {
-                             logger.warn("Could not get last used info for role {}: {}", role.roleName(), e.getMessage());
-                        }
-                    });
+                        });
             } catch (Exception e) {
                 logger.error("Security Scan failed: Could not check for unused IAM roles.", e);
             }
@@ -1924,45 +1928,178 @@ public class AwsDataService {
         }
     }
 
+    /**
+     * UPDATED: Generates RI modification recommendations based on utilization.
+     * This method now fetches live utilization data and suggests modifications for underutilized RIs.
+     */
     @Async("awsTaskExecutor")
     @Cacheable("reservationModificationRecs")
     public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations() {
-        logger.info("Fetching reservation modification recommendations...");
-        List<ReservationModificationRecommendationDto> recommendations = new ArrayList<>();
+        logger.info("Fetching reservation modification recommendations based on utilization...");
+        
         try {
-            List<ReservationInventoryDto> inventory = getReservationInventory().get();
-            for (ReservationInventoryDto ri : inventory) {
-                // Simple mock logic: if an RI is for an xlarge instance, recommend a large one.
-                if (ri.getInstanceType().contains("xlarge")) {
-                    String currentType = ri.getInstanceType();
-                    String recommendedType = currentType.replace("xlarge", "large");
-                    recommendations.add(new ReservationModificationRecommendationDto(
-                        ri.getReservationId(),
-                        currentType,
-                        recommendedType,
-                        "Low Utilization",
-                        75.50 // Mocked savings
-                    ));
-                }
-                 // Simple mock logic: if an RI is for a 2xlarge instance, recommend an xlarge one.
-                 if (ri.getInstanceType().contains("2xlarge")) {
-                    String currentType = ri.getInstanceType();
-                    String recommendedType = currentType.replace("2xlarge", "xlarge");
-                    recommendations.add(new ReservationModificationRecommendationDto(
-                        ri.getReservationId(),
-                        currentType,
-                        recommendedType,
-                        "Low Utilization",
-                        150.00 // Mocked savings
-                    ));
+            // 1. Get all active reservations
+            Map<String, ReservedInstances> activeReservationsMap = ec2Client.describeReservedInstances(req -> req.filters(f -> f.name("state").values("active")))
+                .reservedInstances().stream()
+                .collect(Collectors.toMap(ReservedInstances::reservedInstancesId, ri -> ri));
+
+            if (activeReservationsMap.isEmpty()) {
+                logger.info("No active reservations found. Skipping modification check.");
+                return CompletableFuture.completedFuture(Collections.emptyList());
+            }
+
+            // 2. Get utilization data for the last 30 days, grouped by reservation ID
+            DateInterval last30Days = DateInterval.builder()
+                .start(LocalDate.now().minusDays(30).toString())
+                .end(LocalDate.now().toString())
+                .build();
+                
+            GroupDefinition groupByRiId = GroupDefinition.builder().type(GroupDefinitionType.DIMENSION).key("RESERVATION_ID").build();
+
+            GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder()
+                .timePeriod(last30Days)
+                .groupBy(groupByRiId)
+                .build();
+
+            // FIXED: Changed utilizationByTime() to utilizationsByTime()
+            List<ReservationUtilizationGroup> utilizationGroups = costExplorerClient.getReservationUtilization(utilRequest).utilizationsByTime().get(0).groups();
+
+            // 3. Process the utilization data to find candidates for modification
+            List<ReservationModificationRecommendationDto> recommendations = new ArrayList<>();
+            for (ReservationUtilizationGroup group : utilizationGroups) {
+                String reservationId = group.attributes().get("reservationId");
+                double utilizationPercentage = Double.parseDouble(group.utilization().utilizationPercentage());
+
+                // 4. Check if utilization is low and if the RI is convertible
+                if (utilizationPercentage < 80.0 && activeReservationsMap.containsKey(reservationId)) {
+                    ReservedInstances ri = activeReservationsMap.get(reservationId);
+                    
+                    // FIXED: Changed enum comparison to use string comparison to avoid compile-time resolution issues.
+                    if ("Convertible".equalsIgnoreCase(ri.offeringTypeAsString())) {
+                        String currentType = ri.instanceTypeAsString();
+                        // Simple logic to suggest a smaller size. A real-world scenario would be more complex.
+                        String recommendedType = suggestSmallerInstanceType(currentType);
+                        
+                        if (recommendedType != null && !recommendedType.equals(currentType)) {
+                                recommendations.add(new ReservationModificationRecommendationDto(
+                                ri.reservedInstancesId(),
+                                currentType,
+                                recommendedType,
+                                String.format("Low Utilization (%.1f%%)", utilizationPercentage),
+                                50.0 // Placeholder for savings calculation
+                            ));
+                        }
+                    }
                 }
             }
+            logger.info("Generated {} RI modification recommendations.", recommendations.size());
+            return CompletableFuture.completedFuture(recommendations);
+
         } catch (Exception e) {
             logger.error("Could not generate reservation modification recommendations.", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
         }
-        return CompletableFuture.completedFuture(recommendations);
     }
-        @Async("awsTaskExecutor")
+
+    /**
+     * ADDED: A helper method to suggest a smaller instance type within the same family.
+     * This is a simplified implementation.
+     */
+    private String suggestSmallerInstanceType(String instanceType) {
+        String[] parts = instanceType.split("\\.");
+        if (parts.length != 2) return null;
+        
+        String family = parts[0];
+        String size = parts[1];
+
+        // This is a very basic mapping and should be expanded for a production system
+        Map<String, String> sizeMap = Map.of(
+            "2xlarge", "xlarge",
+            "xlarge", "large",
+            "large", "medium",
+            "medium", "small"
+        );
+
+        String smallerSize = sizeMap.get(size);
+        return smallerSize != null ? family + "." + smallerSize : null;
+    }
+
+
+public String applyReservationModification(ReservationModificationRequestDto request) {
+    logger.info("Attempting to modify reservation {} to type {}", request.getReservationId(), request.getTargetInstanceType());
+
+    // 1. Get details of the original RI to match parameters for the new offering
+    DescribeReservedInstancesResponse riResponse = ec2Client.describeReservedInstances(r -> r.reservedInstancesIds(request.getReservationId()));
+    if (riResponse.reservedInstances().isEmpty()) {
+        throw new IllegalArgumentException("Reservation ID not found: " + request.getReservationId());
+    }
+    ReservedInstances originalRi = riResponse.reservedInstances().get(0);
+
+    if (!"Convertible".equalsIgnoreCase(originalRi.offeringTypeAsString())) {
+        throw new IllegalArgumentException("Cannot modify a non-convertible reservation.");
+    }
+
+    // 2. Find the offering ID for the target instance type
+    // ORIGINAL ERRONEOUS BLOCK
+    // DescribeReservedInstancesOfferingsRequest offeringsRequest = DescribeReservedInstancesOfferingsRequest.builder()
+    //         .instanceType(request.getTargetInstanceType())
+    //         .productDescription(originalRi.productDescription())
+    //         .offeringType("Convertible")
+    //         .offeringClass(originalRi.offeringClass())
+    //         .duration(originalRi.duration()) // <-- THIS LINE CAUSES THE ERROR
+    //         .includeMarketplace(false)
+    //         .instanceTenancy(originalRi.instanceTenancy())
+    //         .build();
+
+    // CORRECTED BLOCK
+    DescribeReservedInstancesOfferingsRequest offeringsRequest = DescribeReservedInstancesOfferingsRequest.builder()
+            .instanceType(request.getTargetInstanceType())
+            .productDescription(originalRi.productDescription())
+.offeringType("Convertible") 
+            .offeringClass(originalRi.offeringClass())
+            .minDuration(originalRi.duration()) // Correct: Use minDuration
+            .maxDuration(originalRi.duration()) // Correct: Use maxDuration
+            .includeMarketplace(false)
+            .instanceTenancy(originalRi.instanceTenancy())
+            .build();
+    
+    Optional<ReservedInstancesOffering> targetOffering = ec2Client.describeReservedInstancesOfferings(offeringsRequest).reservedInstancesOfferings()
+            .stream().findFirst();
+
+    if (targetOffering.isEmpty()) {
+        throw new RuntimeException("Could not find a matching RI offering for type: " + request.getTargetInstanceType());
+    }
+    
+    // 3. Build the modification request
+    ReservedInstancesConfiguration targetConfig = ReservedInstancesConfiguration.builder()
+            .instanceType(request.getTargetInstanceType())
+            .instanceCount(request.getInstanceCount())
+            .platform(originalRi.productDescriptionAsString())
+            .availabilityZone(originalRi.availabilityZone())
+            .build();
+
+    ModifyReservedInstancesRequest modifyRequest = ModifyReservedInstancesRequest.builder()
+            .clientToken(UUID.randomUUID().toString()) // Ensures idempotency
+            .reservedInstancesIds(request.getReservationId())
+            .targetConfigurations(targetConfig)
+            .build();
+    
+    // 4. Execute the modification
+    try {
+        ModifyReservedInstancesResponse modifyResponse = ec2Client.modifyReservedInstances(modifyRequest);
+        logger.info("Successfully submitted modification request for RI {}. Transaction ID: {}", request.getReservationId(), modifyResponse.reservedInstancesModificationId());
+        
+        // Clear cache so the next refresh shows the updated state
+        clearAllCaches(); 
+        
+        return modifyResponse.reservedInstancesModificationId();
+    } catch (Exception e) {
+        logger.error("Failed to execute RI modification for ID {}: {}", request.getReservationId(), e.getMessage());
+        throw new RuntimeException("AWS API call to modify reservation failed.", e);
+    }
+}
+
+    @Async("awsTaskExecutor")
     @Cacheable(value = "reservationCostByTag", key = "#tagKey")
     public CompletableFuture<List<CostByTagDto>> getReservationCostByTag(String tagKey) {
         logger.info("Fetching reservation cost by tag: {}", tagKey);
