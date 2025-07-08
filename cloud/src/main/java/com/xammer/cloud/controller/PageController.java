@@ -46,15 +46,19 @@ public class PageController {
         return "performance";
     }
 
-    // ADDED: Mapping for the new FinOps Report page
     @GetMapping("/finops")
     public String finopsReportPage() {
         return "finops";
     }
 
-    // ADDED: Mapping for the new Reservation page
     @GetMapping("/reservation")
     public String reservationPage() {
         return "reservation";
+    }
+
+    // ADDED: Mapping for the new CloudK8s page
+    @GetMapping("/cloudk8s")
+    public String cloudk8sPage() {
+        return "cloudk8s";
     }
 }

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - CloudK8s</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+        .table-container { max-height: 60vh; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="cloudK8s()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-20">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">CloudK8s Dashboard</h1>
+                    <p class="text-xs text-gray-500">Live overview of your EKS clusters</p>
+                </div>
+                <button @click="refreshAll()" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading.clusters">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading.clusters }"></i>
+                    <span x-text="isLoading.clusters ? 'Refreshing...' : 'Refresh All'"></span>
+                </button>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <!-- Cluster Selector -->
+                <div class="bg-white rounded-lg p-4 shadow-sm border flex items-center gap-4">
+                    <label for="cluster-selector" class="font-semibold text-gray-700">Select Cluster:</label>
+                    <div class="relative flex-1">
+                        <select id="cluster-selector" x-model="selectedClusterName" @change="onClusterChange()" class="w-full form-select rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring-indigo-200">
+                            <option value="">-- Select a Cluster --</option>
+                            <template x-for="cluster in clusters" :key="cluster.name">
+                                <option :value="cluster.name" x-text="cluster.name"></option>
+                            </template>
+                        </select>
+                        <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <!-- Initial Loading or Empty State -->
+                <div x-show="isLoading.clusters" class="text-center p-16">
+                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
+                    <p class="mt-4 text-gray-600">Fetching EKS Clusters...</p>
+                </div>
+                <div x-show="!isLoading.clusters && clusters.length === 0" x-cloak class="text-center p-16 border-2 border-dashed rounded-lg">
+                    <i class="fas fa-dharmachakra fa-3x text-gray-400"></i>
+                    <h3 class="mt-4 font-semibold text-lg">No EKS Clusters Found</h3>
+                    <p class="text-gray-500">We couldn't find any EKS clusters in this account and region.</p>
+                </div>
+                <div x-show="!isLoading.clusters && clusters.length > 0 && !selectedClusterName" x-cloak class="text-center p-16 border-2 border-dashed rounded-lg">
+                    <i class="fas fa-mouse-pointer fa-3x text-gray-400"></i>
+                    <h3 class="mt-4 font-semibold text-lg">Select a Cluster</h3>
+                    <p class="text-gray-500">Choose a cluster from the dropdown above to view its details.</p>
+                </div>
+
+                <!-- Cluster Details -->
+                <div x-show="selectedCluster" x-cloak class="space-y-6">
+                    <!-- Tabs -->
+                    <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                            <template x-for="tab in tabs" :key="tab.name">
+                                <button @click="activeTab = tab.name" :class="activeTab === tab.name ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                                    <i :class="tab.icon" class="mr-2"></i>
+                                    <span x-text="tab.label"></span>
+                                    <span x-show="isLoading[tab.name]" class="ml-2"><i class="fas fa-spinner fa-spin"></i></span>
+                                </button>
+                            </template>
+                        </nav>
+                    </div>
+
+                    <!-- Content Area -->
+                    <div>
+                        <!-- Nodes Tab -->
+                        <div x-show="activeTab === 'nodes'">
+                           <div class="bg-white rounded-lg p-6 shadow-sm border table-container overflow-y-auto">
+                                <table class="w-full text-sm text-left text-gray-600">
+                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                        <tr>
+                                            <th class="px-6 py-3">Node Name</th>
+                                            <th class="px-6 py-3">Status</th>
+                                            <th class="px-6 py-3">Instance Type</th>
+                                            <th class="px-6 py-3">Zone</th>
+                                            <th class="px-6 py-3">K8s Version</th>
+                                            <th class="px-6 py-3">Age</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <template x-for="node in nodes" :key="node.name">
+                                            <tr>
+                                                <td class="px-6 py-4 font-semibold" x-text="node.name"></td>
+                                                <td class="px-6 py-4"><span class="px-2 py-1 text-xs font-bold rounded-full" :class="node.status === 'Ready' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="node.status"></span></td>
+                                                <td class="px-6 py-4" x-text="node.instanceType"></td>
+                                                <td class="px-6 py-4" x-text="node.availabilityZone"></td>
+                                                <td class="px-6 py-4" x-text="node.k8sVersion"></td>
+                                                <td class="px-6 py-4" x-text="node.age"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                           </div>
+                        </div>
+
+                        <!-- Workloads (Deployments/Pods) Tab -->
+                        <div x-show="activeTab === 'deployments' || activeTab === 'pods'" class="space-y-4">
+                            <div class="flex items-center gap-2">
+                                <label for="namespace-selector" class="text-sm font-medium">Namespace:</label>
+                                <select id="namespace-selector" x-model="selectedNamespace" @change="onNamespaceChange()" class="form-select rounded-md text-sm">
+                                    <template x-for="ns in namespaces" :key="ns">
+                                        <option :value="ns" x-text="ns"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            
+                            <!-- Deployments Table -->
+                            <div x-show="activeTab === 'deployments'" class="bg-white rounded-lg p-6 shadow-sm border table-container overflow-y-auto">
+                                <table class="w-full text-sm text-left text-gray-600">
+                                     <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                        <tr>
+                                            <th class="px-6 py-3">Deployment</th>
+                                            <th class="px-6 py-3">Ready</th>
+                                            <th class="px-6 py-3">Up-to-date</th>
+                                            <th class="px-6 py-3">Available</th>
+                                            <th class="px-6 py-3">Age</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <template x-for="dep in deployments" :key="dep.name">
+                                            <tr>
+                                                <td class="px-6 py-4 font-semibold" x-text="dep.name"></td>
+                                                <td class="px-6 py-4" x-text="dep.ready"></td>
+                                                <td class="px-6 py-4" x-text="dep.upToDate"></td>
+                                                <td class="px-6 py-4" x-text="dep.available"></td>
+                                                <td class="px-6 py-4" x-text="dep.age"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pods Table -->
+                            <div x-show="activeTab === 'pods'" class="bg-white rounded-lg p-6 shadow-sm border table-container overflow-y-auto">
+                                <table class="w-full text-sm text-left text-gray-600">
+                                     <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                        <tr>
+                                            <th class="px-6 py-3">Pod Name</th>
+                                            <th class="px-6 py-3">Ready</th>
+                                            <th class="px-6 py-3">Status</th>
+                                            <th class="px-6 py-3">Restarts</th>
+                                            <th class="px-6 py-3">Node</th>
+                                            <th class="px-6 py-3">Age</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                         <template x-for="pod in pods" :key="pod.name">
+                                            <tr>
+                                                <td class="px-6 py-4 font-semibold" x-text="pod.name"></td>
+                                                <td class="px-6 py-4" x-text="pod.ready"></td>
+                                                <td class="px-6 py-4" x-text="pod.status"></td>
+                                                <td class="px-6 py-4" x-text="pod.restarts"></td>
+                                                <td class="px-6 py-4 font-mono text-xs" x-text="pod.nodeName"></td>
+                                                <td class="px-6 py-4" x-text="pod.age"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function cloudK8s() {
+    return {
+        // --- State ---
+        isLoading: { clusters: true, nodes: false, namespaces: false, deployments: false, pods: false },
+        clusters: [],
+        selectedClusterName: '',
+        nodes: [],
+        namespaces: [],
+        selectedNamespace: 'default',
+        deployments: [],
+        pods: [],
+        activeTab: 'nodes',
+        tabs: [
+            { name: 'nodes', label: 'Nodes', icon: 'fa-server' },
+            { name: 'deployments', label: 'Deployments', icon: 'fa-box' },
+            { name: 'pods', label: 'Pods', icon: 'fa-cube' },
+        ],
+
+        // --- Computed Properties ---
+        get selectedCluster() {
+            return this.clusters.find(c => c.name === this.selectedClusterName);
+        },
+
+        // --- Methods ---
+        init() {
+            this.fetchClusters();
+        },
+
+        refreshAll() {
+            this.fetchClusters(true);
+            if (this.selectedClusterName) {
+                this.onClusterChange(true);
+            }
+        },
+
+        fetchClusters(force = false) {
+            this.isLoading.clusters = true;
+            if (force) sessionStorage.removeItem('k8sClusters');
+            const cached = sessionStorage.getItem('k8sClusters');
+            if (cached && !force) {
+                this.clusters = JSON.parse(cached);
+                this.isLoading.clusters = false;
+                return;
+            }
+            fetch('/api/k8s/clusters')
+                .then(res => res.json())
+                .then(data => {
+                    this.clusters = data;
+                    sessionStorage.setItem('k8sClusters', JSON.stringify(data));
+                })
+                .catch(err => console.error('Failed to fetch clusters', err))
+                .finally(() => this.isLoading.clusters = false);
+        },
+
+        onClusterChange(force = false) {
+            if (!this.selectedClusterName) {
+                this.nodes = []; this.namespaces = []; this.deployments = []; this.pods = [];
+                return;
+            }
+            this.fetchNodes(force);
+            this.fetchNamespaces(force);
+        },
+
+        onNamespaceChange(force = false) {
+            if (!this.selectedNamespace) return;
+            this.fetchDeployments(force);
+            this.fetchPods(force);
+        },
+
+        fetchData(type, url, force = false) {
+            this.isLoading[type] = true;
+            const key = `k8s-${this.selectedClusterName}-${type}-${this.selectedNamespace || ''}`;
+            if (force) sessionStorage.removeItem(key);
+            const cached = sessionStorage.getItem(key);
+            if (cached && !force) {
+                this[type] = JSON.parse(cached);
+                this.isLoading[type] = false;
+                return;
+            }
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    this[type] = data;
+                    sessionStorage.setItem(key, JSON.stringify(data));
+                })
+                .catch(err => console.error(`Failed to fetch ${type}`, err))
+                .finally(() => this.isLoading[type] = false);
+        },
+
+        fetchNodes(force = false) {
+            this.fetchData('nodes', `/api/k8s/clusters/${this.selectedClusterName}/nodes`, force);
+        },
+
+        fetchNamespaces(force = false) {
+            this.isLoading.namespaces = true;
+             const key = `k8s-${this.selectedClusterName}-namespaces`;
+            if (force) sessionStorage.removeItem(key);
+            const cached = sessionStorage.getItem(key);
+            if(cached && !force){
+                this.namespaces = JSON.parse(cached);
+                this.isLoading.namespaces = false;
+                this.onNamespaceChange(force);
+                return;
+            }
+            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces`)
+                .then(res => res.json())
+                .then(data => {
+                    this.namespaces = data;
+                    sessionStorage.setItem(key, JSON.stringify(data));
+                    if (!this.namespaces.includes(this.selectedNamespace)) {
+                        this.selectedNamespace = 'default';
+                    }
+                    this.onNamespaceChange(force);
+                })
+                .catch(err => console.error('Failed to fetch namespaces', err))
+                .finally(() => this.isLoading.namespaces = false);
+        },
+
+        fetchDeployments(force = false) {
+            this.fetchData('deployments', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/deployments`, force);
+        },
+
+        fetchPods(force = false) {
+            this.fetchData('pods', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods`, force);
+        }
+    }
+}
+</script>
+
+</body>
+</html>

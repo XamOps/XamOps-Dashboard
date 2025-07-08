@@ -17,8 +17,9 @@
     <properties>
         <java.version>17</java.version>
         <aws.java.sdk.version>2.20.0</aws.java.sdk.version>
-        <!-- ADDED: OpenAPI/Swagger Version -->
         <springdoc.version>1.6.12</springdoc.version>
+        <!-- MODIFIED: Using a stable K8s client version -->
+        <k8s.client.version>15.0.1</k8s.client.version>
     </properties>
 
     <dependencyManagement>
@@ -57,20 +58,20 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- ADDED: Spring Data JPA for Database Access -->
+        <!-- Spring Data JPA for Database Access -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-        <!-- ADDED: H2 Database for in-memory persistence -->
+        <!-- H2 Database for in-memory persistence -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ADDED: SpringDoc OpenAPI for API Documentation -->
+        <!-- SpringDoc OpenAPI for API Documentation -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-ui</artifactId>
@@ -93,7 +94,6 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>servicequotas</artifactId>
         </dependency>
-
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>costexplorer</artifactId>
@@ -178,16 +178,32 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>acm</artifactId>
         </dependency>
-
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>budgets</artifactId>
         </dependency>
-
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sts</artifactId>
         </dependency>
+
+        <!-- MODIFIED: Corrected Kubernetes Java Client Dependencies -->
+<!-- Replace your current Kubernetes dependencies with these: -->
+<dependency>
+    <groupId>io.kubernetes</groupId>
+    <artifactId>client-java</artifactId>
+    <version>${k8s.client.version}</version>
+    <exclusions>
+        <exclusion>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+        </exclusion>
+        <exclusion>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>logging-interceptor</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
 
         <!-- Dependency for Excel Export -->
         <dependency>

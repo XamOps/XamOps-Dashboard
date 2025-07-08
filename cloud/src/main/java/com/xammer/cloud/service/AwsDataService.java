@@ -15,7 +15,50 @@ import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.dto.ReservationModificationRecommendationDto;
 import com.xammer.cloud.dto.ReservationModificationRequestDto;
 import com.xammer.cloud.dto.ResourceDto;
+import com.xammer.cloud.dto.k8s.K8sClusterInfo;
+import com.xammer.cloud.dto.k8s.K8sDeploymentInfo;
+import com.xammer.cloud.dto.k8s.K8sNodeInfo;
+import com.xammer.cloud.dto.k8s.K8sPodInfo;
+import io.kubernetes.client.openapi.ApiClient;
+import io.kubernetes.client.openapi.ApiException;
+import io.kubernetes.client.openapi.apis.AppsV1Api;
+import io.kubernetes.client.openapi.apis.CoreV1Api;
+import io.kubernetes.client.openapi.models.V1Deployment;
+import io.kubernetes.client.openapi.models.V1Node;
+import io.kubernetes.client.openapi.models.V1Pod;
+import io.kubernetes.client.util.ClientBuilder;
+
+
+import java.io.FileReader;
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -45,19 +88,69 @@ import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
 import software.amazon.awssdk.services.cloudwatch.model.ScanBy;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
 import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
-import software.amazon.awssdk.services.computeoptimizer.model.*;
+import software.amazon.awssdk.services.computeoptimizer.model.GetEbsVolumeRecommendationsRequest;
+import software.amazon.awssdk.services.computeoptimizer.model.GetEc2InstanceRecommendationsRequest;
+import software.amazon.awssdk.services.computeoptimizer.model.GetLambdaFunctionRecommendationsRequest;
+import software.amazon.awssdk.services.computeoptimizer.model.InstanceRecommendation;
+import software.amazon.awssdk.services.computeoptimizer.model.LambdaFunctionMemoryRecommendationOption;
+import software.amazon.awssdk.services.computeoptimizer.model.LambdaFunctionRecommendation;
+import software.amazon.awssdk.services.computeoptimizer.model.VolumeRecommendation;
+import software.amazon.awssdk.services.computeoptimizer.model.VolumeRecommendationOption;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
-import software.amazon.awssdk.services.costexplorer.model.*;
+import software.amazon.awssdk.services.costexplorer.model.Anomaly;
+import software.amazon.awssdk.services.costexplorer.model.AnomalyDateInterval;
+import software.amazon.awssdk.services.costexplorer.model.CoverageByTime;
+import software.amazon.awssdk.services.costexplorer.model.DateInterval;
+import software.amazon.awssdk.services.costexplorer.model.DimensionValues;
+import software.amazon.awssdk.services.costexplorer.model.Expression;
+import software.amazon.awssdk.services.costexplorer.model.GetAnomaliesRequest;
+import software.amazon.awssdk.services.costexplorer.model.GetCostAndUsageRequest;
+import software.amazon.awssdk.services.costexplorer.model.GetReservationCoverageRequest;
+import software.amazon.awssdk.services.costexplorer.model.GetReservationPurchaseRecommendationRequest;
+import software.amazon.awssdk.services.costexplorer.model.GetReservationPurchaseRecommendationResponse;
+import software.amazon.awssdk.services.costexplorer.model.GetReservationUtilizationRequest;
+import software.amazon.awssdk.services.costexplorer.model.Granularity;
+import software.amazon.awssdk.services.costexplorer.model.GroupDefinition;
+import software.amazon.awssdk.services.costexplorer.model.GroupDefinitionType;
+import software.amazon.awssdk.services.costexplorer.model.LookbackPeriodInDays;
+import software.amazon.awssdk.services.costexplorer.model.ReservationPurchaseRecommendation;
+import software.amazon.awssdk.services.costexplorer.model.ReservationUtilizationGroup;
+import software.amazon.awssdk.services.costexplorer.model.ResultByTime;
+import software.amazon.awssdk.services.costexplorer.model.RootCause;
+import software.amazon.awssdk.services.costexplorer.model.UtilizationByTime;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.DescribeImagesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeInternetGatewaysRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeNatGatewaysRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeNetworkInterfacesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesOfferingsRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.DescribeSecurityGroupsRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeSubnetsRequest;
+import software.amazon.awssdk.services.ec2.model.FlowLog;
+import software.amazon.awssdk.services.ec2.model.ImageState;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.ModifyReservedInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.ModifyReservedInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.Region;
+import software.amazon.awssdk.services.ec2.model.ReservedInstances;
+import software.amazon.awssdk.services.ec2.model.ReservedInstancesConfiguration;
+import software.amazon.awssdk.services.ec2.model.ReservedInstancesOffering;
+import software.amazon.awssdk.services.ec2.model.Snapshot;
+import software.amazon.awssdk.services.ec2.model.Tag;
+import software.amazon.awssdk.services.ec2.model.Volume;
+import software.amazon.awssdk.services.ec2.model.Vpc;
 import software.amazon.awssdk.services.ecr.EcrClient;
 import software.amazon.awssdk.services.ecs.EcsClient;
 import software.amazon.awssdk.services.eks.EksClient;
+// CORRECTED: This is the proper import for the EKS Cluster model
+import software.amazon.awssdk.services.eks.model.Cluster;
 import software.amazon.awssdk.services.elasticache.ElastiCacheClient;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.iam.IamClient;
-import software.amazon.awssdk.services.iam.model.ListMfaDevicesRequest;
 import software.amazon.awssdk.services.iam.model.NoSuchEntityException;
 import software.amazon.awssdk.services.iam.model.PasswordPolicy;
 import software.amazon.awssdk.services.iam.model.PolicyScopeType;
@@ -76,33 +169,14 @@ import software.amazon.awssdk.services.servicequotas.model.ServiceQuota;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
-import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-// import java.util.logging.Filter; // Removed because it conflicts with EC2 Filter
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import software.amazon.awssdk.services.sts.StsClient;
 
+import io.kubernetes.client.openapi.ApiClient;
+import io.kubernetes.client.openapi.Configuration;
+import io.kubernetes.client.openapi.apis.CoreV1Api;
+import io.kubernetes.client.util.ClientBuilder;
+import io.kubernetes.client.util.KubeConfig;
+import software.amazon.awssdk.services.eks.model.Cluster;
 
 @Service
 public class AwsDataService {
@@ -369,7 +443,9 @@ public class AwsDataService {
             "ec2Recs", "costAnomalies", "ebsRecs", "lambdaRecs", "reservationAnalysis", 
             "reservationPurchaseRecs", "billingSummary", "iamResources", "costHistory", 
             "allRecommendations", "securityFindings", "serviceQuotas", "reservationPageData",
-            "reservationInventory", "historicalReservationData", "reservationModificationRecs"
+            "reservationInventory", "historicalReservationData", "reservationModificationRecs",
+            // ADDED: K8s cache keys
+            "eksClusters", "k8sNodes", "k8sNamespaces", "k8sDeployments", "k8sPods"
     }, allEntries = true)
     public void clearAllCaches() {
         logger.info("All dashboard caches have been evicted.");
@@ -1961,7 +2037,6 @@ public class AwsDataService {
                 .groupBy(groupByRiId)
                 .build();
 
-            // FIXED: Changed utilizationByTime() to utilizationsByTime()
             List<ReservationUtilizationGroup> utilizationGroups = costExplorerClient.getReservationUtilization(utilRequest).utilizationsByTime().get(0).groups();
 
             // 3. Process the utilization data to find candidates for modification
@@ -1974,7 +2049,6 @@ public class AwsDataService {
                 if (utilizationPercentage < 80.0 && activeReservationsMap.containsKey(reservationId)) {
                     ReservedInstances ri = activeReservationsMap.get(reservationId);
                     
-                    // FIXED: Changed enum comparison to use string comparison to avoid compile-time resolution issues.
                     if ("Convertible".equalsIgnoreCase(ri.offeringTypeAsString())) {
                         String currentType = ri.instanceTypeAsString();
                         // Simple logic to suggest a smaller size. A real-world scenario would be more complex.
@@ -2040,25 +2114,13 @@ public String applyReservationModification(ReservationModificationRequestDto req
     }
 
     // 2. Find the offering ID for the target instance type
-    // ORIGINAL ERRONEOUS BLOCK
-    // DescribeReservedInstancesOfferingsRequest offeringsRequest = DescribeReservedInstancesOfferingsRequest.builder()
-    //         .instanceType(request.getTargetInstanceType())
-    //         .productDescription(originalRi.productDescription())
-    //         .offeringType("Convertible")
-    //         .offeringClass(originalRi.offeringClass())
-    //         .duration(originalRi.duration()) // <-- THIS LINE CAUSES THE ERROR
-    //         .includeMarketplace(false)
-    //         .instanceTenancy(originalRi.instanceTenancy())
-    //         .build();
-
-    // CORRECTED BLOCK
     DescribeReservedInstancesOfferingsRequest offeringsRequest = DescribeReservedInstancesOfferingsRequest.builder()
             .instanceType(request.getTargetInstanceType())
             .productDescription(originalRi.productDescription())
-.offeringType("Convertible") 
+            .offeringType("Convertible") 
             .offeringClass(originalRi.offeringClass())
-            .minDuration(originalRi.duration()) // Correct: Use minDuration
-            .maxDuration(originalRi.duration()) // Correct: Use maxDuration
+            .minDuration(originalRi.duration()) 
+            .maxDuration(originalRi.duration()) 
             .includeMarketplace(false)
             .instanceTenancy(originalRi.instanceTenancy())
             .build();
@@ -2089,7 +2151,6 @@ public String applyReservationModification(ReservationModificationRequestDto req
         ModifyReservedInstancesResponse modifyResponse = ec2Client.modifyReservedInstances(modifyRequest);
         logger.info("Successfully submitted modification request for RI {}. Transaction ID: {}", request.getReservationId(), modifyResponse.reservedInstancesModificationId());
         
-        // Clear cache so the next refresh shows the updated state
         clearAllCaches(); 
         
         return modifyResponse.reservedInstancesModificationId();
@@ -2112,7 +2173,7 @@ public String applyReservationModification(ReservationModificationRequestDto req
             DateInterval period = DateInterval.builder().start(start.toString()).end(end.toString()).build();
 
             Expression filter = Expression.builder().dimensions(DimensionValues.builder()
-                .key(software.amazon.awssdk.services.costexplorer.model.Dimension.PURCHASE_TYPE) // <-- FIXED
+                .key(software.amazon.awssdk.services.costexplorer.model.Dimension.PURCHASE_TYPE)
                 .values("Reserved Instances")
                 .build()).build();
 
@@ -2143,4 +2204,179 @@ public String applyReservationModification(ReservationModificationRequestDto req
         }
     }
 
+    // --- NEW KUBERNETES METHODS ---
+
+    @Async("awsTaskExecutor")
+    @Cacheable("eksClusters")
+    public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo() {
+        logger.info("Fetching EKS cluster list...");
+        try {
+            List<String> clusterNames = eksClient.listClusters().clusters();
+            List<K8sClusterInfo> clusters = clusterNames.parallelStream().map(name -> {
+                try {
+                    Cluster cluster = getEksCluster(name);
+                    String region = cluster.arn().split(":")[3];
+                    return new K8sClusterInfo(name, cluster.statusAsString(), cluster.version(), region);
+                } catch (Exception e) {
+                    logger.error("Failed to describe EKS cluster {}", name, e);
+                    return null;
+                }
+            }).filter(Objects::nonNull).collect(Collectors.toList());
+            return CompletableFuture.completedFuture(clusters);
+        } catch (Exception e) {
+            logger.error("Could not list EKS clusters.", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable(value = "k8sNodes", key = "#clusterName")
+    public CompletableFuture<List<K8sNodeInfo>> getK8sNodes(String clusterName) {
+        logger.info("Fetching nodes for K8s cluster: {}", clusterName);
+        try {
+            CoreV1Api api = getCoreV1Api(clusterName);
+            List<V1Node> nodeList = api.listNode(null, null, null, null, null, null, null, null, null, null).getItems();
+            return CompletableFuture.completedFuture(nodeList.stream().map(node -> {
+                String status = node.getStatus().getConditions().stream()
+                        .filter(c -> "Ready".equals(c.getType()))
+                        .findFirst()
+                        .map(c -> "True".equals(c.getStatus()) ? "Ready" : "NotReady")
+                        .orElse("Unknown");
+                return new K8sNodeInfo(
+                        node.getMetadata().getName(),
+                        status,
+                        node.getMetadata().getLabels().get("node.kubernetes.io/instance-type"),
+                        node.getMetadata().getLabels().get("topology.kubernetes.io/zone"),
+                        formatAge(node.getMetadata().getCreationTimestamp()),
+                        node.getStatus().getNodeInfo().getKubeletVersion()
+                );
+            }).collect(Collectors.toList()));
+        } catch (ApiException e) {
+            logger.error("Kubernetes API error while fetching nodes for cluster {}: {} - {}", clusterName, e.getCode(), e.getResponseBody(), e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        } catch (Exception e) {
+            logger.error("Failed to get nodes for cluster {}", clusterName, e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable(value = "k8sNamespaces", key = "#clusterName")
+    public CompletableFuture<List<String>> getK8sNamespaces(String clusterName) {
+        logger.info("Fetching namespaces for K8s cluster: {}", clusterName);
+        try {
+            CoreV1Api api = getCoreV1Api(clusterName);
+            return CompletableFuture.completedFuture(api.listNamespace(null, null, null, null, null, null, null, null, null, null)
+                    .getItems().stream()
+                    .map(ns -> ns.getMetadata().getName())
+                    .collect(Collectors.toList()));
+        } catch (Exception e) {
+            logger.error("Failed to get namespaces for cluster {}", clusterName, e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable(value = "k8sDeployments", key = "#clusterName + '-' + #namespace")
+    public CompletableFuture<List<K8sDeploymentInfo>> getK8sDeployments(String clusterName, String namespace) {
+        logger.info("Fetching deployments in namespace {} for K8s cluster: {}", namespace, clusterName);
+        try {
+            AppsV1Api api = getAppsV1Api(clusterName);
+            List<V1Deployment> deployments = api.listNamespacedDeployment(namespace, null, null, null, null, null, null, null, null, null, null).getItems();
+            return CompletableFuture.completedFuture(deployments.stream().map(d -> {
+                int available = d.getStatus().getAvailableReplicas() != null ? d.getStatus().getAvailableReplicas() : 0;
+                int upToDate = d.getStatus().getUpdatedReplicas() != null ? d.getStatus().getUpdatedReplicas() : 0;
+                String ready = (d.getStatus().getReadyReplicas() != null ? d.getStatus().getReadyReplicas() : 0) + "/" + d.getSpec().getReplicas();
+                return new K8sDeploymentInfo(
+                        d.getMetadata().getName(),
+                        ready,
+                        upToDate,
+                        available,
+                        formatAge(d.getMetadata().getCreationTimestamp())
+                );
+            }).collect(Collectors.toList()));
+        } catch (Exception e) {
+            logger.error("Failed to get deployments for cluster {}", clusterName, e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable(value = "k8sPods", key = "#clusterName + '-' + #namespace")
+    public CompletableFuture<List<K8sPodInfo>> getK8sPods(String clusterName, String namespace) {
+        logger.info("Fetching pods in namespace {} for K8s cluster: {}", namespace, clusterName);
+        try {
+            CoreV1Api api = getCoreV1Api(clusterName);
+            List<V1Pod> pods = api.listNamespacedPod(namespace, null, null, null, null, null, null, null, null, null, null).getItems();
+            return CompletableFuture.completedFuture(pods.stream().map(p -> {
+                long readyContainers = p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().filter(cs -> cs.getReady()).count() : 0;
+                int totalContainers = p.getSpec().getContainers().size();
+                int restarts = p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().mapToInt(cs -> cs.getRestartCount()).sum() : 0;
+                return new K8sPodInfo(
+                        p.getMetadata().getName(),
+                        readyContainers + "/" + totalContainers,
+                        p.getStatus().getPhase(),
+                        restarts,
+                        formatAge(p.getMetadata().getCreationTimestamp()),
+                        p.getSpec().getNodeName()
+                );
+            }).collect(Collectors.toList()));
+        } catch (Exception e) {
+            logger.error("Failed to get pods for cluster {}", clusterName, e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    private Cluster getEksCluster(String clusterName) {
+        return eksClient.describeCluster(r -> r.name(clusterName)).cluster();
+    }
+
+    private CoreV1Api getCoreV1Api(String clusterName) throws IOException {
+        ApiClient apiClient = buildK8sApiClient(clusterName);
+        return new CoreV1Api(apiClient);
+    }
+
+    private AppsV1Api getAppsV1Api(String clusterName) throws IOException {
+        ApiClient apiClient = buildK8sApiClient(clusterName);
+        return new AppsV1Api(apiClient);
+    }
+
+private ApiClient buildK8sApiClient(String clusterName) throws IOException {
+    Cluster cluster = getEksCluster(clusterName);
+    
+    // Option 1: Use the default kubeconfig (~/.kube/config)
+    ApiClient apiClient = ClientBuilder
+            .kubeconfig(KubeConfig.loadKubeConfig(new FileReader(System.getProperty("user.home") + "/.kube/config")))
+            .setBasePath(cluster.endpoint())
+            .setVerifyingSsl(true)
+            .setCertificateAuthority(Base64.getDecoder().decode(cluster.certificateAuthority().data()))
+            .build();
+    
+    // Option 2: Or use AWS IAM authenticator (recommended for production)
+    /*
+    ApiClient apiClient = ClientBuilder.standard()
+            .setBasePath(cluster.endpoint())
+            .setVerifyingSsl(true)
+            .setCertificateAuthority(Base64.getDecoder().decode(cluster.certificateAuthority().data()))
+            .setAuthentication(new ExecCredentialAuthentication())
+            .build();
+    */
+    
+    Configuration.setDefaultApiClient(apiClient);
+    return apiClient;
+}
+
+    private String formatAge(OffsetDateTime creationTimestamp) {
+        if (creationTimestamp == null) return "N/A";
+        Duration duration = Duration.between(creationTimestamp, OffsetDateTime.now());
+        long days = duration.toDays();
+        if (days > 0) return days + "d";
+        long hours = duration.toHours();
+        if (hours > 0) return hours + "h";
+        long minutes = duration.toMinutes();
+        if (minutes > 0) return minutes + "m";
+        return duration.toSeconds() + "s";
+    }
+
+    
 }
