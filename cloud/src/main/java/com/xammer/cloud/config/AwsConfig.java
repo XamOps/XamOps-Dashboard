@@ -7,7 +7,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
-import software.amazon.awssdk.services.budgets.BudgetsClient; // ADDED
+import software.amazon.awssdk.services.budgets.BudgetsClient;
+import software.amazon.awssdk.services.cloudformation.CloudFormationClient;
 import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
@@ -29,26 +30,33 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.servicequotas.ServiceQuotasClient;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sts.StsClient; // ADDED
 
 @Configuration
 public class AwsConfig {
 
     private final String region = "ap-south-1";
 
-    // ... (existing beans)
-
-    // ADDED: Bean for BudgetsClient
     @Bean
     public BudgetsClient budgetsClient() {
-        // AWS Budgets is a global service, but the SDK requires a region for the endpoint.
-        // us-east-1 is the standard for global services.
         return BudgetsClient.builder().region(Region.US_EAST_1).build();
+    }
+    
+    @Bean
+    public CloudFormationClient cloudFormationClient() {
+        return CloudFormationClient.builder().region(Region.of(region)).build();
+    }
+
+    // ADDED: Bean for StsClient
+    @Bean
+    public StsClient stsClient() {
+        return StsClient.builder().region(Region.of(region)).build();
     }
     
     @Bean("awsTaskExecutor")
     public TaskExecutor threadPoolTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(20); // Increased pool size for more parallel tasks
+        executor.setCorePoolSize(20);
         executor.setMaxPoolSize(40);
         executor.setQueueCapacity(500);
         executor.setThreadNamePrefix("AWS-Async-");

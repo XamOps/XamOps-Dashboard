@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.CostByTagDto;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.DashboardData.BudgetDetails;
@@ -19,6 +20,7 @@ import com.xammer.cloud.dto.k8s.K8sClusterInfo;
 import com.xammer.cloud.dto.k8s.K8sDeploymentInfo;
 import com.xammer.cloud.dto.k8s.K8sNodeInfo;
 import com.xammer.cloud.dto.k8s.K8sPodInfo;
+import com.xammer.cloud.repository.CloudAccountRepository;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.AppsV1Api;
@@ -33,6 +35,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -61,8 +64,10 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -210,6 +215,11 @@ public class AwsDataService {
     private final ServiceQuotasClient serviceQuotasClient;
     private final String accountId;
     private final String configuredRegion;
+    private final CloudAccountRepository cloudAccountRepository;
+    private final ResourceLoader resourceLoader;
+
+    @Value("${cloudformation.template.s3.url}")
+    private String cloudFormationTemplateUrl;
 
     private static final Map<String, double[]> REGION_GEO = Map.ofEntries(
             Map.entry("us-east-1", new double[]{38.8951, -77.0364}),
@@ -229,7 +239,7 @@ public class AwsDataService {
             Map.entry("ap-northeast-3", new double[]{34.6937, 135.5023}),
             Map.entry("ap-south-1", new double[]{19.0760, 72.8777}),
             Map.entry("sa-east-1", new double[]{-23.5505, -46.6333}));
-    
+
 
     public AwsDataService(Ec2Client ec2, IamClient iam, EcsClient ecs, EksClient eks, LambdaClient lambda,
                           CloudWatchClient cw, CostExplorerClient ce, ComputeOptimizerClient co,
@@ -238,7 +248,8 @@ public class AwsDataService {
                           ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient,
                           Route53Client route53Client, CloudTrailClient cloudTrailClient, AcmClient acmClient,
                           CloudWatchLogsClient cloudWatchLogsClient, SnsClient snsClient, SqsClient sqsClient,
-                          BudgetsClient budgetsClient, ServiceQuotasClient serviceQuotasClient) {
+                          BudgetsClient budgetsClient, ServiceQuotasClient serviceQuotasClient,
+                          CloudAccountRepository cloudAccountRepository, ResourceLoader resourceLoader) {
         this.ec2Client = ec2;
         this.iamClient = iam;
         this.ecsClient = ecs;
@@ -264,6 +275,8 @@ public class AwsDataService {
         this.budgetsClient = budgetsClient;
         this.serviceQuotasClient = serviceQuotasClient;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
+        this.cloudAccountRepository = cloudAccountRepository;
+        this.resourceLoader = resourceLoader;
 
         String tmpAccountId;
         try (StsClient stsClient = StsClient.create()) {
@@ -274,7 +287,7 @@ public class AwsDataService {
         }
         this.accountId = tmpAccountId;
     }
-    
+
     public DashboardData getDashboardData() throws ExecutionException, InterruptedException {
         logger.info("--- LAUNCHING ASYNC DATA FETCH FROM AWS ---");
 
@@ -363,7 +376,7 @@ public class AwsDataService {
             logger.info("Found {} total regions available to the account. Now checking for activity.", allRegions.size());
 
             return CompletableFuture.completedFuture(
-                allRegions.parallelStream() 
+                allRegions.parallelStream()
                         .filter(region -> !"not-opted-in".equals(region.optInStatus()))
                         .filter(region -> {
                             if (!REGION_GEO.containsKey(region.regionName())) {
@@ -389,7 +402,7 @@ public class AwsDataService {
 
     private DashboardData.RegionStatus mapRegionToStatus(Region region) {
         double[] coords = REGION_GEO.get(region.regionName());
-        String status = "ACTIVE"; 
+        String status = "ACTIVE";
 
         if (SUSTAINABLE_REGIONS.contains(region.regionName())) {
             status = "SUSTAINABLE";
@@ -438,10 +451,10 @@ public class AwsDataService {
     }
 
     @CacheEvict(value = {
-            "cloudlistResources", "groupedCloudlistResources", "wastedResources", 
-            "regionStatus", "inventory", "cloudwatchStatus", "securityInsights", 
-            "ec2Recs", "costAnomalies", "ebsRecs", "lambdaRecs", "reservationAnalysis", 
-            "reservationPurchaseRecs", "billingSummary", "iamResources", "costHistory", 
+            "cloudlistResources", "groupedCloudlistResources", "wastedResources",
+            "regionStatus", "inventory", "cloudwatchStatus", "securityInsights",
+            "ec2Recs", "costAnomalies", "ebsRecs", "lambdaRecs", "reservationAnalysis",
+            "reservationPurchaseRecs", "billingSummary", "iamResources", "costHistory",
             "allRecommendations", "securityFindings", "serviceQuotas", "reservationPageData",
             "reservationInventory", "historicalReservationData", "reservationModificationRecs",
             // ADDED: K8s cache keys
@@ -466,7 +479,7 @@ public class AwsDataService {
         });
     }
 
-    
+
     private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -640,7 +653,7 @@ public class AwsDataService {
                  logger.info("Cloudlist: Fetching S3 Buckets...");
                  return s3Client.listBuckets().buckets().stream()
                          .map(b -> {
-                             String bucketRegion = "us-east-1"; 
+                             String bucketRegion = "us-east-1";
                              try {
                                  bucketRegion = s3Client.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
                                  if (bucketRegion == null || bucketRegion.isEmpty()) {
@@ -753,7 +766,7 @@ public class AwsDataService {
         });
     }
 
-    
+
 
     private CompletableFuture<List<ResourceDto>> fetchRoute53HostedZonesForCloudlist() {
         return CompletableFuture.supplyAsync(() -> {
@@ -1378,7 +1391,7 @@ public class AwsDataService {
     }
 
     private String getTermValue(ReservationPurchaseRecommendation rec) {
-        try { return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year"; } 
+        try { return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year"; }
         catch (Exception e) { logger.debug("Could not determine term value", e); return "1 Year"; }
     }
 
@@ -1459,7 +1472,7 @@ public class AwsDataService {
                             asgData.put("id", asg.autoScalingGroupARN()); asgData.put("label", asg.autoScalingGroupName()); asgData.put("type", "Auto Scaling Group"); asgData.put("parent", vpc.vpcId());
                             asgNode.put("data", asgData);
                             elements.add(asgNode);
-                            
+
                             asg.instances().forEach(inst -> {
                                 Map<String, Object> edge = new HashMap<>();
                                 Map<String, Object> edgeData = new HashMap<>();
@@ -1479,7 +1492,7 @@ public class AwsDataService {
                             instanceData.put("id", instance.instanceId()); instanceData.put("label", getTagName(instance.tags(), instance.instanceId())); instanceData.put("type", "EC2 Instance"); instanceData.put("parent", instance.subnetId());
                             instanceNode.put("data", instanceData);
                             elements.add(instanceNode);
-                            
+
                             instance.securityGroups().forEach(sg -> {
                                 Map<String, Object> edge = new HashMap<>();
                                 Map<String, Object> edgeData = new HashMap<>();
@@ -1488,7 +1501,7 @@ public class AwsDataService {
                                 elements.add(edge);
                             });
                         });
-                
+
                 rdsClient.describeDBInstances().dbInstances().stream()
                         .filter(db -> db.dbSubnetGroup() != null && vpcId.equals(db.dbSubnetGroup().vpcId()))
                         .forEach(db -> {
@@ -1582,7 +1595,7 @@ public class AwsDataService {
                             reason = "Bucket ACL grants public access.";
                         }
                     }
-                    
+
                     if (isPublic) {
                         findings.add(new SecurityFinding(bucketName, region, "S3", "Critical", reason));
                     }
@@ -1727,7 +1740,7 @@ public class AwsDataService {
                     FinOpsReportDto.Kpis kpis = new FinOpsReportDto.Kpis(mtdSpend, lastMonthSpend, forecastedSpend, totalPotentialSavings);
                     List<Map<String, Object>> costByService = billingSummary.stream().sorted(Comparator.comparingDouble(DashboardData.BillingSummary::getMonthToDateCost).reversed()).limit(10).map(s -> Map.<String, Object>of("service", s.getServiceName(), "cost", s.getMonthToDateCost())).collect(Collectors.toList());
                     List<Map<String, Object>> costByRegion = new ArrayList<>();
-                     try { costByRegion = getCostByRegion().join(); } 
+                     try { costByRegion = getCostByRegion().join(); }
                      catch (Exception e) { logger.error("Could not fetch cost by region data for FinOps report.", e); }
                     FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegion);
 
@@ -1898,10 +1911,10 @@ public class AwsDataService {
                 logger.error("Could not fetch service quotas for {}.", serviceCode, e);
             }
         }
-        
+
         return CompletableFuture.completedFuture(quotaInfos);
     }
-    
+
     @Async("awsTaskExecutor")
     @Cacheable("reservationPageData")
     public CompletableFuture<ReservationDto> getReservationPageData() {
@@ -1932,7 +1945,7 @@ public class AwsDataService {
             DescribeReservedInstancesRequest request = DescribeReservedInstancesRequest.builder()
                     .filters(activeFilter)
                     .build();
-            
+
             List<ReservedInstances> reservedInstances = ec2Client.describeReservedInstances(request).reservedInstances();
 
             return CompletableFuture.completedFuture(
@@ -1991,7 +2004,7 @@ public class AwsDataService {
             List<Double> utilPercentages = utilizations.stream()
                     .map(u -> Double.parseDouble(u.total().utilizationPercentage()))
                     .collect(Collectors.toList());
-            
+
             List<Double> covPercentages = coverages.stream()
                     .map(c -> Double.parseDouble(c.total().coverageHours().coverageHoursPercentage()))
                     .collect(Collectors.toList());
@@ -2012,7 +2025,7 @@ public class AwsDataService {
     @Cacheable("reservationModificationRecs")
     public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations() {
         logger.info("Fetching reservation modification recommendations based on utilization...");
-        
+
         try {
             // 1. Get all active reservations
             Map<String, ReservedInstances> activeReservationsMap = ec2Client.describeReservedInstances(req -> req.filters(f -> f.name("state").values("active")))
@@ -2029,7 +2042,7 @@ public class AwsDataService {
                 .start(LocalDate.now().minusDays(30).toString())
                 .end(LocalDate.now().toString())
                 .build();
-                
+
             GroupDefinition groupByRiId = GroupDefinition.builder().type(GroupDefinitionType.DIMENSION).key("RESERVATION_ID").build();
 
             GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder()
@@ -2048,12 +2061,12 @@ public class AwsDataService {
                 // 4. Check if utilization is low and if the RI is convertible
                 if (utilizationPercentage < 80.0 && activeReservationsMap.containsKey(reservationId)) {
                     ReservedInstances ri = activeReservationsMap.get(reservationId);
-                    
+
                     if ("Convertible".equalsIgnoreCase(ri.offeringTypeAsString())) {
                         String currentType = ri.instanceTypeAsString();
                         // Simple logic to suggest a smaller size. A real-world scenario would be more complex.
                         String recommendedType = suggestSmallerInstanceType(currentType);
-                        
+
                         if (recommendedType != null && !recommendedType.equals(currentType)) {
                                 recommendations.add(new ReservationModificationRecommendationDto(
                                 ri.reservedInstancesId(),
@@ -2082,7 +2095,7 @@ public class AwsDataService {
     private String suggestSmallerInstanceType(String instanceType) {
         String[] parts = instanceType.split("\\.");
         if (parts.length != 2) return null;
-        
+
         String family = parts[0];
         String size = parts[1];
 
@@ -2117,21 +2130,21 @@ public String applyReservationModification(ReservationModificationRequestDto req
     DescribeReservedInstancesOfferingsRequest offeringsRequest = DescribeReservedInstancesOfferingsRequest.builder()
             .instanceType(request.getTargetInstanceType())
             .productDescription(originalRi.productDescription())
-            .offeringType("Convertible") 
+            .offeringType("Convertible")
             .offeringClass(originalRi.offeringClass())
-            .minDuration(originalRi.duration()) 
-            .maxDuration(originalRi.duration()) 
+            .minDuration(originalRi.duration())
+            .maxDuration(originalRi.duration())
             .includeMarketplace(false)
             .instanceTenancy(originalRi.instanceTenancy())
             .build();
-    
+
     Optional<ReservedInstancesOffering> targetOffering = ec2Client.describeReservedInstancesOfferings(offeringsRequest).reservedInstancesOfferings()
             .stream().findFirst();
 
     if (targetOffering.isEmpty()) {
         throw new RuntimeException("Could not find a matching RI offering for type: " + request.getTargetInstanceType());
     }
-    
+
     // 3. Build the modification request
     ReservedInstancesConfiguration targetConfig = ReservedInstancesConfiguration.builder()
             .instanceType(request.getTargetInstanceType())
@@ -2145,14 +2158,14 @@ public String applyReservationModification(ReservationModificationRequestDto req
             .reservedInstancesIds(request.getReservationId())
             .targetConfigurations(targetConfig)
             .build();
-    
+
     // 4. Execute the modification
     try {
         ModifyReservedInstancesResponse modifyResponse = ec2Client.modifyReservedInstances(modifyRequest);
         logger.info("Successfully submitted modification request for RI {}. Transaction ID: {}", request.getReservationId(), modifyResponse.reservedInstancesModificationId());
-        
-        clearAllCaches(); 
-        
+
+        clearAllCaches();
+
         return modifyResponse.reservedInstancesModificationId();
     } catch (Exception e) {
         logger.error("Failed to execute RI modification for ID {}: {}", request.getReservationId(), e.getMessage());
@@ -2186,7 +2199,7 @@ public String applyReservationModification(ReservationModificationRequestDto req
                 .build();
 
             List<ResultByTime> results = costExplorerClient.getCostAndUsage(request).resultsByTime();
-            
+
             return CompletableFuture.completedFuture(
                 results.stream()
                     .flatMap(r -> r.groups().stream())
@@ -2343,7 +2356,7 @@ public String applyReservationModification(ReservationModificationRequestDto req
 
 private ApiClient buildK8sApiClient(String clusterName) throws IOException {
     Cluster cluster = getEksCluster(clusterName);
-    
+
     // Option 1: Use the default kubeconfig (~/.kube/config)
     ApiClient apiClient = ClientBuilder
             .kubeconfig(KubeConfig.loadKubeConfig(new FileReader(System.getProperty("user.home") + "/.kube/config")))
@@ -2351,7 +2364,7 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
             .setVerifyingSsl(true)
             .setCertificateAuthority(Base64.getDecoder().decode(cluster.certificateAuthority().data()))
             .build();
-    
+
     // Option 2: Or use AWS IAM authenticator (recommended for production)
     /*
     ApiClient apiClient = ClientBuilder.standard()
@@ -2361,7 +2374,7 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
             .setAuthentication(new ExecCredentialAuthentication())
             .build();
     */
-    
+
     Configuration.setDefaultApiClient(apiClient);
     return apiClient;
 }
@@ -2378,5 +2391,27 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
         return duration.toSeconds() + "s";
     }
 
-    
+    public URL generateCloudFormationUrl(String accountName, String accessType) throws Exception {
+        // 1. Generate a unique external ID for security
+        String externalId = UUID.randomUUID().toString();
+
+        // 2. Create and save a record for this new account connection
+        CloudAccount newAccount = new CloudAccount(accountName, externalId, accessType);
+        cloudAccountRepository.save(newAccount);
+
+        // 3. Define stack parameters
+        String stackName = "XamOps-Connection-" + accountName.replaceAll("[^a-zA-Z0-9-]", "");
+        String xamopsAccountId = this.accountId; // The account ID of the main XamOps application
+
+        // 4. Construct the Quick Create URL
+        String urlString = String.format(
+            "https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=%s&stackName=%s&param_XamOpsAccountId=%s&param_ExternalId=%s",
+            cloudFormationTemplateUrl,
+            stackName,
+            xamopsAccountId,
+            externalId
+        );
+
+        return new URL(urlString);
+    }
 }

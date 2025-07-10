@@ -1,6 +1,6 @@
 package com.xammer.cloud.config;
 
-import com.xammer.cloud.security.CustomAuthenticationSuccessHandler; // Import the new handler
+import com.xammer.cloud.security.CustomAuthenticationSuccessHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,7 +17,6 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    // Inject your custom success handler
     private final CustomAuthenticationSuccessHandler authenticationSuccessHandler;
 
     public SecurityConfig(CustomAuthenticationSuccessHandler authenticationSuccessHandler) {
@@ -28,12 +27,12 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests((requests) -> requests
-                .antMatchers("/", "/waste", "/cloudlist").authenticated() // Secure the main pages
+                .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
                 .anyRequest().permitAll()
             )
             .formLogin((form) -> form
-                .loginPage("/login")
-                .successHandler(authenticationSuccessHandler) // Use the custom success handler
+                .loginPage("/login") // Defines the custom login page URL
+                .successHandler(authenticationSuccessHandler)
                 .permitAll()
             )
             .logout((logout) -> logout.permitAll());

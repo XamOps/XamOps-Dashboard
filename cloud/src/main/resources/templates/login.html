@@ -100,7 +100,6 @@
 </head>
 <body class="flex items-center justify-center h-screen px-4">
 
-    <!-- Aurora Background Container -->
     <div class="aurora-background">
         <div class="aurora">
             <div class="aurora__item"></div>
@@ -109,7 +108,6 @@
         </div>
     </div>
 
-    <!-- Login Form -->
     <div class="max-w-md w-full glass-container p-8">
         
         <h2 class="text-3xl font-bold text-center text-gray-100 mb-2">
@@ -117,13 +115,11 @@
         </h2>
         <p class="text-center text-gray-300 mb-8">Sign in to continue</p>
         
-        <!-- Thymeleaf error message display -->
         <div th:if="${param.error}" class="bg-red-200 border-l-4 border-red-500 text-red-800 p-4 rounded-md mb-6" role="alert">
             <p class="font-bold">Login Failed</p>
             <p>Invalid username or password. Please try again.</p>
         </div>
 
-        <!-- Corrected form tag for Spring Security -->
         <form th:action="@{/login}" method="post" class="space-y-6">
             <div>
                 <label for="username" class="block text-sm font-medium text-gray-300">Username</label>

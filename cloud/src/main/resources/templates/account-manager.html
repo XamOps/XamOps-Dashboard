@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - Account Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="accountManager()">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800">Account Manager</h1>
+                    <p class="text-xs text-gray-500">Manage your connected cloud accounts</p>
+                </div>
+                <a href="/add-account" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                    <i class="fas fa-plus mr-2"></i>Add New Account
+                </a>
+            </header>
+
+            <div class="flex-1 p-6 space-y-6">
+                <div class="bg-white rounded-lg p-6 shadow-sm border">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Accounts with master account</h2>
+                    <div class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                        <i class="fas fa-folder-open fa-3x text-gray-400"></i>
+                        <h3 class="mt-4 text-lg font-medium text-gray-900">You don't have any items yet</h3>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg p-6 shadow-sm border">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Accounts without master account</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3">Name</th>
+                                    <th class="px-6 py-3">Id</th>
+                                    <th class="px-6 py-3">Access</th>
+                                    <th class="px-6 py-3">Connection</th>
+                                    <th class="px-6 py-3">Status</th>
+                                    <th class="px-6 py-3 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-900">MachaDalo</td>
+                                    <td class="px-6 py-4">578460219112</td>
+                                    <td class="px-6 py-4">Read/write</td>
+                                    <td class="px-6 py-4">
+                                        <i class="fas fa-link text-green-500 mr-2"></i>Cross-account role
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800">
+                                            OK
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
+                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 ml-2"><i class="fas fa-sync-alt"></i></button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-900">test</td>
+                                    <td class="px-6 py-4">605134457560</td>
+                                    <td class="px-6 py-4">Read/write</td>
+                                    <td class="px-6 py-4">
+                                        <i class="fas fa-link text-green-500 mr-2"></i>Cross-account role
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800">
+                                            OK
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
+                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 ml-2"><i class="fas fa-sync-alt"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function accountManager() {
+    return {
+        // Add any necessary JavaScript logic here
+    }
+}
+</script>
+
+</body>
+</html>
