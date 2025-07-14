@@ -16,6 +16,8 @@ import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.dto.ReservationModificationRecommendationDto;
 import com.xammer.cloud.dto.ReservationModificationRequestDto;
 import com.xammer.cloud.dto.ResourceDto;
+import com.xammer.cloud.dto.StackCreationDto;
+import com.xammer.cloud.dto.AccountDto;
 import com.xammer.cloud.dto.k8s.K8sClusterInfo;
 import com.xammer.cloud.dto.k8s.K8sDeploymentInfo;
 import com.xammer.cloud.dto.k8s.K8sNodeInfo;
@@ -176,12 +178,8 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sts.StsClient;
 
-import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.Configuration;
-import io.kubernetes.client.openapi.apis.CoreV1Api;
-import io.kubernetes.client.util.ClientBuilder;
 import io.kubernetes.client.util.KubeConfig;
-import software.amazon.awssdk.services.eks.model.Cluster;
 
 @Service
 public class AwsDataService {
@@ -323,8 +321,16 @@ public class AwsDataService {
                 anomalies);
 
         DashboardData data = new DashboardData();
-        DashboardData.Account mainAccount = new DashboardData.Account(
-                "123456789012", "MachaDalo",
+        List<CloudAccount> accounts = cloudAccountRepository.findAll();
+        if (accounts.isEmpty()) {
+            data.setAvailableAccounts(Collections.emptyList());
+            data.setSelectedAccount(null);
+            return data;
+        }
+
+        CloudAccount first = accounts.get(0);
+        DashboardData.Account firstAccount = new DashboardData.Account(
+                first.getAwsAccountId(), first.getAccountName(),
                 regionStatusFuture.get(), inventoryFuture.get(), cwStatusFuture.get(), insightsFuture.get(),
                 costHistoryFuture.get(), billingFuture.get(), iamFuture.get(), savingsFuture.get(),
                 ec2Recs, anomalies, ebsRecs,
@@ -332,10 +338,19 @@ public class AwsDataService {
                 optimizationSummary,
                 null, serviceQuotasFuture.get());
 
-        data.setAvailableAccounts(
-                List.of(mainAccount, new DashboardData.Account("987654321098", "Xammer", new ArrayList<>(), null, null,
-                        null, null, null, null, null, null, null, null, null, null, null, null, null, null)));
-        data.setSelectedAccount(mainAccount);
+        List<DashboardData.Account> dtoList = new ArrayList<>();
+        dtoList.add(firstAccount);
+        for (int i = 1; i < accounts.size(); i++) {
+            CloudAccount acc = accounts.get(i);
+            dtoList.add(new DashboardData.Account(
+                    acc.getAwsAccountId(), acc.getAccountName(),
+                    new ArrayList<>(), null, null, null, null, null,
+                    null, null, null, null, null,
+                    null, null, null, null, null, null));
+        }
+
+        data.setAvailableAccounts(dtoList);
+        data.setSelectedAccount(firstAccount);
         return data;
     }
 
@@ -2398,7 +2413,7 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
         return duration.toSeconds() + "s";
     }
 
-    public URL generateCloudFormationUrl(String accountName, String accessType) throws Exception {
+    public StackCreationDto generateCloudFormationUrl(String accountName, String accessType) throws Exception {
         // 1. Generate a unique external ID for security
         String externalId = UUID.randomUUID().toString();
 
@@ -2419,6 +2434,28 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
             externalId
         );
 
-        return new URL(urlString);
+        return new StackCreationDto(urlString, externalId);
+    }
+
+    public Optional<AccountDto> getAccountStatus(String externalId) {
+        return cloudAccountRepository.findByExternalId(externalId)
+                .map(acc -> new AccountDto(acc.getAccountName(), acc.getAwsAccountId(),
+                        acc.getAccessType(), "Cross-account role", acc.getStatus(), acc.getRoleArn()));
+    }
+
+    public void markAccountConnected(String externalId, String awsAccountId, String roleArn) {
+        cloudAccountRepository.findByExternalId(externalId).ifPresent(acc -> {
+            acc.setAwsAccountId(awsAccountId);
+            acc.setRoleArn(roleArn);
+            acc.setStatus("CONNECTED");
+            cloudAccountRepository.save(acc);
+        });
+    }
+
+    public List<AccountDto> getAllAccounts() {
+        return cloudAccountRepository.findAll().stream()
+                .map(acc -> new AccountDto(acc.getAccountName(), acc.getAwsAccountId(),
+                        acc.getAccessType(), "Cross-account role", acc.getStatus(), acc.getRoleArn()))
+                .collect(Collectors.toList());
     }
 }

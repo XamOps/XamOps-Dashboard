@@ -95,6 +95,18 @@ function addAccount() {
         accountName: '',
         accessType: 'read-only',
         isLoading: false,
+        pollHandle: null,
+        pollStatus() {
+            fetch(`/api/account-manager/status/${sessionStorage.getItem('pendingExternalId')}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(acc => {
+                    if (acc && acc.status === 'CONNECTED') {
+                        clearInterval(this.pollHandle);
+                        this.isLoading = false;
+                        window.location.href = '/account-manager';
+                    }
+                });
+        },
         launchStack() {
             if (!this.accountName) {
                 alert('Please enter an account name.');
@@ -116,8 +128,9 @@ function addAccount() {
                 return res.json();
             })
             .then(data => {
-                // Redirect user to the AWS console
-                window.location.href = data.url;
+                window.open(data.url, '_blank');
+                sessionStorage.setItem('pendingExternalId', data.externalId);
+                this.pollHandle = setInterval(() => this.pollStatus(), 5000);
             })
             .catch(err => {
                 alert(`Error: ${err.message}`);
