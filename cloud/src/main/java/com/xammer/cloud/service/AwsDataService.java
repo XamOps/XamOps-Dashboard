@@ -175,6 +175,11 @@ import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
+import software.amazon.awssdk.services.sts.model.Credentials;
+import software.amazon.awssdk.services.sts.model.GetCallerIdentityResponse;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.Configuration;
@@ -213,6 +218,7 @@ public class AwsDataService {
     private final SqsClient sqsClient;
     private final BudgetsClient budgetsClient;
     private final ServiceQuotasClient serviceQuotasClient;
+    private final StsClient stsClient;
     private final String accountId;
     private final String configuredRegion;
     private final CloudAccountRepository cloudAccountRepository;
@@ -248,7 +254,7 @@ public class AwsDataService {
                           ElastiCacheClient elastiCacheClient, DynamoDbClient dynamoDbClient, EcrClient ecrClient,
                           Route53Client route53Client, CloudTrailClient cloudTrailClient, AcmClient acmClient,
                           CloudWatchLogsClient cloudWatchLogsClient, SnsClient snsClient, SqsClient sqsClient,
-                          BudgetsClient budgetsClient, ServiceQuotasClient serviceQuotasClient,
+                          BudgetsClient budgetsClient, ServiceQuotasClient serviceQuotasClient, StsClient stsClient,
                           CloudAccountRepository cloudAccountRepository, ResourceLoader resourceLoader) {
         this.ec2Client = ec2;
         this.iamClient = iam;
@@ -274,13 +280,14 @@ public class AwsDataService {
         this.sqsClient = sqsClient;
         this.budgetsClient = budgetsClient;
         this.serviceQuotasClient = serviceQuotasClient;
+        this.stsClient = stsClient;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
         this.cloudAccountRepository = cloudAccountRepository;
         this.resourceLoader = resourceLoader;
 
         String tmpAccountId;
-        try (StsClient stsClient = StsClient.create()) {
-            tmpAccountId = stsClient.getCallerIdentity().account();
+        try {
+            tmpAccountId = this.stsClient.getCallerIdentity().account();
         } catch (Exception e) {
             logger.error("Could not determine AWS Account ID. Budgets may not work correctly.", e);
             tmpAccountId = "YOUR_ACCOUNT_ID"; // Fallback
@@ -2398,6 +2405,40 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
         return duration.toSeconds() + "s";
     }
 
+    public CloudAccount verifyAccount(String accountName, String roleArn, String externalId) {
+        CloudAccount account = cloudAccountRepository.findByExternalId(externalId)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid external ID"));
+        if (!account.getAccountName().equals(accountName)) {
+            throw new IllegalArgumentException("Account name does not match request");
+        }
+        try {
+            AssumeRoleRequest assumeRequest = AssumeRoleRequest.builder()
+                    .roleArn(roleArn)
+                    .roleSessionName("XamOpsVerify")
+                    .externalId(externalId)
+                    .build();
+            Credentials creds = stsClient.assumeRole(assumeRequest).credentials();
+
+            AwsSessionCredentials session = AwsSessionCredentials.create(
+                    creds.accessKeyId(), creds.secretAccessKey(), creds.sessionToken());
+
+            StsClient assumed = StsClient.builder()
+                    .credentialsProvider(StaticCredentialsProvider.create(session))
+                    .region(stsClient.serviceClientConfiguration().region())
+                    .build();
+            GetCallerIdentityResponse identity = assumed.getCallerIdentity();
+            account.setAwsAccountId(identity.account());
+            account.setRoleArn(roleArn);
+            account.setStatus("CONNECTED");
+            cloudAccountRepository.save(account);
+            return account;
+        } catch (Exception e) {
+            account.setStatus("FAILED");
+            cloudAccountRepository.save(account);
+            throw e;
+        }
+    }
+
     public URL generateCloudFormationUrl(String accountName, String accessType) throws Exception {
         // 1. Generate a unique external ID for security
         String externalId = UUID.randomUUID().toString();
@@ -2420,5 +2461,9 @@ private ApiClient buildK8sApiClient(String clusterName) throws IOException {
         );
 
         return new URL(urlString);
+    }
+
+    public List<CloudAccount> getAccounts() {
+        return cloudAccountRepository.findAll();
     }
 }
