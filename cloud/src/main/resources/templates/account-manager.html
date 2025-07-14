@@ -21,7 +21,7 @@
     </aside>
 
     <div class="ml-64 flex-1">
-        <main class="flex-1 flex flex-col min-h-screen" x-data="accountManager()">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="accountManager()" x-init="init()">
             <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
                 <div>
                     <h1 class="text-xl font-semibold text-gray-800">Account Manager</h1>
@@ -55,42 +55,7 @@
                                     <th class="px-6 py-3 text-center">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 font-medium text-gray-900">MachaDalo</td>
-                                    <td class="px-6 py-4">578460219112</td>
-                                    <td class="px-6 py-4">Read/write</td>
-                                    <td class="px-6 py-4">
-                                        <i class="fas fa-link text-green-500 mr-2"></i>Cross-account role
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800">
-                                            OK
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 ml-2"><i class="fas fa-sync-alt"></i></button>
-                                    </td>
-                                </tr>
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 font-medium text-gray-900">test</td>
-                                    <td class="px-6 py-4">605134457560</td>
-                                    <td class="px-6 py-4">Read/write</td>
-                                    <td class="px-6 py-4">
-                                        <i class="fas fa-link text-green-500 mr-2"></i>Cross-account role
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800">
-                                            OK
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 ml-2"><i class="fas fa-sync-alt"></i></button>
-                                    </td>
-                                </tr>
-                            </tbody>
+                            <tbody class="divide-y divide-gray-200" id="accountTableBody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -102,7 +67,24 @@
 <script>
 function accountManager() {
     return {
-        // Add any necessary JavaScript logic here
+        accounts: [],
+        init() {
+            fetch('/api/account-manager/accounts')
+                .then(r => r.ok ? r.json() : [])
+                .then(data => { this.accounts = data; this.render(); });
+        },
+        render() {
+            const tbody = document.getElementById('accountTableBody');
+            tbody.innerHTML = this.accounts.map(a => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 font-medium text-gray-900">${a.name}</td>
+                    <td class="px-6 py-4">${a.id || ''}</td>
+                    <td class="px-6 py-4">${a.access}</td>
+                    <td class="px-6 py-4"><i class="fas fa-link text-green-500 mr-2"></i>${a.connection}</td>
+                    <td class="px-6 py-4">${a.status}</td>
+                    <td class="px-6 py-4 text-center">${a.roleArn || ''}</td>
+                </tr>`).join('');
+        }
     }
 }
 </script>
