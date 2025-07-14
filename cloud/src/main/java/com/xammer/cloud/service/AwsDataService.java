@@ -1128,7 +1128,7 @@ public class AwsDataService {
         logger.info("Fetching IAM resources...");
         int users = 0, groups = 0, policies = 0, roles = 0;
         try { users = iamClient.listUsers().users().size(); } catch (Exception e) { logger.error("IAM check failed for Users", e); }
-        try { groups = iamClient.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Policies", e); }
+        try { groups = iamClient.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Groups", e); }
         try { policies = iamClient.listPolicies(r -> r.scope(PolicyScopeType.LOCAL)).policies().size(); } catch (Exception e) { logger.error("IAM check failed for Policies", e); }
         try { roles = iamClient.listRoles().roles().size(); } catch (Exception e) { logger.error("IAM check failed for Roles", e); }
         return CompletableFuture.completedFuture(new DashboardData.IamResources(users, groups, policies, roles));
@@ -1350,7 +1350,14 @@ public class AwsDataService {
     }
 
     public String getTagName(List<Tag> tags, String defaultName) {
-        return tags.stream().filter(t -> t.key().equalsIgnoreCase("Name")).findFirst().map(Tag::value).orElse(defaultName);
+        if (tags == null || tags.isEmpty()) {
+            return defaultName;
+        }
+        return tags.stream()
+                .filter(t -> t.key().equalsIgnoreCase("Name"))
+                .findFirst()
+                .map(Tag::value)
+                .orElse(defaultName);
     }
 
     private double calculateEbsMonthlyCost(Volume volume, String region) {
