@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface CloudAccountRepository extends JpaRepository<CloudAccount, Long> {
+    java.util.Optional<CloudAccount> findByExternalId(String externalId);
 }
