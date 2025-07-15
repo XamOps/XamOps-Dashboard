@@ -22,11 +22,16 @@ public class ExcelExportService {
 
     private static final Logger logger = LoggerFactory.getLogger(ExcelExportService.class);
 
+    /**
+     * Exports a list of security findings to an in-memory Excel workbook.
+     * @param findings The list of security findings to export.
+     * @return A ByteArrayInputStream containing the raw bytes of the Excel file.
+     */
     public ByteArrayInputStream exportSecurityFindingsToExcel(List<SecurityFinding> findings) {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Security Findings");
 
-            // Header Font
+            // Header Font Style
             Font headerFont = workbook.createFont();
             headerFont.setBold(true);
             headerFont.setFontHeightInPoints((short) 12);
@@ -35,8 +40,10 @@ public class ExcelExportService {
             CellStyle headerCellStyle = workbook.createCellStyle();
             headerCellStyle.setFont(headerFont);
 
-            // Header Row
-            String[] columns = { "Resource ID", "Region", "Category", "Severity", "Description" };
+            // Define column headers
+            String[] columns = { "Resource ID", "Region", "Category", "Severity", "Description", "Compliance Framework", "Control ID" };
+            
+            // Create Header Row
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < columns.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -44,7 +51,7 @@ public class ExcelExportService {
                 cell.setCellStyle(headerCellStyle);
             }
 
-            // Data Rows
+            // Populate Data Rows
             int rowIdx = 1;
             for (SecurityFinding finding : findings) {
                 Row row = sheet.createRow(rowIdx++);
@@ -53,15 +60,17 @@ public class ExcelExportService {
                 row.createCell(2).setCellValue(finding.getCategory());
                 row.createCell(3).setCellValue(finding.getSeverity());
                 row.createCell(4).setCellValue(finding.getDescription());
+                row.createCell(5).setCellValue(finding.getComplianceFramework());
+                row.createCell(6).setCellValue(finding.getControlId());
             }
             
-            // Auto-size columns
+            // Auto-size columns for better readability
             for(int i = 0; i < columns.length; i++) {
                 sheet.autoSizeColumn(i);
             }
 
             workbook.write(out);
-            logger.info("Successfully created Excel report with {} findings.", findings.size());
+            logger.info("Successfully created Excel report with {} security findings.", findings.size());
             return new ByteArrayInputStream(out.toByteArray());
         } catch (IOException e) {
             logger.error("Failed to export security findings to Excel", e);

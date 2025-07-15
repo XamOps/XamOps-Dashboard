@@ -10,6 +10,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        [x-cloak] { display: none !important; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -85,6 +86,35 @@
                     </form>
                 </div>
             </div>
+
+            <!-- "Connecting" Modal -->
+            <div x-show="isConnecting" x-cloak class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50" @click.away="isConnecting = false">
+                <div class="bg-white rounded-lg p-8 w-full max-w-2xl shadow-xl transform transition-all" @click.stop>
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                        <h3 class="text-2xl font-bold text-gray-800 mt-6">Account connecting right now</h3>
+                        <p class="text-gray-500 mt-2">Please complete the steps in the AWS Console to finalize the connection.</p>
+                    </div>
+                    <div class="mt-8 bg-gray-50 p-4 rounded-lg">
+                        <label for="stackUrl" class="block text-sm font-medium text-gray-700">Your CloudFormation Quick-Create Link:</label>
+                        <div class="mt-1 flex rounded-md shadow-sm">
+                            <input type="text" id="stackUrl" :value="stackUrl" readonly class="form-input flex-1 block w-full rounded-none rounded-l-md sm:text-sm border-gray-300 bg-gray-100">
+                            <button @click="copyToClipboard(stackUrl)" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-300">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">Manually copy this link and open it in a new tab to create the stack in your AWS account.</p>
+                    </div>
+                    <div class="mt-8 flex justify-between items-center">
+                        <button @click="isConnecting = false" class="text-sm font-semibold text-gray-600 hover:text-gray-800">Cancel</button>
+                        <a href="/account-manager" class="px-5 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">
+                            I've created the stack, go to verify
+                            <i class="fas fa-arrow-right ml-2"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 </div>
@@ -95,6 +125,8 @@ function addAccount() {
         accountName: '',
         accessType: 'read-only',
         isLoading: false,
+        isConnecting: false,
+        stackUrl: '',
         launchStack() {
             if (!this.accountName) {
                 alert('Please enter an account name.');
@@ -116,13 +148,29 @@ function addAccount() {
                 return res.json();
             })
             .then(data => {
-                // Redirect user to the AWS console
-                window.location.href = data.url;
+                this.stackUrl = data.url;
+                this.isConnecting = true; // Show the modal
             })
             .catch(err => {
                 alert(`Error: ${err.message}`);
+            })
+            .finally(() => {
                 this.isLoading = false;
             });
+        },
+        copyToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert('Link copied to clipboard!');
+            } catch (err) {
+                alert('Failed to copy link.');
+            }
+            document.body.removeChild(textArea);
         }
     }
 }

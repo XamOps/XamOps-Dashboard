@@ -90,9 +90,15 @@ function costManagement() {
 
         loadCostData(forceRefresh = false) {
             this.isLoading = true;
-            let url = `/api/costs/breakdown?groupBy=${this.groupBy}`;
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isLoading = false;
+                this.costData = [];
+                return;
+            }
+            
+            let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}`;
             if (this.groupBy === 'TAG') {
-                // Only add tag parameter if tagKey is not empty
                 if(this.tagKey) {
                     url += `&tag=${this.tagKey}`;
                 } else {
@@ -102,8 +108,9 @@ function costManagement() {
                 }
             }
             
-            if(forceRefresh) sessionStorage.removeItem('costData' + this.groupBy + this.tagKey);
-            const cachedData = sessionStorage.getItem('costData' + this.groupBy + this.tagKey);
+            const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
+            if(forceRefresh) sessionStorage.removeItem(cacheKey);
+            const cachedData = sessionStorage.getItem(cacheKey);
 
             if(cachedData && !forceRefresh) {
                 this.costData = JSON.parse(cachedData);
@@ -115,7 +122,7 @@ function costManagement() {
                 .then(res => res.json())
                 .then(data => {
                     this.costData = data;
-                    sessionStorage.setItem('costData' + this.groupBy + this.tagKey, JSON.stringify(data));
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                 })
                 .catch(err => {
                     console.error('Failed to load cost data:', err);

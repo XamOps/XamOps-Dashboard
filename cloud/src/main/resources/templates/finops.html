@@ -57,7 +57,7 @@
                     </template>
                 </div>
                 
-                <!-- NEW: Budgets & Alerts Section -->
+                <!-- Budgets & Alerts Section -->
                 <div class="bg-white rounded-xl p-6 card-shadow">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="font-semibold text-gray-800">Budgets & Alerts</h3>
@@ -216,7 +216,7 @@
                 </div>
             </div>
             
-            <!-- NEW: Budget Creation Modal -->
+            <!-- Budget Creation Modal -->
             <div x-show="isBudgetModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isBudgetModalOpen = false">
                 <div class="bg-white rounded-lg p-8 w-full max-w-md" @click.stop>
                     <h3 class="text-lg font-bold mb-4">Create New Budget</h3>
@@ -263,7 +263,13 @@ function finopsReport() {
         },
         loadReport(forceRefresh = false) {
             this.isLoading = true;
-            const url = `/api/finops/report?forceRefresh=${forceRefresh}`;
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                console.error("No account selected");
+                this.isLoading = false;
+                return;
+            }
+            const url = `/api/finops/report?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`;
             fetch(url)
                 .then(res => res.json())
                 .then(data => {
@@ -319,7 +325,13 @@ function finopsReport() {
         getCostByTag() {
             if (!this.tagKey) return;
             this.isTagLoading = true;
-            fetch(`/api/finops/cost-by-tag?tagKey=${this.tagKey}`)
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                console.error("No account selected");
+                this.isTagLoading = false;
+                return;
+            }
+            fetch(`/api/finops/cost-by-tag?accountId=${selectedAccountId}&tagKey=${this.tagKey}`)
                 .then(res => res.json())
                 .then(data => {
                     this.renderTagChart(data);

@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -25,27 +26,27 @@ public class CloudK8sController {
     }
 
     @GetMapping("/clusters")
-    public ResponseEntity<List<K8sClusterInfo>> getClusters() throws ExecutionException, InterruptedException {
-        return ResponseEntity.ok(awsDataService.getEksClusterInfo().get());
+    public ResponseEntity<List<K8sClusterInfo>> getClusters(@RequestParam String accountId) throws ExecutionException, InterruptedException {
+        return ResponseEntity.ok(awsDataService.getEksClusterInfo(accountId).get());
     }
 
     @GetMapping("/clusters/{clusterName}/nodes")
-    public ResponseEntity<List<K8sNodeInfo>> getNodes(@PathVariable String clusterName) throws ExecutionException, InterruptedException {
-        return ResponseEntity.ok(awsDataService.getK8sNodes(clusterName).get());
+    public ResponseEntity<List<K8sNodeInfo>> getNodes(@RequestParam String accountId, @PathVariable String clusterName) throws ExecutionException, InterruptedException {
+        return ResponseEntity.ok(awsDataService.getK8sNodes(accountId, clusterName).get());
     }
 
     @GetMapping("/clusters/{clusterName}/namespaces")
-    public ResponseEntity<List<String>> getNamespaces(@PathVariable String clusterName) throws ExecutionException, InterruptedException {
-        return ResponseEntity.ok(awsDataService.getK8sNamespaces(clusterName).get());
+    public ResponseEntity<List<String>> getNamespaces(@RequestParam String accountId, @PathVariable String clusterName) throws ExecutionException, InterruptedException {
+        return ResponseEntity.ok(awsDataService.getK8sNamespaces(accountId, clusterName).get());
     }
 
     @GetMapping("/clusters/{clusterName}/namespaces/{namespace}/deployments")
-    public ResponseEntity<List<K8sDeploymentInfo>> getDeployments(@PathVariable String clusterName, @PathVariable String namespace) throws ExecutionException, InterruptedException {
-        return ResponseEntity.ok(awsDataService.getK8sDeployments(clusterName, namespace).get());
+    public ResponseEntity<List<K8sDeploymentInfo>> getDeployments(@RequestParam String accountId, @PathVariable String clusterName, @PathVariable String namespace) throws ExecutionException, InterruptedException {
+        return ResponseEntity.ok(awsDataService.getK8sDeployments(accountId, clusterName, namespace).get());
     }
 
     @GetMapping("/clusters/{clusterName}/namespaces/{namespace}/pods")
-    public ResponseEntity<List<K8sPodInfo>> getPods(@PathVariable String clusterName, @PathVariable String namespace) throws ExecutionException, InterruptedException {
-        return ResponseEntity.ok(awsDataService.getK8sPods(clusterName, namespace).get());
+    public ResponseEntity<List<K8sPodInfo>> getPods(@RequestParam String accountId, @PathVariable String clusterName, @PathVariable String namespace) throws ExecutionException, InterruptedException {
+        return ResponseEntity.ok(awsDataService.getK8sPods(accountId, clusterName, namespace).get());
     }
 }

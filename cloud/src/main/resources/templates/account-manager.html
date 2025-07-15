@@ -34,21 +34,19 @@
 
             <div class="flex-1 p-6 space-y-6">
                 <div class="bg-white rounded-lg p-6 shadow-sm border">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Accounts with master account</h2>
-                    <div class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Connected Accounts</h2>
+                    <div x-show="isLoading" class="text-center p-8"><i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                    <div x-show="!isLoading && accounts.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
                         <i class="fas fa-folder-open fa-3x text-gray-400"></i>
-                        <h3 class="mt-4 text-lg font-medium text-gray-900">You don't have any items yet</h3>
+                        <h3 class="mt-4 text-lg font-medium text-gray-900">No accounts connected yet</h3>
+                        <p class="mt-1 text-sm text-gray-500">Click "Add New Account" to get started.</p>
                     </div>
-                </div>
-
-                <div class="bg-white rounded-lg p-6 shadow-sm border">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Accounts without master account</h2>
-                    <div class="overflow-x-auto">
+                    <div x-show="!isLoading && accounts.length > 0" x-cloak class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-600">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                                 <tr>
                                     <th class="px-6 py-3">Name</th>
-                                    <th class="px-6 py-3">Id</th>
+                                    <th class="px-6 py-3">Account ID</th>
                                     <th class="px-6 py-3">Access</th>
                                     <th class="px-6 py-3">Connection</th>
                                     <th class="px-6 py-3">Status</th>
@@ -56,45 +54,59 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 font-medium text-gray-900">MachaDalo</td>
-                                    <td class="px-6 py-4">578460219112</td>
-                                    <td class="px-6 py-4">Read/write</td>
-                                    <td class="px-6 py-4">
-                                        <i class="fas fa-link text-green-500 mr-2"></i>Cross-account role
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800">
-                                            OK
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 ml-2"><i class="fas fa-sync-alt"></i></button>
-                                    </td>
-                                </tr>
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 font-medium text-gray-900">test</td>
-                                    <td class="px-6 py-4">605134457560</td>
-                                    <td class="px-6 py-4">Read/write</td>
-                                    <td class="px-6 py-4">
-                                        <i class="fas fa-link text-green-500 mr-2"></i>Cross-account role
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800">
-                                            OK
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
-                                        <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100 ml-2"><i class="fas fa-sync-alt"></i></button>
-                                    </td>
-                                </tr>
+                                <template x-for="account in accounts" :key="account.dbId">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium text-gray-900" x-text="account.name"></td>
+                                        <td class="px-6 py-4 font-mono" x-text="account.id || 'N/A'"></td>
+                                        <td class="px-6 py-4" x-text="account.access"></td>
+                                        <td class="px-6 py-4">
+                                            <i class="fas fa-link mr-2" :class="getStatusColor(account.status, 'icon')"></i>
+                                            <span x-text="account.connection"></span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full" :class="getStatusColor(account.status, 'badge')" x-text="account.status">
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-center space-x-2">
+                                            <button x-show="account.status === 'PENDING'" @click="openVerificationModal(account)" class="px-3 py-1.5 text-xs font-semibold bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600">Verify</button>
+                                            <button x-show="account.status !== 'PENDING'" class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
+                                            <button @click="removeAccount(account)" class="px-3 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-md shadow-sm hover:bg-red-700">Remove</button>
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
+
+            <!-- Verification Modal -->
+            <div x-show="isModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isModalOpen = false">
+                <div class="bg-white rounded-lg p-8 w-full max-w-lg shadow-xl" @click.stop>
+                     <h3 class="text-lg font-bold">Verify Account Connection</h3>
+                     <p class="text-sm text-gray-500 mt-1">Enter the details from the CloudFormation stack outputs for '<span x-text="verifyingAccount.name" class="font-semibold"></span>'.</p>
+                     
+                     <form @submit.prevent="verifyAccount" class="mt-6 space-y-4">
+                         <div>
+                             <label for="awsAccountId" class="block text-sm font-medium text-gray-700">AWS Account ID</label>
+                             <input type="text" id="awsAccountId" x-model="verificationDetails.awsAccountId" placeholder="123456789012" class="mt-1 form-input w-full rounded-md" required>
+                         </div>
+                         <div>
+                             <label for="roleName" class="block text-sm font-medium text-gray-700">Role Name</label>
+                             <input type="text" id="roleName" x-model="verificationDetails.roleName" placeholder="XamOps-ReadOnly-Role" class="mt-1 form-input w-full rounded-md" required>
+                         </div>
+                         <div x-show="verificationError" class="text-sm text-red-600 bg-red-50 p-3 rounded-md" x-text="verificationError"></div>
+                         <div class="mt-6 flex justify-end gap-3">
+                             <button type="button" @click="isModalOpen = false" class="px-4 py-2 text-sm bg-gray-200 rounded-md" :disabled="isVerifying">Cancel</button>
+                             <button type="submit" class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-md" :disabled="isVerifying">
+                                 <span x-show="!isVerifying">Verify & Connect</span>
+                                 <span x-show="isVerifying"><i class="fas fa-spinner fa-spin mr-2"></i>Verifying...</span>
+                             </button>
+                         </div>
+                     </form>
+                </div>
+            </div>
+
         </main>
     </div>
 </div>
@@ -102,7 +114,93 @@
 <script>
 function accountManager() {
     return {
-        // Add any necessary JavaScript logic here
+        isLoading: true,
+        accounts: [],
+        isModalOpen: false,
+        isVerifying: false,
+        verificationError: '',
+        verifyingAccount: {},
+        verificationDetails: {
+            awsAccountId: '',
+            roleName: '',
+            externalId: ''
+        },
+        init() {
+            this.fetchAccounts();
+        },
+        fetchAccounts() {
+            this.isLoading = true;
+            fetch('/api/account-manager/accounts')
+                .then(res => res.json())
+                .then(data => {
+                    this.accounts = data;
+                })
+                .catch(err => console.error('Failed to load accounts:', err))
+                .finally(() => this.isLoading = false);
+        },
+        openVerificationModal(account) {
+            this.verifyingAccount = account;
+            this.verificationDetails.externalId = this.verifyingAccount.externalId; 
+            this.verificationError = '';
+            this.isModalOpen = true;
+        },
+        verifyAccount() {
+            this.isVerifying = true;
+            this.verificationError = '';
+            fetch('/api/account-manager/verify-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.verificationDetails)
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.message || 'Verification failed.') });
+                }
+                return res.json();
+            })
+            .then(data => {
+                this.isModalOpen = false;
+                this.fetchAccounts();
+            })
+            .catch(err => {
+                this.verificationError = `Error: ${err.message}`;
+            })
+            .finally(() => {
+                this.isVerifying = false;
+            });
+        },
+        removeAccount(account) {
+            if (!confirm(`Are you sure you want to remove the account "${account.name}"? This action cannot be undone.`)) {
+                return;
+            }
+            fetch(`/api/account-manager/accounts/${account.dbId}`, {
+                method: 'DELETE'
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('Failed to remove account.');
+                }
+                // Remove the account from the local list for immediate UI update
+                this.accounts = this.accounts.filter(acc => acc.dbId !== account.dbId);
+                // If the removed account was the selected one, clear it from session and reload
+                if (sessionStorage.getItem('selectedAccountId') === account.id) {
+                    sessionStorage.removeItem('selectedAccountId');
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                alert(`Error: ${err.message}`);
+                console.error('Failed to remove account:', err);
+            });
+        },
+        getStatusColor(status, type) {
+            const colors = {
+                'CONNECTED': { badge: 'bg-green-100 text-green-800', icon: 'text-green-500' },
+                'PENDING': { badge: 'bg-yellow-100 text-yellow-800', icon: 'text-yellow-500' },
+                'FAILED': { badge: 'bg-red-100 text-red-800', icon: 'text-red-500' }
+            };
+            return (colors[status] && colors[status][type]) || 'bg-gray-100 text-gray-800';
+        }
     }
 }
 </script>

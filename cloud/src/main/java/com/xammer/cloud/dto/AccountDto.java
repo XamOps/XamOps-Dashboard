@@ -8,10 +8,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AccountDto {
+    private Long dbId;
     private String name;
-    private String id;
+    private String id; // AWS Account ID
     private String access;
     private String connection;
     private String status;
-    private String roleArn; // To store after creation
+    private String roleArn;
+    private String externalId; // ADDED: To pass the externalId to the frontend
 }

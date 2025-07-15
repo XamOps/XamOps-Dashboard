@@ -35,7 +35,13 @@
                     <p class="mt-4 text-gray-600">Fetching Quota Details...</p>
                 </div>
 
-                <div x-show="!isLoading" x-cloak class="bg-white rounded-lg p-6 shadow-sm border">
+                <div x-show="!isLoading && quotas.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                    <i class="fas fa-check-circle fa-4x text-green-500"></i>
+                    <h3 class="mt-4 text-lg font-medium text-gray-900">No Quota Issues Found</h3>
+                    <p class="mt-1 text-sm text-gray-500">All service quotas are within normal limits.</p>
+                </div>
+
+                <div x-show="!isLoading && quotas.length > 0" x-cloak class="bg-white rounded-lg p-6 shadow-sm border">
                     <table class="w-full text-sm text-left text-gray-600">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
@@ -79,14 +85,29 @@ function quotaAlerts() {
         isLoading: true,
         quotas: [],
         init() {
-            fetch('/api/cloudguard/quotas')
-                .then(res => res.json())
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isLoading = false;
+                console.warn('No account selected. Cannot fetch quota data.');
+                return;
+            }
+
+            fetch(`/api/cloudguard/quotas?accountId=${selectedAccountId}`)
+                .then(res => {
+                    if (!res.ok) throw new Error('Failed to fetch quota data');
+                    return res.json();
+                })
                 .then(data => {
-                    this.quotas = data.sort((a, b) => b.usage - a.usage); // Sort by usage
-                    this.isLoading = false;
+                    this.quotas = data.sort((a, b) => {
+                        const statusOrder = { 'CRITICAL': 0, 'WARN': 1, 'OK': 2 };
+                        return statusOrder[a.status] - statusOrder[b.status];
+                    });
                 })
                 .catch(err => {
                     console.error('Failed to load quota data', err);
+                    this.quotas = [];
+                })
+                .finally(() => {
                     this.isLoading = false;
                 });
         }

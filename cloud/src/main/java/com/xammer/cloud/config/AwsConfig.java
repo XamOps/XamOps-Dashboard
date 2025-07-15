@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
@@ -30,27 +31,39 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.servicequotas.ServiceQuotasClient;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
-import software.amazon.awssdk.services.sts.StsClient; // ADDED
+import software.amazon.awssdk.services.sts.StsClient;
 
 @Configuration
 public class AwsConfig {
 
     private final String region = "ap-south-1";
 
+    private ProfileCredentialsProvider getCredentialsProvider() {
+        return ProfileCredentialsProvider.create();
+    }
+
     @Bean
     public BudgetsClient budgetsClient() {
-        return BudgetsClient.builder().region(Region.US_EAST_1).build();
+        return BudgetsClient.builder()
+                .region(Region.US_EAST_1)
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
     
     @Bean
     public CloudFormationClient cloudFormationClient() {
-        return CloudFormationClient.builder().region(Region.of(region)).build();
+        return CloudFormationClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
-    // ADDED: Bean for StsClient
     @Bean
     public StsClient stsClient() {
-        return StsClient.builder().region(Region.of(region)).build();
+        return StsClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
     
     @Bean("awsTaskExecutor")
@@ -64,118 +77,186 @@ public class AwsConfig {
         return executor;
     }
 
-    // --- Existing Clients ---
     @Bean
     public Ec2Client ec2Client() {
-        return Ec2Client.builder().region(Region.of(region)).build();
+        return Ec2Client.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public IamClient iamClient() {
-        return IamClient.builder().region(Region.AWS_GLOBAL).build();
+        return IamClient.builder()
+                .region(Region.AWS_GLOBAL)
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public EcsClient ecsClient() {
-        return EcsClient.builder().region(Region.of(region)).build();
+        return EcsClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public EksClient eksClient() {
-        return EksClient.builder().region(Region.of(region)).build();
+        return EksClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public LambdaClient lambdaClient() {
-        return LambdaClient.builder().region(Region.of(region)).build();
+        return LambdaClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public CloudWatchClient cloudWatchClient() {
-        return CloudWatchClient.builder().region(Region.of(region)).build();
+        return CloudWatchClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public CostExplorerClient costExplorerClient() {
-        return CostExplorerClient.builder().region(Region.US_EAST_1).build();
+        return CostExplorerClient.builder()
+                .region(Region.US_EAST_1)
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public ComputeOptimizerClient computeOptimizerClient() {
-        return ComputeOptimizerClient.builder().region(Region.of(region)).build();
+        return ComputeOptimizerClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public PricingClient pricingClient() {
-        return PricingClient.builder().region(Region.US_EAST_1).build();
+        return PricingClient.builder()
+                .region(Region.US_EAST_1)
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public RdsClient rdsClient() {
-        return RdsClient.builder().region(Region.of(region)).build();
+        return RdsClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public S3Client s3Client() {
-        return S3Client.builder().region(Region.of(region)).build();
+        return S3Client.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public ElasticLoadBalancingV2Client elbv2Client() {
-        return ElasticLoadBalancingV2Client.builder().region(Region.of(region)).build();
+        return ElasticLoadBalancingV2Client.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public AutoScalingClient autoScalingClient() {
-        return AutoScalingClient.builder().region(Region.of(region)).build();
+        return AutoScalingClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public ElastiCacheClient elastiCacheClient() {
-        return ElastiCacheClient.builder().region(Region.of(region)).build();
+        return ElastiCacheClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public DynamoDbClient dynamoDbClient() {
-        return DynamoDbClient.builder().region(Region.of(region)).build();
+        return DynamoDbClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public EcrClient ecrClient() {
-        return EcrClient.builder().region(Region.of(region)).build();
+        return EcrClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public Route53Client route53Client() {
-        return Route53Client.builder().region(Region.AWS_GLOBAL).build();
+        return Route53Client.builder()
+                .region(Region.AWS_GLOBAL)
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public SnsClient snsClient() {
-        return SnsClient.builder().region(Region.of(region)).build();
+        return SnsClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public SqsClient sqsClient() {
-        return SqsClient.builder().region(Region.of(region)).build();
+        return SqsClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public CloudTrailClient cloudTrailClient() {
-        return CloudTrailClient.builder().region(Region.of(region)).build();
+        return CloudTrailClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public AcmClient acmClient() {
-        return AcmClient.builder().region(Region.of(region)).build();
+        return AcmClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 
     @Bean
     public CloudWatchLogsClient cloudWatchLogsClient() {
-        return CloudWatchLogsClient.builder().region(Region.of(region)).build();
+        return CloudWatchLogsClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
     @Bean
     public ServiceQuotasClient serviceQuotasClient() {
-        return ServiceQuotasClient.builder().region(Region.of(region)).build();
+        return ServiceQuotasClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(getCredentialsProvider())
+                .build();
     }
 }

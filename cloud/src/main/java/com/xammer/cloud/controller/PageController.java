@@ -18,7 +18,7 @@ public class PageController {
 
     @GetMapping("/login")
     public String loginPage() {
-        return "login"; // This maps the URL to the login.html template
+        return "login"; 
     }
 
     @GetMapping("/cloudlist")
@@ -69,5 +69,10 @@ public class PageController {
     @GetMapping("/add-account")
     public String addAccountPage() {
         return "add-account";
+    }
+
+    @GetMapping("/cost")
+    public String costPage() {
+        return "cost";
     }
 }

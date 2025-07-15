@@ -197,6 +197,7 @@ function cloudK8s() {
         deployments: [],
         pods: [],
         activeTab: 'nodes',
+        selectedAccountId: null,
         tabs: [
             { name: 'nodes', label: 'Nodes', icon: 'fa-server' },
             { name: 'deployments', label: 'Deployments', icon: 'fa-box' },
@@ -210,6 +211,12 @@ function cloudK8s() {
 
         // --- Methods ---
         init() {
+            this.selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!this.selectedAccountId) {
+                console.error("No account selected!");
+                this.isLoading.clusters = false;
+                return;
+            }
             this.fetchClusters();
         },
 
@@ -222,18 +229,19 @@ function cloudK8s() {
 
         fetchClusters(force = false) {
             this.isLoading.clusters = true;
-            if (force) sessionStorage.removeItem('k8sClusters');
-            const cached = sessionStorage.getItem('k8sClusters');
+            const cacheKey = `k8sClusters-${this.selectedAccountId}`;
+            if (force) sessionStorage.removeItem(cacheKey);
+            const cached = sessionStorage.getItem(cacheKey);
             if (cached && !force) {
                 this.clusters = JSON.parse(cached);
                 this.isLoading.clusters = false;
                 return;
             }
-            fetch('/api/k8s/clusters')
+            fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
                     this.clusters = data;
-                    sessionStorage.setItem('k8sClusters', JSON.stringify(data));
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                 })
                 .catch(err => console.error('Failed to fetch clusters', err))
                 .finally(() => this.isLoading.clusters = false);
@@ -256,7 +264,7 @@ function cloudK8s() {
 
         fetchData(type, url, force = false) {
             this.isLoading[type] = true;
-            const key = `k8s-${this.selectedClusterName}-${type}-${this.selectedNamespace || ''}`;
+            const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-${type}-${this.selectedNamespace || ''}`;
             if (force) sessionStorage.removeItem(key);
             const cached = sessionStorage.getItem(key);
             if (cached && !force) {
@@ -275,12 +283,12 @@ function cloudK8s() {
         },
 
         fetchNodes(force = false) {
-            this.fetchData('nodes', `/api/k8s/clusters/${this.selectedClusterName}/nodes`, force);
+            this.fetchData('nodes', `/api/k8s/clusters/${this.selectedClusterName}/nodes?accountId=${this.selectedAccountId}`, force);
         },
 
         fetchNamespaces(force = false) {
             this.isLoading.namespaces = true;
-             const key = `k8s-${this.selectedClusterName}-namespaces`;
+             const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-namespaces`;
             if (force) sessionStorage.removeItem(key);
             const cached = sessionStorage.getItem(key);
             if(cached && !force){
@@ -289,7 +297,7 @@ function cloudK8s() {
                 this.onNamespaceChange(force);
                 return;
             }
-            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces`)
+            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
                     this.namespaces = data;
@@ -304,11 +312,11 @@ function cloudK8s() {
         },
 
         fetchDeployments(force = false) {
-            this.fetchData('deployments', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/deployments`, force);
+            this.fetchData('deployments', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/deployments?accountId=${this.selectedAccountId}`, force);
         },
 
         fetchPods(force = false) {
-            this.fetchData('pods', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods`, force);
+            this.fetchData('pods', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods?accountId=${this.selectedAccountId}`, force);
         }
     }
 }

@@ -27,7 +27,7 @@
                     <h1 class="text-xl font-semibold text-gray-800">Rightsizing</h1>
                     <p class="text-xs text-gray-500">View and manage optimization recommendations</p>
                 </div>
-                <button @click="loadRecommendations()" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                <button @click="loadRecommendations(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
                     <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
                     <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
                 </button>
@@ -93,7 +93,9 @@
                                         <td class="px-6 py-4 font-semibold text-green-700" x-text="'$' + rec.estimatedMonthlySavings.toFixed(2)"></td>
                                         <td class="px-6 py-4 text-xs" x-text="rec.recommendationReason"></td>
                                         <td class="px-6 py-4 text-center">
-                                            <button disabled class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                            <button @click="handleAction('apply', rec)" 
+                                                    :disabled="!isActionable(rec, 'apply')"
+                                                    class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
                                                 <i class="fas fa-wrench mr-2"></i>Apply
                                             </button>
                                         </td>
@@ -121,12 +123,29 @@ function rightsizing() {
             this.loadRecommendations();
         },
 
-        loadRecommendations() {
+        loadRecommendations(forceRefresh = false) {
             this.isLoading = true;
-            fetch('/api/rightsizing/recommendations')
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                console.error("No account selected");
+                this.isLoading = false;
+                return;
+            }
+            const cacheKey = `rightsizingData-${selectedAccountId}`;
+            if(forceRefresh) sessionStorage.removeItem(cacheKey);
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if(cachedData && !forceRefresh) {
+                this.recommendations = JSON.parse(cachedData);
+                this.isLoading = false;
+                return;
+            }
+
+            fetch(`/api/rightsizing/recommendations?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
                     this.recommendations = data;
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                 })
                 .catch(err => console.error('Failed to load rightsizing recommendations:', err))
                 .finally(() => this.isLoading = false);
@@ -156,6 +175,40 @@ function rightsizing() {
                 return acc;
             }, {});
             return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+        },
+
+        isActionable(recommendation, action) {
+            // Currently, only EC2 rightsizing is actionable
+            return recommendation.service === 'EC2' && action === 'apply';
+        },
+
+        handleAction(action, recommendation) {
+            const confirmation = confirm(`Are you sure you want to ${action} this recommendation for "${recommendation.resourceId}"? This will stop and modify the instance.`);
+            if (!confirmation) return;
+
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            const endpoint = `/api/actions/ec2/${recommendation.resourceId}/rightsize?accountId=${selectedAccountId}`;
+
+            fetch(endpoint, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newInstanceType: recommendation.recommendedType })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.error || 'Action failed') });
+                }
+                return res.json();
+            })
+            .then(data => {
+                alert(`Success: ${data.message}`);
+                // Visually remove the recommendation
+                this.recommendations = this.recommendations.filter(r => r.resourceId !== recommendation.resourceId);
+            })
+            .catch(err => {
+                alert(`Error: ${err.message}`);
+                console.error('Action failed:', err);
+            });
         }
     }
 }

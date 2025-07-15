@@ -209,7 +209,6 @@
                                             <td class="px-6 py-4" x-text="rec.reason"></td>
                                             <td class="px-6 py-4 text-right font-mono text-green-600" x-text="`$` + rec.estimatedMonthlySavings.toFixed(2)"></td>
                                             <td class="px-6 py-4 text-center">
-                                                <!-- UPDATED: Button is now enabled and calls a modal -->
                                                 <button @click="openModificationModal(rec)" class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition flex items-center">
                                                     <i class="fas fa-wrench mr-2"></i>Apply
                                                 </button>
@@ -268,7 +267,7 @@
                         <h3 class="text-lg font-bold">"What-If" Analysis</h3>
                         <button @click="isAnalysisModalOpen = false" class="text-gray-400 hover:text-gray-600">&times;</button>
                     </div>
-                    <div x-show="analysisData" class="mt-4 space-y-4">
+                    <div x-if="analysisData" class="mt-4 space-y-4">
                         <p class="text-sm">Analysis for purchasing <strong x-text="analysisData.recommendedInstances"></strong> x <strong x-text="analysisData.instanceFamily"></strong> for <strong x-text="analysisData.term"></strong>.</p>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -298,11 +297,11 @@
                 </div>
             </div>
 
-            <!-- ADDED: Modification Confirmation Modal -->
+            <!-- Modification Confirmation Modal -->
             <div x-show="isModificationModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isModificationModalOpen = false">
                 <div class="bg-white rounded-lg p-8 w-full max-w-lg shadow-xl" @click.stop>
                      <h3 class="text-lg font-bold">Confirm Modification</h3>
-                     <div x-show="modificationDetails" class="mt-4 text-sm space-y-2">
+                     <div x-if="modificationDetails" class="mt-4 text-sm space-y-2">
                         <p>Are you sure you want to modify this reservation?</p>
                         <p><strong>ID:</strong> <span class="font-mono" x-text="modificationDetails.reservationId"></span></p>
                         <p><strong>From:</strong> <span class="font-semibold text-orange-600" x-text="modificationDetails.currentInstanceType"></span></p>
@@ -319,7 +318,7 @@
                 </div>
             </div>
 
-            <!-- ADDED: Toast Notification -->
+            <!-- Toast Notification -->
             <div x-show="toast.show" x-transition:enter="transform ease-out duration-300" x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2" x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="toast fixed top-5 right-5 w-full max-w-xs p-4 rounded-lg shadow-lg text-white" :class="toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'">
                 <div class="flex items-start">
                     <i class="fas mr-3 mt-1" :class="toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
@@ -340,14 +339,14 @@ function reservationManagement() {
         isLoading: true,
         isTagLoading: false,
         isAnalysisModalOpen: false,
-        isModificationModalOpen: false, // ADDED
-        isModifying: false, // ADDED
+        isModificationModalOpen: false,
+        isModifying: false,
         tagKey: 'cost-center',
         activeTagKey: '',
         costByTagData: [],
-        analysisData: null,
-        modificationDetails: null, // ADDED
-        toast: { show: false, message: '', type: 'success' }, // ADDED
+        analysisData: {},
+        modificationDetails: {},
+        toast: { show: false, message: '', type: 'success' },
         data: {
             analysis: null,
             purchaseRecommendations: [],
@@ -366,8 +365,15 @@ function reservationManagement() {
 
         loadReservationData(forceRefresh = false) {
             this.isLoading = true;
-            if (forceRefresh) sessionStorage.removeItem('reservationData');
-            const cachedData = sessionStorage.getItem('reservationData');
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                console.error("No account selected");
+                this.isLoading = false;
+                return;
+            }
+            const cacheKey = `reservationData-${selectedAccountId}`;
+            if (forceRefresh) sessionStorage.removeItem(cacheKey);
+            const cachedData = sessionStorage.getItem(cacheKey);
 
             if (cachedData && !forceRefresh) {
                 this.data = JSON.parse(cachedData);
@@ -379,11 +385,11 @@ function reservationManagement() {
                 return;
             }
 
-            fetch('/api/reservations')
+            fetch(`/api/reservations?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
                     this.data = data;
-                    sessionStorage.setItem('reservationData', JSON.stringify(data));
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                     setTimeout(() => {
                         this.renderHistoricalChart();
                         this.renderExpiryChart();
@@ -405,7 +411,8 @@ function reservationManagement() {
             }
             this.isTagLoading = true;
             this.activeTagKey = this.tagKey;
-            fetch(`/api/reservations/cost-by-tag?tagKey=${this.tagKey}`)
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            fetch(`/api/reservations/cost-by-tag?accountId=${selectedAccountId}&tagKey=${this.tagKey}`)
                 .then(res => res.json())
                 .then(data => {
                     this.costByTagData = data;
@@ -425,16 +432,15 @@ function reservationManagement() {
             this.isAnalysisModalOpen = true;
         },
 
-        // ADDED: Function to open the modification confirmation modal
         openModificationModal(recommendation) {
             this.modificationDetails = recommendation;
             this.isModificationModalOpen = true;
         },
 
-        // ADDED: Function to handle the API call for modification
         applyModification() {
             if (!this.modificationDetails) return;
             this.isModifying = true;
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
 
             const inventoryItem = this.data.inventory.find(item => item.reservationId === this.modificationDetails.reservationId);
             if (!inventoryItem) {
@@ -449,7 +455,7 @@ function reservationManagement() {
                 instanceCount: inventoryItem.instanceCount 
             };
 
-            fetch('/api/reservations/modify', {
+            fetch(`/api/reservations/modify?accountId=${selectedAccountId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
@@ -463,7 +469,7 @@ function reservationManagement() {
             .then(data => {
                 this.showToast('Reservation modification submitted successfully!', 'success');
                 this.isModificationModalOpen = false;
-                this.loadReservationData(true); // Refresh all data
+                this.loadReservationData(true);
             })
             .catch(err => {
                 this.showToast(`Error: ${err.message}`, 'error');
@@ -473,7 +479,6 @@ function reservationManagement() {
             });
         },
         
-        // ADDED: Helper function to show toast notifications
         showToast(message, type = 'success') {
             this.toast.message = message;
             this.toast.type = type;

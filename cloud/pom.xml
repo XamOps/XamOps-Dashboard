@@ -18,7 +18,6 @@
         <java.version>17</java.version>
         <aws.java.sdk.version>2.20.0</aws.java.sdk.version>
         <springdoc.version>1.6.12</springdoc.version>
-        <!-- MODIFIED: Using a stable K8s client version -->
         <k8s.client.version>15.0.1</k8s.client.version>
     </properties>
 
@@ -64,7 +63,14 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-        <!-- H2 Database for in-memory persistence -->
+        <!-- PostgreSQL Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- H2 Database (can be removed or scoped to test if no longer needed for main app) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
@@ -191,8 +197,7 @@
             <artifactId>cloudformation</artifactId>
         </dependency>
 
-        <!-- MODIFIED: Corrected Kubernetes Java Client Dependencies -->
-        <!-- Replace your current Kubernetes dependencies with these: -->
+        <!-- Kubernetes Java Client Dependencies -->
         <dependency>
             <groupId>io.kubernetes</groupId>
             <artifactId>client-java</artifactId>

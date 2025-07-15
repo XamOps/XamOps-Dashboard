@@ -141,7 +141,6 @@
                                         <td class="px-6 py-4" x-text="resource.reason"></td>
                                         <td class="px-6 py-4 text-center">
                                             <div class="flex justify-center gap-2">
-                                                <!-- UPDATED: Added click handler and enabled button for specific types -->
                                                 <button 
                                                     @click="handleAction('delete', resource)"
                                                     :disabled="!isActionable(resource, 'delete')"
@@ -175,7 +174,15 @@ function wasteManagement() {
         },
 
         loadWastedResources(forceRefresh = false) {
-            const cachedData = sessionStorage.getItem('wasteData');
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                console.error("No account selected");
+                this.isLoading = false;
+                return;
+            }
+
+            const cacheKey = `wasteData-${selectedAccountId}`;
+            const cachedData = sessionStorage.getItem(cacheKey);
 
             if (!forceRefresh && cachedData) {
                 this.wastedResources = JSON.parse(cachedData);
@@ -184,13 +191,13 @@ function wasteManagement() {
             }
 
             this.isLoading = true;
-            fetch(`${window.location.origin}/api/waste`)
+            fetch(`/api/waste?accountId=${selectedAccountId}`)
                 .then(res => {
                     if (!res.ok) throw new Error('Network response was not ok.');
                     return res.json();
                 })
                 .then(data => {
-                    sessionStorage.setItem('wasteData', JSON.stringify(data));
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                     this.wastedResources = data;
                 })
                 .catch(err => {
@@ -244,7 +251,6 @@ function wasteManagement() {
 
         isActionable(resource, action) {
             if (action === 'delete') {
-                // Only allow deleting unattached EBS volumes for now
                 return resource.resourceType === 'EBS Volume' && resource.reason === 'Unattached Volume';
             }
             return false;
@@ -255,8 +261,9 @@ function wasteManagement() {
             if (!confirmation) return;
 
             let endpoint = '';
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (resource.resourceType === 'EBS Volume' && action === 'delete') {
-                endpoint = `/api/actions/ebs/${resource.resourceId}/delete`;
+                endpoint = `/api/actions/ebs/${resource.resourceId}/delete?accountId=${selectedAccountId}`;
             } else {
                 alert('This action is not yet supported for this resource type.');
                 return;
@@ -271,7 +278,6 @@ function wasteManagement() {
                 })
                 .then(data => {
                     alert(`Success: ${data.message}`);
-                    // Remove the item from the list visually
                     this.wastedResources = this.wastedResources.filter(r => r.resourceId !== resource.resourceId);
                 })
                 .catch(err => {

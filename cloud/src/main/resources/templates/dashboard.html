@@ -28,7 +28,7 @@
         .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
     </style>
 </head>
-<body x-data="{ isModalOpen: false, modalTitle: '', modalResourceId: '' }"
+<body x-data="dashboardApp()"
       @open-metrics-modal.window="
         isModalOpen = true;
         modalTitle = $event.detail.title;
@@ -36,6 +36,7 @@
         fetchMetricsForModal($event.detail.resourceId);
       ">
 
+    <!-- Full-screen loading overlay, only for initial data fetch -->
     <div id="loadingState" class="fixed inset-0 flex items-center justify-center bg-white z-50">
         <div class="flex flex-col items-center">
              <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -46,6 +47,7 @@
         <div><h2 class="text-2xl font-bold">Error</h2><p id="errorMessage"></p></div>
     </div>
 
+    <!-- Modal for metrics -->
     <div x-show="isModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-40">
         <div class="relative mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
             <div class="flex justify-between items-center pb-3 border-b">
@@ -63,353 +65,462 @@
         </div>
     </div>
 
+    <!-- Main Application Body -->
     <div id="appBody" class="hidden">
         <div class="flex">
+            <!-- Sidebar -->
             <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20">
                 <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
             </aside>
 
+             <!-- Main Content Area -->
              <div class="ml-64 flex-1">
                  <main class="flex-1 p-6 bg-gray-50 space-y-6">
                     <header class="h-16 flex items-center justify-between bg-white px-6 -mx-6 -mt-6 mb-6 border-b sticky top-0 z-10">
                         <div>
                             <span id="updateTime" class="text-gray-500 text-sm"></span>
                         </div>
-                        <button id="refreshButton" onclick="fetchDashboardData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800">
+                        <button id="refreshButton" @click="fetchDashboardData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800">
                             <i class="fas fa-sync-alt mr-2"></i>
                             <span>Refresh</span>
                         </button>
                     </header>
 
-                    <div id="quotaAlertBox" class="hidden bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+                    <!-- This div is shown when no account is selected -->
+                    <div id="unselectedState" class="hidden text-center py-24">
+                        <i class="fas fa-mouse-pointer fa-4x text-gray-400"></i>
+                        <h3 class="mt-4 text-lg font-semibold text-gray-700">Welcome to XamOps</h3>
+                        <p class="text-gray-500">Please select an account from the sidebar to view its dashboard.</p>
+                    </div>
+
+                    <!-- This div contains the actual dashboard content -->
+                    <div id="dashboardContent" class="hidden space-y-6">
+
+                        <!-- AI Smart Advisor -->
+                        <div class="bg-white p-6 rounded-lg shadow-sm border border-indigo-200">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-semibold text-gray-700 flex items-center">
+                                    <i class="fas fa-wand-magic-sparkles text-indigo-500 mr-3"></i>
+                                    AI Smart Advisor
+                                </h3>
+                                <button @click="generateAiSummary()" :disabled="ai.isLoading" class="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:bg-indigo-300">
+                                    <span x-show="!ai.isLoading">Generate Summary</span>
+                                    <span x-show="ai.isLoading"><i class="fas fa-spinner fa-spin mr-2"></i>Thinking...</span>
+                                </button>
                             </div>
-                            <div id="quotaAlertContent" class="ml-3">
+                            <div x-show="ai.isLoading" class="space-y-2">
+                                <div class="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
+                                <div class="h-4 bg-gray-200 rounded w-5/6 animate-pulse"></div>
+                                <div class="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
+                            </div>
+                            <div x-show="!ai.isLoading && ai.summary" x-cloak class="text-gray-600 text-sm leading-relaxed bg-indigo-50 p-4 rounded-md" x-html="ai.summary"></div>
+                            <div x-show="!ai.isLoading && ai.error" x-cloak class="text-red-600 text-sm" x-text="ai.error"></div>
+                        </div>
+
+                        <div id="quotaAlertBox" class="hidden bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-exclamation-triangle text-yellow-500"></i>
                                 </div>
+                                <div id="quotaAlertContent" class="ml-3"></div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="bg-white p-6 rounded-lg shadow-sm">
-                        <h3 id="regionsTitle" class="font-semibold mb-4 text-gray-700"></h3>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div id="highcharts-map-container" class="md:col-span-2" style="height: 400px;"></div>
-                            <div id="regionList" class="space-y-3 overflow-y-auto" style="max-height: 380px;"></div>
+                        <div class="bg-white p-6 rounded-lg shadow-sm">
+                            <h3 id="regionsTitle" class="font-semibold mb-4 text-gray-700"></h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div id="highcharts-map-container" class="md:col-span-2" style="height: 400px;"></div>
+                                <div id="regionList" class="space-y-3 overflow-y-auto" style="max-height: 380px;"></div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3><div id="resourceInventory" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">CloudWatch Global</h3><div id="cloudWatchStatus" class="grid grid-cols-3 gap-4 text-center"></div></div></div>
-                    
-                    <div class="bg-white p-6 rounded-lg shadow-sm space-y-8">
-                        <div id="optimizationHub"></div>
-                        <div id="ec2RecSection"></div>
-                        <div id="costAnomalySection"></div>
-                        <div id="ebsRecSection"></div>
-                        <div id="lambdaRecSection"></div>
-                        <div id="riAnalysisSection"></div>
-                        <div id="riPurchaseRecSection"></div>
-                    </div>
+                        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3><div id="resourceInventory" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">CloudWatch Global</h3><div id="cloudWatchStatus" class="grid grid-cols-3 gap-4 text-center"></div></div></div>
+                        
+                        <div class="bg-white p-6 rounded-lg shadow-sm space-y-8">
+                            <div id="optimizationHub"></div>
+                            <div id="ec2RecSection"></div>
+                            <div id="costAnomalySection"></div>
+                            <div id="ebsRecSection"></div>
+                            <div id="lambdaRecSection"></div>
+                            <div id="riAnalysisSection"></div>
+                            <div id="riPurchaseRecSection"></div>
+                        </div>
 
-                    <div class="grid gap-6 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3><canvas id="costHistoryChart"></canvas></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Insights</h3><div id="securityInsights" class="space-y-4"></div></div></div>
-                    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3><div class="overflow-y-auto max-h-96"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead><tbody id="billingSummary"></tbody></table></div></div><div class="space-y-6"><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Your Savings</h3><div id="savingsSummary"></div></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">IAM Resources</h3><div id="iamResources" class="space-y-3"></div></div></div></div>
+                        <div class="grid gap-6 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3><canvas id="costHistoryChart"></canvas></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Insights</h3><div id="securityInsights" class="space-y-4"></div></div></div>
+                        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3><div class="overflow-y-auto max-h-96"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead><tbody id="billingSummary"></tbody></table></div></div><div class="space-y-6"><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">Your Savings</h3><div id="savingsSummary"></div></div><div class="bg-white p-6 rounded-lg shadow-sm"><h3 class="font-semibold mb-4 text-gray-700">IAM Resources</h3><div id="iamResources" class="space-y-3"></div></div></div></div>
+                    </div>
                 </main>
             </div>
         </div>
     </div>
 
     <script>
-    // --- Global variables to hold chart instances ---
-    let costHistoryChartInstance = null;
-    let costAnomalyChartInstance = null;
-    let metricsChartInstance = null;
-
-    const formatCurrency = (num) => '$' + (num != null ? num.toFixed(2) : '0.00');
-    const emptyStateHtml = (title) => `<div class="text-center py-8 px-4 border-2 border-dashed rounded-lg"><h3 class="mt-2 text-sm font-medium text-gray-900">${title}</h3></div>`;
-
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchDashboardData(false);
-    });
-
-    function fetchDashboardData(forceRefresh = false) {
-        const loadingEl = document.getElementById('loadingState');
-        const errorEl = document.getElementById('errorState');
-        const errorMessageEl = document.getElementById('errorMessage');
-        const appBodyEl = document.getElementById('appBody');
-        const refreshButton = document.getElementById('refreshButton').querySelector('i');
-
-        if (forceRefresh) {
-            sessionStorage.removeItem('dashboardData');
-            loadingEl.classList.remove('hidden');
-            appBodyEl.classList.add('hidden');
-            refreshButton.classList.add('fa-spin');
-        }
-
-        const cachedData = sessionStorage.getItem('dashboardData');
-
-        if (cachedData && !forceRefresh) {
-            populatePage(JSON.parse(cachedData));
-            loadingEl.classList.add('hidden');
-            appBodyEl.classList.remove('hidden');
-            return;
-        }
-
-        const apiUrl = forceRefresh 
-            ? `${window.location.origin}/api/dashboard?force=true` 
-            : `${window.location.origin}/api/dashboard`;
-
-        fetch(apiUrl)
-            .then(response => {
-                if (!response.ok) {
-                    if (response.redirected) { window.location.href = response.url; return; }
-                    throw new Error(`HTTP error! status: ${response.status}`);
+    function dashboardApp() {
+        return {
+            isModalOpen: false,
+            modalTitle: '',
+            modalResourceId: '',
+            ai: {
+                isLoading: false,
+                summary: '',
+                error: ''
+            },
+            
+            generateAiSummary() {
+                this.ai.isLoading = true;
+                this.ai.summary = '';
+                this.ai.error = '';
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                if (!selectedAccountId) {
+                    this.ai.error = "Please select an account first.";
+                    this.ai.isLoading = false;
+                    return;
                 }
-                return response.json();
-            })
-            .then(data => {
-                if (!data) return;
-                sessionStorage.setItem('dashboardData', JSON.stringify(data));
-                populatePage(data);
-                appBodyEl.classList.remove('hidden');
-            })
-            .catch(error => {
-                console.error('Failed to fetch dashboard data:', error);
-                errorMessageEl.textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
-                errorEl.classList.remove('hidden');
-            })
-            .finally(() => {
-                loadingEl.classList.add('hidden');
+
+                fetch(`/api/advisor/summary?accountId=${selectedAccountId}`)
+                    .then(res => {
+                        if (!res.ok) {
+                            throw new Error('Failed to get AI summary. The advisor may be offline.');
+                        }
+                        return res.json();
+                    })
+                    .then(data => {
+                        this.ai.summary = data.summary.replace(/\\n/g, '<br>');
+                    })
+                    .catch(err => {
+                        this.ai.error = err.message;
+                    })
+                    .finally(() => {
+                        this.ai.isLoading = false;
+                    });
+            },
+
+            fetchDashboardData(forceRefresh = false) {
+                const loadingEl = document.getElementById('loadingState');
+                const errorEl = document.getElementById('errorState');
+                const errorMessageEl = document.getElementById('errorMessage');
+                const appBodyEl = document.getElementById('appBody');
+                const refreshButton = document.getElementById('refreshButton').querySelector('i');
+                const unselectedStateEl = document.getElementById('unselectedState');
+                const dashboardContentEl = document.getElementById('dashboardContent');
+
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                
+                if (!selectedAccountId) {
+                    loadingEl.classList.add('hidden');
+                    appBodyEl.classList.remove('hidden');
+                    unselectedStateEl.classList.remove('hidden');
+                    dashboardContentEl.classList.add('hidden');
+                    return;
+                }
+
+                unselectedStateEl.classList.add('hidden');
+                dashboardContentEl.classList.remove('hidden');
+                
+                const cacheKey = `dashboardData-${selectedAccountId}`;
+
                 if (forceRefresh) {
-                    refreshButton.classList.remove('fa-spin');
+                    sessionStorage.removeItem(cacheKey);
+                    this.ai.summary = ''; // Clear AI summary on refresh
                 }
-            });
-    }
 
-    function populatePage(data) {
-        const account = data.selectedAccount;
-        document.getElementById('updateTime').textContent = `Updated just now`;
-        if(document.getElementById('accountName')) {
-             document.getElementById('accountName').textContent = account.name;
-        }
-        populateRegionList(account.regionStatus);
-        populateResourceInventory(account.resourceInventory);
-        populateCloudWatchStatus(account.cloudWatchStatus);
-        populateQuotaAlertBox(account.serviceQuotas);
-        populateOptimizationHub(account.optimizationSummary);
-        populateRecTable('ec2RecSection', 'EC2 Instance Right-Sizing', ['Instance ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ec2Recommendations);
-        populateRecTable('ebsRecSection', 'EBS Volume Optimization', ['Volume ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ebsRecommendations);
-        populateRecTable('lambdaRecSection', 'Lambda Function Optimization', ['Function Name', 'Current', 'Recommended', 'Reason', 'Savings'], account.lambdaRecommendations);
-        populateRiPurchaseRecs(account.reservationPurchaseRecommendations);
-        populateSecurityInsights(account.securityInsights);
-        populateBillingSummary(account.billingSummary);
-        populateIamResources(account.iamResources);
-        populateSavingsSummary(account.savingsSummary);
-        populateRiAnalysis(account.reservationAnalysis);
-        renderCostHistoryChart(account.costHistory);
-        renderAnomalyChart(account.costAnomalies);
-        renderHighchartMap(account.regionStatus);
-    }
-    
-    function populateRegionList(regionStatus) {
-        if (!regionStatus) return;
-        document.getElementById('regionsTitle').textContent = `Your regions (${regionStatus.length})`;
-        const colors = { 'ACTIVE': 'bg-blue-500', 'SEMI_ACTIVE': 'bg-red-500', 'SUSTAINABLE': 'bg-green-500', 'NON_ACTIVE': 'bg-gray-400' };
-        document.getElementById('regionList').innerHTML = regionStatus.map(r => `<div class="flex items-center"><span class="h-3 w-3 rounded-full mr-3 ${colors[r.status] || 'bg-gray-400'}"></span><div><p class="font-semibold text-sm">${r.regionName}</p><p class="text-xs text-gray-500">${r.regionId}</p></div></div>`).join('');
-    }
-    
-    function populateResourceInventory(inv) {
-        if (!inv) return;
-        const r = [{ n: 'VPC', i: 'fa-network-wired', v: inv.vpc }, { n: 'ECS', i: 'fa-cubes', v: inv.ecs }, { n: 'EC2', i: 'fa-server', v: inv.ec2 }, { n: 'Kubernetes', i: 'fa-dharmachakra', v: inv.kubernetes }, { n: 'Lambdas', i: 'fa-bolt', v: inv.lambdas }, { n: 'EBS Volumes', i: 'fa-hdd', v: inv.ebsVolumes }, { n: 'Images', i: 'fa-compact-disc', v: inv.images }, { n: 'Snapshots', i: 'fa-camera-retro', v: inv.snapshots }];
-        document.getElementById('resourceInventory').innerHTML = r.map(res => `<div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas ${res.i} text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl">${res.v}</p><p class="text-xs text-gray-500">${res.n}</p></div></div>`).join('');
-    }
+                const cachedData = sessionStorage.getItem(cacheKey);
 
-    function populateCloudWatchStatus(s) { if(s) document.getElementById('cloudWatchStatus').innerHTML = `<div><p class="font-semibold text-2xl text-green-600">${s.ok}</p><p class="text-xs text-gray-500">Ok</p></div><div><p class="font-semibold text-2xl text-red-600">${s.alarm}</p><p class="text-xs text-gray-500">Alarm</p></div><div><p class="font-semibold text-2xl text-yellow-500">${s.insufficient}</p><p class="text-xs text-gray-500">Insufficient</p></div>`; }
-    
-    function populateOptimizationHub(summary) { if(summary) document.getElementById('optimizationHub').innerHTML = `<h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub</h3><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"><div class="bg-green-50 border border-green-200 p-4 rounded-lg text-center"><p class="text-xs text-green-700 font-semibold uppercase">Potential Savings</p><p class="text-2xl font-bold text-green-800">${formatCurrency(summary.totalPotentialSavings)}</p><p class="text-xs text-green-600">per month</p></div><div class="bg-red-50 border border-red-200 p-4 rounded-lg text-center"><p class="text-xs text-red-700 font-semibold uppercase">Critical Alerts</p><p class="text-2xl font-bold text-red-800">${summary.criticalAlertsCount}</p><p class="text-xs text-red-600">items to review</p></div></div>`;}
-    
-    function populateRecTable(containerId, title, headers, recs) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        let tableHtml = '';
-        if (recs && recs.length > 0) {
-            const isClickable = containerId === 'ec2RecSection';
-            tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr>${headers.map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50 ${isClickable ? 'clickable-row' : ''}" ${isClickable ? `onclick="showMetricsModal('EC2', '${rec.resourceId}')"` : ''}><th class="px-6 py-4 font-medium text-gray-900">${rec.resourceId}</th><td class="px-6 py-4">${rec.currentType}</td><td class="px-6 py-4 font-semibold text-green-600">${rec.recommendedType}</td><td class="px-6 py-4">${rec.recommendationReason}</td><td class="px-6 py-4 text-right font-mono text-green-600">${formatCurrency(rec.estimatedMonthlySavings)}</td></tr>`).join('')}</tbody></table></div>`;
-        } else {
-            tableHtml = emptyStateHtml(`All ${title.split(' ')[0]} resources are optimized!`);
-        }
-        container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">${title}</h4>${tableHtml}`;
-    }
-    
-    function populateRiPurchaseRecs(recs) { const container = document.getElementById('riPurchaseRecSection'); if (!container) return; let tableHtml = ''; if (recs && recs.length > 0) { tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr><th class="px-6 py-3">Instance Family</th><th class="px-6 py-3">Term</th><th class="px-6 py-3 text-right">Recommended #</th><th class="px-6 py-3 text-right">Est. Monthly Savings</th></tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50"><th class="px-6 py-4 font-medium text-gray-900">${rec.instanceFamily}</th><td class="px-6 py-4">${rec.term}</td><td class="px-6 py-4 text-right">${rec.recommendedInstances}</td><td class="px-6 py-4 text-right font-mono text-green-600">$${rec.monthlySavings}</td></tr>`).join('')}</tbody></table></div>`; } else { tableHtml = emptyStateHtml('No RI purchase recommendations.'); } container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">RI Purchase Recommendations</h4>${tableHtml}`; }
-    
-    function populateSecurityInsights(insights) { const container = document.getElementById('securityInsights'); if (!container || !insights) return; if (insights.length > 0) { container.innerHTML = insights.map(i => `<div class="flex items-start gap-3"><i class="fas fa-exclamation-circle text-red-500 mt-1"></i><div><p class="font-semibold text-sm">${i.title}</p><p class="text-xs text-gray-500">${i.description}</p><span class="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block">${i.category} x${i.count}</span></div></div>`).join(''); } else { container.innerHTML = `<p class="text-sm text-center text-gray-500">No security issues found.</p>`; } }
-    
-    function populateBillingSummary(summary) { const container = document.getElementById('billingSummary'); if (!container || !summary) return; if (summary.length > 0) { container.innerHTML = summary.map(item => `<tr class="border-b"><th class="px-6 py-4 font-medium">${item.serviceName}</th><td class="px-6 py-4 text-right font-mono">${formatCurrency(item.monthToDateCost)}</td></tr>`).join(''); } else { container.innerHTML = `<tr><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>`; } }
-    
-    function populateIamResources(iam) { if(iam) document.getElementById('iamResources').innerHTML = `<div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Users</p><p class="font-semibold">${iam.users}</p></div><div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Groups</p><p class="font-semibold">${iam.groups}</p></div><div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Customer Managed Policies</p><p class="font-semibold">${iam.customerManagedPolicies}</p></div><div class="flex justify-between items-center"><p class="text-sm">Roles</p><p class="font-semibold">${iam.roles}</p></div>`;}
-    
-    function populateSavingsSummary(summary) { if(summary) document.getElementById('savingsSummary').innerHTML = `<div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600">${formatCurrency(summary.potential)}</p><p class="text-xs text-gray-500">Potential Savings</p></div><table class="w-full text-sm mt-4"><thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead><tbody>${summary.suggestions.map(s => `<tr><td>${s.service}</td><td class="text-right font-mono text-green-600">${formatCurrency(s.suggested)}</td></tr>`).join('')}</tbody></table>`;}
-    
-    function populateRiAnalysis(analysis) { if(analysis) document.getElementById('riAnalysisSection').innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Reserved Instance Analysis (Last 30 Days)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-gray-50 p-4 rounded-lg"><h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5><p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p><div class="flex items-center gap-4"><p class="text-3xl font-bold text-indigo-600">${analysis.utilizationPercentage.toFixed(1)}%</p><div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-indigo-500" style="width: ${analysis.utilizationPercentage}%;"></div></div></div></div></div><div class="bg-gray-50 p-4 rounded-lg"><h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5><p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p><div class="flex items-center gap-4"><p class="text-3xl font-bold text-green-600">${analysis.coveragePercentage.toFixed(1)}%</p><div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-green-500" style="width: ${analysis.coveragePercentage}%;"></div></div></div></div></div></div>`;}
+                if (cachedData && !forceRefresh) {
+                    this.populatePage(JSON.parse(cachedData));
+                    loadingEl.classList.add('hidden');
+                    appBodyEl.classList.remove('hidden');
+                    return;
+                }
+                
+                loadingEl.classList.remove('hidden');
+                if (forceRefresh) {
+                    refreshButton.classList.add('fa-spin');
+                }
 
-    function populateQuotaAlertBox(quotas) {
-        const alertBox = document.getElementById('quotaAlertBox');
-        const alertContent = document.getElementById('quotaAlertContent');
-        if (!alertBox || !alertContent || !quotas) return;
+                const apiUrl = new URL(`${window.location.origin}/api/dashboard`);
+                apiUrl.searchParams.append('accountId', selectedAccountId);
+                if (forceRefresh) {
+                    apiUrl.searchParams.append('force', 'true');
+                }
 
-        const criticalQuotas = quotas.filter(q => q.status === 'CRITICAL' || q.status === 'WARN');
+                fetch(apiUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.redirected) { window.location.href = response.url; return; }
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (!data) return;
+                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                        this.populatePage(data);
+                        appBodyEl.classList.remove('hidden');
+                    })
+                    .catch(error => {
+                        console.error('Failed to fetch dashboard data:', error);
+                        errorMessageEl.textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
+                        errorEl.classList.remove('hidden');
+                    })
+                    .finally(() => {
+                        loadingEl.classList.add('hidden');
+                        if (forceRefresh) {
+                            refreshButton.classList.remove('fa-spin');
+                        }
+                    });
+            },
 
-        if (criticalQuotas.length > 0) {
-            const topQuota = criticalQuotas[0];
-            let contentHtml = `<p class="text-sm text-yellow-700">
-                <b>Service Quota Warning:</b> You are using ${topQuota.usage} of ${topQuota.limit} for <b>${topQuota.quotaName}</b>.
-                <a href="/cloudguard/alerts" class="font-medium underline text-yellow-700 hover:text-yellow-600">
-                    View all ${criticalQuotas.length} alerts.
-                </a>
-            </p>`;
-            alertContent.innerHTML = contentHtml;
-            alertBox.classList.remove('hidden');
-        } else {
-            alertBox.classList.add('hidden');
-        }
-    }
+            populatePage(data) {
+                const account = data.selectedAccount;
+                document.getElementById('updateTime').textContent = `Updated just now`;
+                this.populateRegionList(account.regionStatus);
+                this.populateResourceInventory(account.resourceInventory);
+                this.populateCloudWatchStatus(account.cloudWatchStatus);
+                this.populateQuotaAlertBox(account.serviceQuotas);
+                this.populateOptimizationHub(account.optimizationSummary);
+                this.populateRecTable('ec2RecSection', 'EC2 Instance Right-Sizing', ['Instance ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ec2Recommendations);
+                this.populateRecTable('ebsRecSection', 'EBS Volume Optimization', ['Volume ID', 'Current', 'Recommended', 'Reason', 'Savings'], account.ebsRecommendations);
+                this.populateRecTable('lambdaRecSection', 'Lambda Function Optimization', ['Function Name', 'Current', 'Recommended', 'Reason', 'Savings'], account.lambdaRecommendations);
+                this.populateRiPurchaseRecs(account.reservationPurchaseRecommendations);
+                this.populateSecurityInsights(account.securityInsights);
+                this.populateBillingSummary(account.billingSummary);
+                this.populateIamResources(account.iamResources);
+                this.populateSavingsSummary(account.savingsSummary);
+                this.populateRiAnalysis(account.reservationAnalysis);
+                this.renderCostHistoryChart(account.costHistory);
+                this.renderAnomalyChart(account.costAnomalies);
+                this.renderHighchartMap(account.regionStatus);
+            },
 
-    function renderCostHistoryChart(costHistory) { 
-        if (!costHistory || !costHistory.labels) return;
-        if (costHistoryChartInstance) {
-            costHistoryChartInstance.destroy();
-        }
-        costHistoryChartInstance = new Chart(document.getElementById('costHistoryChart'), { 
-            type: 'bar', 
-            data: { 
-                labels: costHistory.labels, 
-                datasets: [{ 
-                    label: 'Monthly Cost', 
-                    data: costHistory.costs, 
-                    backgroundColor: 'rgba(79, 70, 229, 0.8)' 
-                }] 
-            }, 
-            options: { 
-                responsive: true, 
-                plugins: { legend: { display: false } }, 
-                scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } 
-            } 
-        }); 
-    }
-    
-    function renderAnomalyChart(anomalies) {
-        const container = document.getElementById('costAnomalySection');
-        if (!container || !anomalies) return;
-        
-        if (costAnomalyChartInstance) {
-            costAnomalyChartInstance.destroy();
-        }
+            populateRegionList(regionStatus) {
+                if (!regionStatus) return;
+                document.getElementById('regionsTitle').textContent = `Your regions (${regionStatus.length})`;
+                const colors = { 'ACTIVE': 'bg-blue-500', 'SEMI_ACTIVE': 'bg-red-500', 'SUSTAINABLE': 'bg-green-500', 'NON_ACTIVE': 'bg-gray-400' };
+                document.getElementById('regionList').innerHTML = regionStatus.map(r => `<div class="flex items-center"><span class="h-3 w-3 rounded-full mr-3 ${colors[r.status] || 'bg-gray-400'}"></span><div><p class="font-semibold text-sm">${r.regionName}</p><p class="text-xs text-gray-500">${r.regionId}</p></div></div>`).join('');
+            },
+            
+            populateResourceInventory(inv) {
+                if (!inv) return;
+                const r = [{ n: 'VPC', i: 'fa-network-wired', v: inv.vpc }, { n: 'ECS', i: 'fa-cubes', v: inv.ecs }, { n: 'EC2', i: 'fa-server', v: inv.ec2 }, { n: 'Kubernetes', i: 'fa-dharmachakra', v: inv.kubernetes }, { n: 'Lambdas', i: 'fa-bolt', v: inv.lambdas }, { n: 'EBS Volumes', i: 'fa-hdd', v: inv.ebsVolumes }, { n: 'Images', i: 'fa-compact-disc', v: inv.images }, { n: 'Snapshots', i: 'fa-camera-retro', v: inv.snapshots }];
+                document.getElementById('resourceInventory').innerHTML = r.map(res => `<div class="flex items-center gap-4"><div class="bg-gray-100 rounded-lg p-3"><i class="fas ${res.i} text-indigo-600 fa-lg"></i></div><div><p class="font-semibold text-2xl">${res.v}</p><p class="text-xs text-gray-500">${res.n}</p></div></div>`).join('');
+            },
 
-        let contentHtml = '';
-        if (anomalies.length > 0) {
-            contentHtml = `<div class="bg-gray-50 p-4 rounded-lg"><canvas id="costAnomalyChartCanvas"></canvas></div>`;
-            container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>${contentHtml}`;
-            setTimeout(() => {
-                const ctx = document.getElementById('costAnomalyChartCanvas');
-                if (!ctx) return;
-                const labels = anomalies.map(a => `${a.service} (${a.startDate})`);
-                const data = anomalies.map(a => a.unexpectedSpend);
-                costAnomalyChartInstance = new Chart(ctx, { 
+            populateCloudWatchStatus(s) { if(s) document.getElementById('cloudWatchStatus').innerHTML = `<div><p class="font-semibold text-2xl text-green-600">${s.ok}</p><p class="text-xs text-gray-500">Ok</p></div><div><p class="font-semibold text-2xl text-red-600">${s.alarm}</p><p class="text-xs text-gray-500">Alarm</p></div><div><p class="font-semibold text-2xl text-yellow-500">${s.insufficient}</p><p class="text-xs text-gray-500">Insufficient</p></div>`; },
+            
+            populateOptimizationHub(summary) { if(summary) document.getElementById('optimizationHub').innerHTML = `<h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub</h3><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"><div class="bg-green-50 border border-green-200 p-4 rounded-lg text-center"><p class="text-xs text-green-700 font-semibold uppercase">Potential Savings</p><p class="text-2xl font-bold text-green-800">${this.formatCurrency(summary.totalPotentialSavings)}</p><p class="text-xs text-green-600">per month</p></div><div class="bg-red-50 border border-red-200 p-4 rounded-lg text-center"><p class="text-xs text-red-700 font-semibold uppercase">Critical Alerts</p><p class="text-2xl font-bold text-red-800">${summary.criticalAlertsCount}</p><p class="text-xs text-red-600">items to review</p></div></div>`;},
+            
+            populateRecTable(containerId, title, headers, recs) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                let tableHtml = '';
+                if (recs && recs.length > 0) {
+                    const isClickable = containerId === 'ec2RecSection';
+                    tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr>${headers.map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50 ${isClickable ? 'clickable-row' : ''}" ${isClickable ? `onclick="document.body.__x.$data.showMetricsModal('EC2', '${rec.resourceId}')"` : ''}><th class="px-6 py-4 font-medium text-gray-900">${rec.resourceId}</th><td class="px-6 py-4">${rec.currentType}</td><td class="px-6 py-4 font-semibold text-green-600">${rec.recommendedType}</td><td class="px-6 py-4">${rec.recommendationReason}</td><td class="px-6 py-4 text-right font-mono text-green-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td></tr>`).join('')}</tbody></table></div>`;
+                } else {
+                    tableHtml = this.emptyStateHtml(`All ${title.split(' ')[0]} resources are optimized!`);
+                }
+                container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">${title}</h4>${tableHtml}`;
+            },
+            
+            populateRiPurchaseRecs(recs) { const container = document.getElementById('riPurchaseRecSection'); if (!container) return; let tableHtml = ''; if (recs && recs.length > 0) { tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr><th class="px-6 py-3">Instance Family</th><th class="px-6 py-3">Term</th><th class="px-6 py-3 text-right">Recommended #</th><th class="px-6 py-3 text-right">Est. Monthly Savings</th></tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50"><th class="px-6 py-4 font-medium text-gray-900">${rec.instanceFamily}</th><td class="px-6 py-4">${rec.term}</td><td class="px-6 py-4 text-right">${rec.recommendedInstances}</td><td class="px-6 py-4 text-right font-mono text-green-600">$${rec.monthlySavings}</td></tr>`).join('')}</tbody></table></div>`; } else { tableHtml = this.emptyStateHtml('No RI purchase recommendations.'); } container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">RI Purchase Recommendations</h4>${tableHtml}`; },
+            
+            populateSecurityInsights(insights) { const container = document.getElementById('securityInsights'); if (!container || !insights) return; if (insights.length > 0) { container.innerHTML = insights.map(i => `<div class="flex items-start gap-3"><i class="fas fa-exclamation-circle text-red-500 mt-1"></i><div><p class="font-semibold text-sm">${i.title}</p><p class="text-xs text-gray-500">${i.description}</p><span class="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block">${i.category} x${i.count}</span></div></div>`).join(''); } else { container.innerHTML = `<p class="text-sm text-center text-gray-500">No security issues found.</p>`; } },
+            
+            populateBillingSummary(summary) { const container = document.getElementById('billingSummary'); if (!container || !summary) return; if (summary.length > 0) { container.innerHTML = summary.map(item => `<tr class="border-b"><th class="px-6 py-4 font-medium">${item.serviceName}</th><td class="px-6 py-4 text-right font-mono">${this.formatCurrency(item.monthToDateCost)}</td></tr>`).join(''); } else { container.innerHTML = `<tr><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>`; } },
+            
+            populateIamResources(iam) { if(iam) document.getElementById('iamResources').innerHTML = `<div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Users</p><p class="font-semibold">${iam.users}</p></div><div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Groups</p><p class="font-semibold">${iam.groups}</p></div><div class="flex justify-between items-center border-b pb-2"><p class="text-sm">Customer Managed Policies</p><p class="font-semibold">${iam.customerManagedPolicies}</p></div><div class="flex justify-between items-center"><p class="text-sm">Roles</p><p class="font-semibold">${iam.roles}</p></div>`;},
+            
+            populateSavingsSummary(summary) { if(summary) document.getElementById('savingsSummary').innerHTML = `<div class="text-center border rounded-lg p-4"><p class="font-semibold text-2xl text-green-600">${this.formatCurrency(summary.potential)}</p><p class="text-xs text-gray-500">Potential Savings</p></div><table class="w-full text-sm mt-4"><thead class="text-xs text-gray-500 uppercase"><tr><th>Service</th><th class="text-right">Suggested</th></tr></thead><tbody>${summary.suggestions.map(s => `<tr><td>${s.service}</td><td class="text-right font-mono text-green-600">${this.formatCurrency(s.suggested)}</td></tr>`).join('')}</tbody></table>`;},
+            
+            populateRiAnalysis(analysis) { if(analysis) document.getElementById('riAnalysisSection').innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Reserved Instance Analysis (Last 30 Days)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-gray-50 p-4 rounded-lg"><h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5><p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p><div class="flex items-center gap-4"><p class="text-3xl font-bold text-indigo-600">${analysis.utilizationPercentage.toFixed(1)}%</p><div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-indigo-500" style="width: ${analysis.utilizationPercentage}%;"></div></div></div></div></div><div class="bg-gray-50 p-4 rounded-lg"><h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5><p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p><div class="flex items-center gap-4"><p class="text-3xl font-bold text-green-600">${analysis.coveragePercentage.toFixed(1)}%</p><div class="w-full"><div class="progress-bar"><div class="progress-bar-fill bg-green-500" style="width: ${analysis.coveragePercentage}%;"></div></div></div></div></div></div>`;},
+
+            populateQuotaAlertBox(quotas) {
+                const alertBox = document.getElementById('quotaAlertBox');
+                const alertContent = document.getElementById('quotaAlertContent');
+                if (!alertBox || !alertContent || !quotas) return;
+
+                const criticalQuotas = quotas.filter(q => q.status === 'CRITICAL' || q.status === 'WARN');
+
+                if (criticalQuotas.length > 0) {
+                    const topQuota = criticalQuotas[0];
+                    let contentHtml = `<p class="text-sm text-yellow-700">
+                        <b>Service Quota Warning:</b> You are using ${topQuota.usage} of ${topQuota.limit} for <b>${topQuota.quotaName}</b>.
+                        <a href="/cloudguard/alerts" class="font-medium underline text-yellow-700 hover:text-yellow-600">
+                            View all ${criticalQuotas.length} alerts.
+                        </a>
+                    </p>`;
+                    alertContent.innerHTML = contentHtml;
+                    alertBox.classList.remove('hidden');
+                } else {
+                    alertBox.classList.add('hidden');
+                }
+            },
+
+            renderCostHistoryChart(costHistory) { 
+                if (!costHistory || !costHistory.labels) return;
+                if (window.costHistoryChartInstance) {
+                    window.costHistoryChartInstance.destroy();
+                }
+                window.costHistoryChartInstance = new Chart(document.getElementById('costHistoryChart'), { 
                     type: 'bar', 
                     data: { 
-                        labels: labels, 
+                        labels: costHistory.labels, 
                         datasets: [{ 
-                            label: 'Unexpected Spend (USD)', 
-                            data: data, 
-                            backgroundColor: 'rgba(239, 68, 68, 0.7)' 
+                            label: 'Monthly Cost', 
+                            data: costHistory.costs, 
+                            backgroundColor: 'rgba(79, 70, 229, 0.8)' 
                         }] 
                     }, 
                     options: { 
-                        indexAxis: 'y', 
                         responsive: true, 
-                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `Unexpected Spend: ${formatCurrency(c.parsed.x)}` } } }, 
-                        scales: { x: { beginAtZero: true, title: { display: true, text: 'Cost (USD)' } } } 
+                        plugins: { legend: { display: false } }, 
+                        scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(0) } } } 
                     } 
-                });
-            }, 0);
-        } else {
-            container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>` + emptyStateHtml('No cost anomalies detected.');
-        }
-    }
-    
-    function showMetricsModal(service, resourceId) { if (service !== 'EC2') return; window.dispatchEvent(new CustomEvent('open-metrics-modal', { bubbles: true, detail: { title: 'EC2 Instance Metrics', resourceId: resourceId }})); }
-    
-    function fetchMetricsForModal(resourceId) { 
-        if (metricsChartInstance) { 
-            metricsChartInstance.destroy(); 
-        } 
-        fetch(`${window.location.origin}/api/metrics/ec2/${resourceId}`).then(res => res.json()).then(data => { renderMetricsChart(data); }).catch(err => console.error('Failed to fetch metrics:', err)); 
-    }
-    
-    function renderMetricsChart(data) { 
-        const ctx = document.getElementById('metricsChart').getContext('2d'); 
-        const cpuData = data.CPUUtilization || []; 
-        const labels = cpuData.map(dp => new Date(dp.timestamp).toLocaleDateString()); 
-        const cpuValues = cpuData.map(dp => dp.average); 
-        metricsChartInstance = new Chart(ctx, { 
-            type: 'line', 
-            data: { 
-                labels: labels, 
-                datasets: [{ 
-                    label: 'Average CPU Utilization (%)', 
-                    data: cpuValues, 
-                    borderColor: 'rgb(79, 70, 229)', 
-                    backgroundColor: 'rgba(79, 70, 229, 0.5)', 
-                    fill: false, 
-                    tension: 0.1 
-                }] 
-            }, 
-            options: { 
-                responsive: true, 
-                plugins: { legend: { position: 'top' }, title: { display: true, text: 'CPU Utilization (Last 14 Days)' } } 
-            } 
-        }); 
-    }
-    
-    function renderHighchartMap(regionStatus) {
-        if (!regionStatus || !document.getElementById('highcharts-map-container')) {
-            return;
-        }
-
-        const statusColors = {
-            'ACTIVE': '#3b82f6',
-            'SEMI_ACTIVE': '#ef4444',
-            'SUSTAINABLE': '#22c55e',
-            'NON_ACTIVE': '#6b7280'
-        };
-
-        const regionPoints = regionStatus.map(r => ({
-            name: r.regionName + ` (${r.status})`,
-            lat: r.lat,
-            lon: r.lon,
-            color: statusColors[r.status] || '#6b7280'
-        }));
-
-        Highcharts.mapChart('highcharts-map-container', {
-            chart: { map: 'custom/world', backgroundColor: '#f8fafc' },
-            title: { text: null },
-            credits: { enabled: false },
-            mapNavigation: {
-                enabled: true,
-                buttonOptions: { verticalAlign: 'bottom' }
+                }); 
             },
-            tooltip: { headerFormat: '', pointFormat: '<b>{point.name}</b>' },
-            series: [{
-                name: 'World',
-                color: '#e5e7eb',
-                states: { hover: { color: '#d1d5db' } }
-            }, {
-                type: 'mappoint',
-                name: 'AWS Regions',
-                data: regionPoints,
-                marker: { lineWidth: 1, lineColor: '#ffffff' }
-            }]
-        });
+            
+            renderAnomalyChart(anomalies) {
+                const container = document.getElementById('costAnomalySection');
+                if (!container || !anomalies) return;
+                
+                if (window.costAnomalyChartInstance) {
+                    window.costAnomalyChartInstance.destroy();
+                }
+
+                let contentHtml = '';
+                if (anomalies.length > 0) {
+                    contentHtml = `<div class="bg-gray-50 p-4 rounded-lg"><canvas id="costAnomalyChartCanvas"></canvas></div>`;
+                    container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>${contentHtml}`;
+                    setTimeout(() => {
+                        const ctx = document.getElementById('costAnomalyChartCanvas');
+                        if (!ctx) return;
+                        const labels = anomalies.map(a => `${a.service} (${a.startDate})`);
+                        const data = anomalies.map(a => a.unexpectedSpend);
+                        window.costAnomalyChartInstance = new Chart(ctx, { 
+                            type: 'bar', 
+                            data: { 
+                                labels: labels, 
+                                datasets: [{ 
+                                    label: 'Unexpected Spend (USD)', 
+                                    data: data, 
+                                    backgroundColor: 'rgba(239, 68, 68, 0.7)' 
+                                }] 
+                            }, 
+                            options: { 
+                                indexAxis: 'y', 
+                                responsive: true, 
+                                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `Unexpected Spend: ${this.formatCurrency(c.parsed.x)}` } } }, 
+                                scales: { x: { beginAtZero: true, title: { display: true, text: 'Cost (USD)' } } } 
+                            } 
+                        });
+                    }, 0);
+                } else {
+                    container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>` + this.emptyStateHtml('No cost anomalies detected.');
+                }
+            },
+            
+            showMetricsModal(service, resourceId) { if (service !== 'EC2') return; window.dispatchEvent(new CustomEvent('open-metrics-modal', { bubbles: true, detail: { title: 'EC2 Instance Metrics', resourceId: resourceId }})); },
+            
+            fetchMetricsForModal(resourceId) { 
+                if (window.metricsChartInstance) { 
+                    window.metricsChartInstance.destroy(); 
+                } 
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                fetch(`${window.location.origin}/api/metrics/ec2/${resourceId}?accountId=${selectedAccountId}`)
+                    .then(res => res.json())
+                    .then(data => { this.renderMetricsChart(data); })
+                    .catch(err => console.error('Failed to fetch metrics:', err)); 
+            },
+            
+            renderMetricsChart(data) { 
+                const ctx = document.getElementById('metricsChart').getContext('2d'); 
+                const cpuData = data.CPUUtilization || []; 
+                const labels = cpuData.map(dp => new Date(dp.timestamp).toLocaleDateString()); 
+                const cpuValues = cpuData.map(dp => dp.average); 
+                window.metricsChartInstance = new Chart(ctx, { 
+                    type: 'line', 
+                    data: { 
+                        labels: labels, 
+                        datasets: [{ 
+                            label: 'Average CPU Utilization (%)', 
+                            data: cpuValues, 
+                            borderColor: 'rgb(79, 70, 229)', 
+                            backgroundColor: 'rgba(79, 70, 229, 0.5)', 
+                            fill: false, 
+                            tension: 0.1 
+                        }] 
+                    }, 
+                    options: { 
+                        responsive: true, 
+                        plugins: { legend: { position: 'top' }, title: { display: true, text: 'CPU Utilization (Last 14 Days)' } } 
+                    } 
+                }); 
+            },
+            
+            renderHighchartMap(regionStatus) {
+                if (!regionStatus || !document.getElementById('highcharts-map-container')) {
+                    return;
+                }
+
+                const statusColors = {
+                    'ACTIVE': '#3b82f6',
+                    'SEMI_ACTIVE': '#ef4444',
+                    'SUSTAINABLE': '#22c55e',
+                    'NON_ACTIVE': '#6b7280'
+                };
+
+                const regionPoints = regionStatus.map(r => ({
+                    name: r.regionName + ` (${r.status})`,
+                    lat: r.lat,
+                    lon: r.lon,
+                    color: statusColors[r.status] || '#6b7280'
+                }));
+
+                Highcharts.mapChart('highcharts-map-container', {
+                    chart: { map: 'custom/world', backgroundColor: '#f8fafc' },
+                    title: { text: null },
+                    credits: { enabled: false },
+                    mapNavigation: {
+                        enabled: true,
+                        buttonOptions: { verticalAlign: 'bottom' }
+                    },
+                    tooltip: { headerFormat: '', pointFormat: '<b>{point.name}</b>' },
+                    series: [{
+                        name: 'World',
+                        color: '#e5e7eb',
+                        states: { hover: { color: '#d1d5db' } }
+                    }, {
+                        type: 'mappoint',
+                        name: 'AWS Regions',
+                        data: regionPoints,
+                        marker: { lineWidth: 1, lineColor: '#ffffff' }
+                    }]
+                });
+            },
+
+            formatCurrency(num) {
+                return '$' + (num != null ? num.toFixed(2) : '0.00');
+            },
+
+            emptyStateHtml(title) {
+                return `<div class="text-center py-8 px-4 border-2 border-dashed rounded-lg"><h3 class="mt-2 text-sm font-medium text-gray-900">${title}</h3></div>`;
+            },
+
+            init() {
+                this.fetchDashboardData();
+                // Make the functions available in the global scope for onclick attributes
+                window.dashboardFunctions = {
+                    fetchDashboardData: this.fetchDashboardData.bind(this),
+                    showMetricsModal: this.showMetricsModal.bind(this)
+                };
+            }
+        }
     }
+
+    // A separate script to initialize the main Alpine component
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('dashboardApp', dashboardApp);
+    });
     </script>
 </body>
 </html>

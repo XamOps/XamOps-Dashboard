@@ -26,31 +26,24 @@ public class FinOpsController {
         this.awsDataService = awsDataService;
     }
 
-    // ... (existing endpoints)
     @GetMapping("/report")
-    public ResponseEntity<FinOpsReportDto> getFinOpsReport(@RequestParam(required = false) boolean forceRefresh) throws ExecutionException, InterruptedException {
+    public ResponseEntity<FinOpsReportDto> getFinOpsReport(@RequestParam String accountId, @RequestParam(required = false) boolean forceRefresh) throws ExecutionException, InterruptedException {
         if (forceRefresh) {
-            awsDataService.clearFinOpsReportCache();
+            awsDataService.clearFinOpsReportCache(accountId);
         }
-        FinOpsReportDto report = awsDataService.getFinOpsReport().get();
+        FinOpsReportDto report = awsDataService.getFinOpsReport(accountId).get();
         return ResponseEntity.ok(report);
     }
     
     @GetMapping("/cost-by-tag")
-    public ResponseEntity<List<Map<String, Object>>> getCostByTag(@RequestParam String tagKey) throws ExecutionException, InterruptedException {
-        List<Map<String, Object>> costData = awsDataService.getCostByTag(tagKey).get();
+    public ResponseEntity<List<Map<String, Object>>> getCostByTag(@RequestParam String accountId, @RequestParam String tagKey) throws ExecutionException, InterruptedException {
+        List<Map<String, Object>> costData = awsDataService.getCostByTag(accountId, tagKey).get();
         return ResponseEntity.ok(costData);
     }
 
-    /**
-     * ADDED: Creates a new AWS Budget.
-     * @param budgetDetails The budget details from the request body.
-     * @return A success response.
-     */
     @PostMapping("/budgets")
-    public ResponseEntity<Void> createBudget(@RequestBody BudgetDetails budgetDetails) {
-        // Add validation for budgetDetails here in a real app
-        awsDataService.createBudget(budgetDetails);
+    public ResponseEntity<Void> createBudget(@RequestParam String accountId, @RequestBody BudgetDetails budgetDetails) {
+        awsDataService.createBudget(accountId, budgetDetails);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }

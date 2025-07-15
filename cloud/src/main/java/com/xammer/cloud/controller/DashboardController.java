@@ -1,6 +1,8 @@
 package com.xammer.cloud.controller;
 
+import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.repository.CloudAccountRepository;
 import com.xammer.cloud.service.AwsDataService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,23 +21,31 @@ import java.util.concurrent.ExecutionException;
 public class DashboardController {
 
     private final AwsDataService awsDataService;
+    private final CloudAccountRepository cloudAccountRepository;
 
-    public DashboardController(AwsDataService awsDataService) {
+    public DashboardController(AwsDataService awsDataService, CloudAccountRepository cloudAccountRepository) {
         this.awsDataService = awsDataService;
+        this.cloudAccountRepository = cloudAccountRepository;
     }
 
     @GetMapping("/dashboard")
-    public ResponseEntity<DashboardData> getDashboardData(@RequestParam(required = false) boolean force) throws ExecutionException, InterruptedException {
+    public ResponseEntity<DashboardData> getDashboardData(
+            @RequestParam(required = false) boolean force,
+            @RequestParam String accountId) throws ExecutionException, InterruptedException {
+        
         if (force) {
             awsDataService.clearAllCaches();
         }
-        DashboardData data = awsDataService.getDashboardData();
+
+        DashboardData data = awsDataService.getDashboardData(accountId);
         return ResponseEntity.ok(data);
     }
 
     @GetMapping("/waste")
-    public ResponseEntity<List<DashboardData.WastedResource>> getWastedResources() throws ExecutionException, InterruptedException {
-        List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources().get();
+    public ResponseEntity<List<DashboardData.WastedResource>> getWastedResources(@RequestParam String accountId) throws ExecutionException, InterruptedException {
+        CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
+                .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
+        List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources(account).get();
         return ResponseEntity.ok(wastedResources);
     }
 

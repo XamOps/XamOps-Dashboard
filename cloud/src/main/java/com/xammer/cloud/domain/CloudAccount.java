@@ -30,7 +30,7 @@ public class CloudAccount {
     @Column(nullable = false)
     private String accessType; // "read-only" or "read-write"
 
-    @Column
+    @Column(unique = true)
     private String roleArn;
 
     @Column(nullable = false)

@@ -3,6 +3,7 @@ package com.xammer.cloud.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import software.amazon.awssdk.services.costexplorer.model.TermInYears;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -242,5 +243,7 @@ public class DashboardData {
         private String category;
         private String severity;
         private String description;
+        private String complianceFramework;
+        private String controlId;
     }
 }

@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -21,10 +22,9 @@ public class MetricsController {
         this.awsDataService = awsDataService;
     }
 
-    // FIXED: The method now returns our JSON-friendly MetricDto.
     @GetMapping("/ec2/{instanceId}")
-    public ResponseEntity<Map<String, List<MetricDto>>> getEc2Metrics(@PathVariable String instanceId) {
-        Map<String, List<MetricDto>> metrics = awsDataService.getEc2InstanceMetrics(instanceId);
+    public ResponseEntity<Map<String, List<MetricDto>>> getEc2Metrics(@RequestParam String accountId, @PathVariable String instanceId) {
+        Map<String, List<MetricDto>> metrics = awsDataService.getEc2InstanceMetrics(accountId, instanceId);
         return ResponseEntity.ok(metrics);
     }
 }

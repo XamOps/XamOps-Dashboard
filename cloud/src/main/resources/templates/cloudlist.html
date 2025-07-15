@@ -97,7 +97,7 @@
             <div id="empty-state" class="hidden text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-xl mt-4">
                 <i class="fas fa-box-open fa-3x text-gray-400"></i>
                 <h3 class="mt-4 text-lg font-medium text-gray-900">No Resources Found</h3>
-                <p class="mt-1 text-sm text-gray-500">Try adjusting your search or filter criteria.</p>
+                <p class="mt-1 text-sm text-gray-500">Try adjusting your search or filter criteria, or select an account.</p>
             </div>
         </div>
     </main>
@@ -141,11 +141,19 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         fetchResources() {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.dom.loadingState.classList.add('hidden');
+                this.dom.emptyState.classList.remove('hidden');
+                this.dom.updateStatus.textContent = 'Please select an account.';
+                return;
+            }
+
             this.dom.loadingState.classList.remove('hidden');
             this.dom.emptyState.classList.add('hidden');
             this.dom.updateStatus.textContent = 'Updating...';
             
-            fetch('/api/cloudlist/resources')
+            fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
                 .then(res => {
                     if (!res.ok) throw new Error(`API Error: ${res.status}`);
                     return res.json();
@@ -306,8 +314,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
                 'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
                 'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left',
-                'SNS Topic': 'fas fa-bell', // ADDED
-                'SQS Queue': 'fas fa-envelope-open-text'// ADDED
+                'SNS Topic': 'fas fa-bell',
+                'SQS Queue': 'fas fa-envelope-open-text'
             };
             return map[serviceType] || 'fas fa-cloud';
         },
@@ -320,7 +328,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'VPC': 'text-green-500', 'Security Group': 'text-red-600',
                 'CloudTrail': 'text-blue-600', 'Certificate Manager': 'text-green-600',
                 'CloudWatch Log Group': 'text-indigo-500',
-                'SNS Topic': 'text-pink-500', // ADDED
+                'SNS Topic': 'text-pink-500',
                 'SQS Queue': 'text-cyan-500'
             };
             return map[serviceType] || 'text-gray-500';

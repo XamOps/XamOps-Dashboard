@@ -67,7 +67,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const saveBtn = document.getElementById('save-btn');
     let cy;
 
-    // This registers the dagre layout with Cytoscape
     cytoscape.use(cytoscapeDagre);
 
     const icons = {
@@ -95,25 +94,51 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function initialize() {
-        fetch('/api/cloudmap/vpcs')
-            .then(response => response.json())
+        const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+        if (!selectedAccountId) {
+            vpcSelector.innerHTML = '<option value="">Please select an account</option>';
+            return;
+        }
+
+        fetch(`/api/cloudmap/vpcs?accountId=${selectedAccountId}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Bad Request');
+                return response.json();
+            })
             .then(vpcs => {
                 vpcSelector.innerHTML = '<option value="">-- Global & S3 --</option>';
-                vpcs.forEach(vpc => {
-                    const option = document.createElement('option');
-                    option.value = vpc.id;
-                    option.textContent = `${vpc.name} (${vpc.id})`;
-                    vpcSelector.appendChild(option);
-                });
-                loadGraphForVpc("");
+                if (Array.isArray(vpcs)) {
+                    vpcs.forEach(vpc => {
+                        const option = document.createElement('option');
+                        // Store both vpcId and region in the option value, separated by a pipe
+                        option.value = `${vpc.id}|${vpc.region}`;
+                        option.textContent = `${vpc.name} (${vpc.id} - ${vpc.region})`;
+                        vpcSelector.appendChild(option);
+                    });
+                } else {
+                     console.error('Expected an array of VPCs, but received:', vpcs);
+                }
+                loadGraphForVpc(""); // Load global view by default
             })
-            .catch(error => console.error('Error fetching VPCs:', error));
+            .catch(error => {
+                console.error('Error fetching VPCs:', error);
+                vpcSelector.innerHTML = '<option value="">Error loading VPCs</option>';
+            });
     }
 
-    function loadGraphForVpc(vpcId) {
+    function loadGraphForVpc(vpcSelectorValue) {
         if (cy) cy.destroy();
         infoPanel.classList.add('translate-x-full');
-        const url = `/api/cloudmap/graph-data?vpcId=${vpcId}`;
+        
+        const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+        if (!selectedAccountId) {
+            messageOverlay.innerHTML = '<p class="text-gray-500">Please select an account to begin.</p>';
+            return;
+        }
+
+        const [vpcId, region] = (vpcSelectorValue || '|').split('|');
+
+        const url = `/api/cloudmap/graph?accountId=${selectedAccountId}&vpcId=${vpcId || ''}&region=${region || ''}`;
         messageOverlay.innerHTML = '<i class="fas fa-spinner fa-spin fa-3x text-indigo-600"></i>';
         messageOverlay.style.display = 'flex';
         
