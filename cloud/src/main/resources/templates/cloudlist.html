@@ -33,6 +33,12 @@
         .form-input, .form-select {
             transition: all 0.2s ease;
         }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e5e7eb; }
+        @keyframes pulse {
+            50% {
+                opacity: .5;
+            }
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -87,9 +93,40 @@
             <!-- Resource List Container -->
             <div id="resource-list-container" class="space-y-3">
                 <!-- Loading State -->
-                <div id="loading-state" class="w-full text-center p-16">
-                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
-                    <p class="mt-4 text-gray-600 font-semibold tracking-wide">Fetching AWS Resources...</p>
+                <div id="loading-state" class="w-full space-y-3">
+                    <div class="bg-white rounded-xl shadow-md border border-gray-200/80 p-4">
+                        <div class="flex items-center justify-between animate-pulse">
+                            <div class="flex items-center gap-4 flex-1">
+                                <div class="h-5 w-5 rounded bg-gray-300"></div>
+                                <div class="h-6 w-6 rounded-full bg-gray-300"></div>
+                                <div class="h-5 w-32 rounded bg-gray-300"></div>
+                                <div class="h-5 w-12 rounded-full bg-gray-300"></div>
+                            </div>
+                            <div class="h-8 w-24 rounded-md bg-gray-300"></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-md border border-gray-200/80 p-4">
+                        <div class="flex items-center justify-between animate-pulse">
+                             <div class="flex items-center gap-4 flex-1">
+                                <div class="h-5 w-5 rounded bg-gray-300"></div>
+                                <div class="h-6 w-6 rounded-full bg-gray-300"></div>
+                                <div class="h-5 w-32 rounded bg-gray-300"></div>
+                                <div class="h-5 w-12 rounded-full bg-gray-300"></div>
+                            </div>
+                            <div class="h-8 w-24 rounded-md bg-gray-300"></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-md border border-gray-200/80 p-4">
+                        <div class="flex items-center justify-between animate-pulse">
+                             <div class="flex items-center gap-4 flex-1">
+                                <div class="h-5 w-5 rounded bg-gray-300"></div>
+                                <div class="h-6 w-6 rounded-full bg-gray-300"></div>
+                                <div class="h-5 w-32 rounded bg-gray-300"></div>
+                                <div class="h-5 w-12 rounded-full bg-gray-300"></div>
+                            </div>
+                            <div class="h-8 w-24 rounded-md bg-gray-300"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -119,15 +156,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         init() {
             this.setupEventListeners();
-            this.fetchResources();
+            this.loadResources(); // **MODIFIED**: Use the new cache-aware loader
         },
 
         setupEventListeners() {
             this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
             this.dom.regionFilter.addEventListener('change', () => this.render());
             this.dom.refreshButton.addEventListener('click', () => {
-                this.dom.listContainer.innerHTML = ''; 
-                this.fetchResources();
+                this.loadResources(true); // **MODIFIED**: Force refresh on click
             });
         },
 
@@ -140,18 +176,34 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         },
 
-        fetchResources() {
+        // **NEW**: Cache-first loading logic
+        loadResources(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
-                this.dom.loadingState.classList.add('hidden');
+                this.dom.loadingState.style.display = 'none';
                 this.dom.emptyState.classList.remove('hidden');
                 this.dom.updateStatus.textContent = 'Please select an account.';
                 return;
             }
 
-            this.dom.loadingState.classList.remove('hidden');
+            const cacheKey = `cloudlistData-${selectedAccountId}`;
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                console.log("Cloudlist data loaded from cache.");
+                this.allGroups = JSON.parse(cachedData);
+                this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                this.render();
+                return;
+            }
+
+            // If no cache or forcing refresh, fetch from API
+            this.dom.loadingState.style.display = 'block';
             this.dom.emptyState.classList.add('hidden');
+            this.dom.listContainer.innerHTML = ''; // Clear old content before showing loader
+            this.dom.listContainer.appendChild(this.dom.loadingState);
             this.dom.updateStatus.textContent = 'Updating...';
+            sessionStorage.removeItem(cacheKey); // Clear cache if forcing refresh
             
             fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
                 .then(res => {
@@ -160,6 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(data => {
                     this.allGroups = Array.isArray(data) ? data : [];
+                    sessionStorage.setItem(cacheKey, JSON.stringify(this.allGroups));
                     this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
                     this.render();
                 })
@@ -172,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         render() {
-            this.dom.loadingState.classList.add('hidden');
+            this.dom.loadingState.style.display = 'none';
             this.dom.listContainer.innerHTML = '';
 
             const filteredGroups = this.getFilteredData();

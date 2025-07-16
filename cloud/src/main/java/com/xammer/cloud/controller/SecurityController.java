@@ -5,7 +5,6 @@ import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import com.xammer.cloud.service.AwsDataService;
 import com.xammer.cloud.service.ExcelExportService;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,8 +14,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.ByteArrayInputStream;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -38,31 +35,32 @@ public class SecurityController {
     public ResponseEntity<List<DashboardData.SecurityFinding>> getSecurityFindings(@RequestParam String accountId) throws ExecutionException, InterruptedException {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-        List<DashboardData.SecurityFinding> findings = awsDataService.getComprehensiveSecurityFindings(account).get();
+        
+        // **FIXED**: Fetch active regions first, then pass them to the service method.
+        List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
+        List<DashboardData.SecurityFinding> findings = awsDataService.getComprehensiveSecurityFindings(account, activeRegions).get();
+
         return ResponseEntity.ok(findings);
     }
 
     @GetMapping("/export")
-    public ResponseEntity<InputStreamResource> exportFindings(@RequestParam String accountId) throws ExecutionException, InterruptedException {
+    public ResponseEntity<byte[]> exportFindingsToExcel(@RequestParam String accountId) throws ExecutionException, InterruptedException {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
         
-        // Fetch the security findings data
-        List<DashboardData.SecurityFinding> findings = awsDataService.getComprehensiveSecurityFindings(account).get();
-        
-        // Use the export service to generate the Excel file in memory
+        // **FIXED**: Fetch active regions first, then pass them to the service method for export.
+        List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
+        List<DashboardData.SecurityFinding> findings = awsDataService.getComprehensiveSecurityFindings(account, activeRegions).get();
+
         ByteArrayInputStream in = excelExportService.exportSecurityFindingsToExcel(findings);
 
-        // Set HTTP headers for file download
         HttpHeaders headers = new HttpHeaders();
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm").format(new Date());
-        String filename = "XamOps_Security_Report_" + accountId + "_" + timestamp + ".xlsx";
-        headers.add("Content-Disposition", "attachment; filename=" + filename);
+        headers.add("Content-Disposition", "attachment; filename=security-findings.xlsx");
 
         return ResponseEntity
                 .ok()
                 .headers(headers)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new InputStreamResource(in));
+                .body(in.readAllBytes());
     }
 }

@@ -89,8 +89,9 @@
             <span>Dashboard</span>
         </a>
         
-        <div x-data="{ open: true }">
-            <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'cloud') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
+        <!-- FIXED: Using Thymeleaf to set the initial 'open' state on the server-side -->
+        <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap')}]] }">
+            <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
                 <div class="flex items-center gap-3"><i class="fas fa-cloud fa-fw w-5 text-center"></i><span class="font-semibold">Cloudview</span></div>
                 <i class="fas fa-chevron-down text-xs text-gray-400 transition-transform" :class="open && 'rotate-180'"></i>
             </button>
@@ -101,8 +102,9 @@
             </div>
         </div>
 
-        <div x-data="{ open: true }">
-            <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
+        <!-- FIXED: Using Thymeleaf to set the initial 'open' state on the server-side -->
+        <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') || #strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation')}]] }">
+            <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
                 <div class="flex items-center gap-3"><i class="fas fa-cogs fa-fw w-5 text-center"></i><span class="font-semibold">Optimization</span></div>
                 <i class="fas fa-chevron-down text-xs transition-transform" :class="open && 'rotate-180'"></i>
             </button>
@@ -116,7 +118,8 @@
             </div>
         </div>
 
-        <div x-data="{ open: true }">
+        <!-- FIXED: Using Thymeleaf to set the initial 'open' state on the server-side -->
+        <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts')}]] }">
             <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
                 <div class="flex items-center gap-3"><i class="fas fa-shield-alt fa-fw w-5 text-center"></i><span class="font-semibold">Cloudguard</span></div>
                 <i class="fas fa-chevron-down text-xs text-gray-400 transition-transform" :class="open && 'rotate-180'"></i>

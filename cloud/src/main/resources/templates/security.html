@@ -11,6 +11,8 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -40,27 +42,31 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
+                <!-- Summary Cards Skeleton -->
+                <div x-show="isLoading" x-cloak class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                </div>
+
                 <!-- Summary Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     <div class="bg-white rounded-xl p-5 shadow-sm border">
                         <h3 class="text-gray-500 text-sm font-medium">Total Findings</h3>
-                        <div x-show="isLoading" class="skeleton h-8 w-16 mt-2 rounded"></div>
-                        <p x-show="!isLoading" class="text-3xl font-bold text-gray-800 mt-1" x-text="findings.length"></p>
+                        <p class="text-3xl font-bold text-gray-800 mt-1" x-text="findings.length"></p>
                     </div>
                     <div class="bg-white rounded-xl p-5 shadow-sm border">
                         <h3 class="text-gray-500 text-sm font-medium">Critical</h3>
-                        <div x-show="isLoading" class="skeleton h-8 w-16 mt-2 rounded"></div>
-                        <p x-show="!isLoading" class="text-3xl font-bold text-red-600 mt-1" x-text="severityCounts.Critical || 0"></p>
+                        <p class="text-3xl font-bold text-red-600 mt-1" x-text="severityCounts.Critical || 0"></p>
                     </div>
                     <div class="bg-white rounded-xl p-5 shadow-sm border">
                         <h3 class="text-gray-500 text-sm font-medium">High</h3>
-                        <div x-show="isLoading" class="skeleton h-8 w-16 mt-2 rounded"></div>
-                        <p x-show="!isLoading" class="text-3xl font-bold text-orange-500 mt-1" x-text="severityCounts.High || 0"></p>
+                        <p class="text-3xl font-bold text-orange-500 mt-1" x-text="severityCounts.High || 0"></p>
                     </div>
                     <div class="bg-white rounded-xl p-5 shadow-sm border">
                         <h3 class="text-gray-500 text-sm font-medium">Medium & Low</h3>
-                        <div x-show="isLoading" class="skeleton h-8 w-16 mt-2 rounded"></div>
-                        <p x-show="!isLoading" class="text-3xl font-bold text-yellow-500 mt-1" x-text="(severityCounts.Medium || 0) + (severityCounts.Low || 0)"></p>
+                        <p class="text-3xl font-bold text-yellow-500 mt-1" x-text="(severityCounts.Medium || 0) + (severityCounts.Low || 0)"></p>
                     </div>
                 </div>
 
@@ -80,8 +86,30 @@
                         </div>
                     </div>
                     
-                    <div x-show="isLoading" class="text-center p-16">
-                        <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
+                    <!-- Table Skeleton Loader -->
+                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-48"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-28"></div></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="i in 5" :key="i">
+                                    <tr class="border-b">
+                                        <td class="px-6 py-4"><div class="h-6 skeleton rounded-full w-20"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
+                                        <td class="px-6 py-4"><div class="h-6 skeleton rounded-md w-32"></div></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
                     </div>
 
                     <div x-show="!isLoading && filteredFindings.length === 0" x-cloak class="text-center py-12 border-2 border-dashed rounded-lg">
@@ -136,30 +164,52 @@ function securityCenter() {
             severity: 'All'
         },
         init() {
-            this.loadFindings();
-        },
-        loadFindings(forceRefresh = false) {
-            this.isLoading = true;
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 console.error("No account selected");
                 this.isLoading = false;
-                this.findings = [];
                 return;
             }
+            const cacheKey = `securityFindings-${selectedAccountId}`;
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData) {
+                this.processFindings(JSON.parse(cachedData));
+                this.isLoading = false;
+            } else {
+                this.loadFindings(true);
+            }
+        },
+        loadFindings(forceRefresh = false) {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isLoading = false;
+                return;
+            }
+            
+            const cacheKey = `securityFindings-${selectedAccountId}`;
+            if (forceRefresh) {
+                sessionStorage.removeItem(cacheKey);
+                this.isLoading = true;
+            }
+
             fetch(`/api/security/findings?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    this.findings = data.sort((a, b) => {
-                        const severityOrder = { 'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3 };
-                        return (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4);
-                    });
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                    this.processFindings(data);
                 })
                 .catch(err => {
                     console.error('Failed to load security findings:', err);
                     this.findings = [];
                 })
                 .finally(() => this.isLoading = false);
+        },
+        processFindings(data) {
+            this.findings = data.sort((a, b) => {
+                const severityOrder = { 'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3 };
+                return (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4);
+            });
         },
         exportToExcel() {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');

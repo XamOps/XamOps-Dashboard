@@ -18,6 +18,8 @@
         .toast {
             transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
         }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -41,10 +43,17 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                <!-- Loading State -->
-                <div x-show="isLoading" class="text-center p-16">
-                    <i class="fas fa-spinner fa-spin fa-3x text-indigo-500"></i>
-                    <p class="mt-4 text-gray-600 font-semibold">Fetching Reservation Data...</p>
+                <!-- Skeleton Loader for the entire page -->
+                <div x-show="isLoading" x-cloak class="space-y-6">
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="bg-white rounded-lg p-6 shadow-sm border skeleton h-48"></div>
+                        </div>
+                        <div class="lg:col-span-3 bg-white rounded-lg p-6 shadow-sm border skeleton h-48"></div>
+                    </div>
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border skeleton h-96"></div>
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
+                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
                 </div>
 
                 <div x-show="!isLoading" x-cloak>
@@ -360,11 +369,6 @@ function reservationManagement() {
         expiryChartInstance: null,
 
         init() {
-            this.loadReservationData();
-        },
-
-        loadReservationData(forceRefresh = false) {
-            this.isLoading = true;
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 console.error("No account selected");
@@ -372,19 +376,32 @@ function reservationManagement() {
                 return;
             }
             const cacheKey = `reservationData-${selectedAccountId}`;
-            if (forceRefresh) sessionStorage.removeItem(cacheKey);
             const cachedData = sessionStorage.getItem(cacheKey);
 
-            if (cachedData && !forceRefresh) {
+            if (cachedData) {
                 this.data = JSON.parse(cachedData);
                 this.isLoading = false;
                 setTimeout(() => {
                     this.renderHistoricalChart();
                     this.renderExpiryChart();
                 }, 0);
+            } else {
+                this.loadReservationData(true);
+            }
+        },
+
+        loadReservationData(forceRefresh = false) {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+             if (!selectedAccountId) {
+                this.isLoading = false;
                 return;
             }
-
+            const cacheKey = `reservationData-${selectedAccountId}`;
+            if (forceRefresh) {
+                sessionStorage.removeItem(cacheKey);
+                this.isLoading = true;
+            }
+            
             fetch(`/api/reservations?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {

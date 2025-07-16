@@ -11,6 +11,8 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -35,12 +37,43 @@
             <div class="flex-1 p-6 space-y-6">
                 <div class="bg-white rounded-lg p-6 shadow-sm border">
                     <h2 class="text-lg font-semibold text-gray-800 mb-4">Connected Accounts</h2>
-                    <div x-show="isLoading" class="text-center p-8"><i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                    
+                    <!-- Skeleton Loader -->
+                    <div x-show="isLoading" x-cloak>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                        <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
+                                        <th class="px-6 py-3"><div class="h-4 skeleton rounded w-16"></div></th>
+                                        <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                        <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
+                                        <th class="px-6 py-3 text-center"><div class="h-4 skeleton rounded w-16 mx-auto"></div></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="i in 3" :key="i">
+                                        <tr class="border-b">
+                                            <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
+                                            <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
+                                            <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
+                                            <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
+                                            <td class="px-6 py-4"><div class="h-6 skeleton rounded-full w-20"></div></td>
+                                            <td class="px-6 py-4"><div class="h-8 skeleton rounded w-24 mx-auto"></div></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div x-show="!isLoading && accounts.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
                         <i class="fas fa-folder-open fa-3x text-gray-400"></i>
                         <h3 class="mt-4 text-lg font-medium text-gray-900">No accounts connected yet</h3>
                         <p class="mt-1 text-sm text-gray-500">Click "Add New Account" to get started.</p>
                     </div>
+
                     <div x-show="!isLoading && accounts.length > 0" x-cloak class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-600">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">

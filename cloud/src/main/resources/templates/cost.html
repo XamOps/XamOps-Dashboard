@@ -12,6 +12,8 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -40,18 +42,39 @@
                     <h2 class="text-lg font-semibold text-gray-800 mb-4">Cost Breakdown</h2>
                     <div class="flex items-center space-x-2 mb-4">
                         <span class="text-sm font-medium">Group by:</span>
-                        <select x-model="groupBy" @change="loadCostData()" class="form-select text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <select x-model="groupBy" @change="loadCostData(true)" class="form-select text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                             <option value="SERVICE">Service</option>
                             <option value="REGION">Region</option>
                             <option value="TAG">Tag</option>
                         </select>
-                        <input type="text" x-show="groupBy === 'TAG'" x-model="tagKey" @input.debounce.500ms="loadCostData()" placeholder="Enter Tag Key" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <input type="text" x-show="groupBy === 'TAG'" x-model="tagKey" @input.debounce.500ms="loadCostData(true)" placeholder="Enter Tag Key" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                     </div>
-                    <div x-show="isLoading" class="text-center p-8"> <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                    
+                    <!-- Skeleton Loader -->
+                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
+                                    <th class="px-6 py-3 text-right"><div class="h-4 skeleton rounded w-24 ml-auto"></div></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="i in 8" :key="i">
+                                    <tr class="border-b">
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/4 ml-auto"></div></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
                     <div x-show="!isLoading && costData.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
                         <h3 class="mt-2 text-sm font-medium text-gray-900">No cost data found.</h3>
                         <p class="mt-1 text-sm text-gray-500">There is no cost data for the selected criteria, or the tag key is invalid.</p>
                     </div>
+
                     <div x-show="!isLoading && costData.length > 0" x-cloak class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-600">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -85,11 +108,10 @@ function costManagement() {
         tagKey: 'Name',
 
         init() {
-            this.loadCostData();
+            this.loadCostData(false); // Initial load from cache if available
         },
 
         loadCostData(forceRefresh = false) {
-            this.isLoading = true;
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 this.isLoading = false;
@@ -97,6 +119,21 @@ function costManagement() {
                 return;
             }
             
+            const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
+            
+            if (!forceRefresh) {
+                const cachedData = sessionStorage.getItem(cacheKey);
+                if (cachedData) {
+                    this.costData = JSON.parse(cachedData);
+                    this.isLoading = false;
+                    return;
+                }
+            }
+
+            // If forcing refresh or cache is empty, set loading and fetch
+            this.isLoading = true;
+            sessionStorage.removeItem(cacheKey);
+
             let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}`;
             if (this.groupBy === 'TAG') {
                 if(this.tagKey) {
@@ -108,16 +145,6 @@ function costManagement() {
                 }
             }
             
-            const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
-            if(forceRefresh) sessionStorage.removeItem(cacheKey);
-            const cachedData = sessionStorage.getItem(cacheKey);
-
-            if(cachedData && !forceRefresh) {
-                this.costData = JSON.parse(cachedData);
-                this.isLoading = false;
-                return;
-            }
-
             fetch(url)
                 .then(res => res.json())
                 .then(data => {

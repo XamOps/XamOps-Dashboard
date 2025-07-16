@@ -171,6 +171,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -238,76 +239,86 @@ public class AwsDataService {
 
     @Cacheable(value = "dashboardData", key = "#accountId")
     public DashboardData getDashboardData(String accountId) throws ExecutionException, InterruptedException {
-        logger.info("--- LAUNCHING ASYNC DATA FETCH FROM AWS for account {} ---", accountId);
+        logger.info("--- LAUNCHING OPTIMIZED ASYNC DATA FETCH FROM AWS for account {} ---", accountId);
         CloudAccount account = getAccount(accountId);
 
+        // **MODIFIED**: Fetch active regions ONCE.
         CompletableFuture<List<DashboardData.RegionStatus>> regionStatusFuture = getRegionStatusForAccount(account);
-        CompletableFuture<DashboardData.ResourceInventory> inventoryFuture = getResourceInventory(account);
-        CompletableFuture<DashboardData.CloudWatchStatus> cwStatusFuture = getCloudWatchStatus(account);
-        CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
-        CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = getBillingSummary(account);
-        CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account);
-        CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(account);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = getEc2InstanceRecommendations(account);
-        CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = getEbsVolumeRecommendations(account);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture = getLambdaFunctionRecommendations(account);
-        CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = getReservationAnalysis(account);
-        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = getReservationPurchaseRecommendations(account);
-        CompletableFuture<List<DashboardData.ServiceQuotaInfo>> serviceQuotasFuture = getServiceQuotaInfo(account);
-        CompletableFuture<List<SecurityFinding>> securityFindingsFuture = getComprehensiveSecurityFindings(account);
-        CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = getWastedResources(account);
 
+        // **MODIFIED**: Use thenCompose to chain subsequent calls, passing the active regions list.
+        return regionStatusFuture.thenCompose(activeRegions -> {
+            logger.info("Active regions fetched for account {}, proceeding with dependent data calls.", accountId);
 
-        CompletableFuture.allOf(
-            inventoryFuture, regionStatusFuture, cwStatusFuture,
-            costHistoryFuture, billingFuture, iamFuture, savingsFuture,
-            ec2RecsFuture, anomaliesFuture, ebsRecsFuture,
-            lambdaRecsFuture, reservationFuture, reservationPurchaseFuture, serviceQuotasFuture,
-            securityFindingsFuture, wastedResourcesFuture
-        ).join();
+            // All these futures will now receive the pre-fetched list of active regions.
+            CompletableFuture<DashboardData.ResourceInventory> inventoryFuture = getResourceInventory(account, activeRegions);
+            CompletableFuture<DashboardData.CloudWatchStatus> cwStatusFuture = getCloudWatchStatus(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = getEc2InstanceRecommendations(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = getEbsVolumeRecommendations(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture = getLambdaFunctionRecommendations(account, activeRegions);
+            CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = getWastedResources(account, activeRegions);
+            CompletableFuture<List<SecurityFinding>> securityFindingsFuture = getComprehensiveSecurityFindings(account, activeRegions);
+            CompletableFuture<List<DashboardData.ServiceQuotaInfo>> serviceQuotasFuture = getServiceQuotaInfo(account, activeRegions);
+            CompletableFuture<List<ReservationInventoryDto>> reservationInventoryFuture = getReservationInventory(account, activeRegions);
 
-        logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {} ---", accountId);
+            // These futures do not depend on the region list and can run in parallel.
+            CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
+            CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = getBillingSummary(account);
+            CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account);
+            CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(account);
+            CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
+            CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = getReservationAnalysis(account);
+            CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = getReservationPurchaseRecommendations(account);
 
-        List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.get();
-        List<DashboardData.OptimizationRecommendation> ebsRecs = ebsRecsFuture.get();
-        List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.get();
-        List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.get();
-        List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.get();
+            // Combine all futures
+            return CompletableFuture.allOf(
+                inventoryFuture, cwStatusFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture,
+                wastedResourcesFuture, securityFindingsFuture, costHistoryFuture, billingFuture,
+                iamFuture, savingsFuture, anomaliesFuture, reservationFuture, reservationPurchaseFuture,
+                serviceQuotasFuture, reservationInventoryFuture
+            ).thenApply(v -> {
+                logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {}, assembling DTO ---", accountId);
 
-        List<DashboardData.SecurityInsight> securityInsights = securityFindingsFuture.get().stream()
-            .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory))
-            .entrySet().stream()
-            .map(entry -> new DashboardData.SecurityInsight(
-                String.format("%s has %d potential issues", entry.getKey(), entry.getValue().size()),
-                entry.getKey(),
-                "SECURITY",
-                entry.getValue().size()
-            )).collect(Collectors.toList());
+                // Gracefully handle individual future failures
+                List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.isCompletedExceptionally() ? null : ec2RecsFuture.join();
+                List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.isCompletedExceptionally() ? null : anomaliesFuture.join();
+                List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.isCompletedExceptionally() ? null : lambdaRecsFuture.join();
+                
+                List<DashboardData.SecurityInsight> securityInsights = securityFindingsFuture.join().stream()
+                    .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory))
+                    .entrySet().stream()
+                    .map(entry -> new DashboardData.SecurityInsight(
+                        String.format("%s has %d potential issues", entry.getKey(), entry.getValue().size()),
+                        entry.getKey(),
+                        "SECURITY",
+                        entry.getValue().size()
+                    )).collect(Collectors.toList());
 
+                DashboardData.OptimizationSummary optimizationSummary = getOptimizationSummary(
+                    ec2Recs != null ? ec2Recs : Collections.emptyList(),
+                    ebsRecsFuture.join(),
+                    lambdaRecs != null ? lambdaRecs : Collections.emptyList(),
+                    anomalies != null ? anomalies : Collections.emptyList()
+                );
 
-        DashboardData.OptimizationSummary optimizationSummary = getOptimizationSummary(ec2Recs, ebsRecs, lambdaRecs, anomalies);
+                DashboardData data = new DashboardData();
+                DashboardData.Account mainAccount = new DashboardData.Account(
+                        accountId, account.getAccountName(),
+                        activeRegions, inventoryFuture.join(), cwStatusFuture.join(), securityInsights,
+                        costHistoryFuture.join(), billingFuture.join(), iamFuture.join(), savingsFuture.join(),
+                        ec2Recs, anomalies, ebsRecsFuture.join(), lambdaRecs,
+                        reservationFuture.join(), reservationPurchaseFuture.join(),
+                        optimizationSummary, wastedResourcesFuture.join(), serviceQuotasFuture.join());
 
-        DashboardData data = new DashboardData();
+                data.setSelectedAccount(mainAccount);
 
-        DashboardData.Account mainAccount = new DashboardData.Account(
-                accountId, account.getAccountName(),
-                regionStatusFuture.get(), inventoryFuture.get(), cwStatusFuture.get(), securityInsights,
-                costHistoryFuture.get(), billingFuture.get(), iamFuture.get(), savingsFuture.get(),
-                ec2Recs, anomalies, ebsRecs,
-                lambdaRecs, reservationFuture.get(), reservationPurchaseFuture.get(),
-                optimizationSummary,
-                wastedResources, 
-                serviceQuotasFuture.get());
+                List<DashboardData.Account> availableAccounts = cloudAccountRepository.findAll().stream()
+                    .map(acc -> new DashboardData.Account(acc.getAwsAccountId(), acc.getAccountName(), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))
+                    .collect(Collectors.toList());
+                data.setAvailableAccounts(availableAccounts);
 
-        data.setSelectedAccount(mainAccount);
-
-        List<DashboardData.Account> availableAccounts = cloudAccountRepository.findAll().stream()
-            .map(acc -> new DashboardData.Account(acc.getAwsAccountId(), acc.getAccountName(), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))
-            .collect(Collectors.toList());
-        data.setAvailableAccounts(availableAccounts);
-
-        return data;
+                return data;
+            });
+        }).join(); // Join the result of the chain
     }
 
 
@@ -366,66 +377,62 @@ public class AwsDataService {
         }
     }
 
+    // **MODIFIED**: This method now accepts the list of active regions.
     @Async("awsTaskExecutor")
-    @Cacheable(value = "inventory", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.ResourceInventory> getResourceInventory(CloudAccount account) {
+    public CompletableFuture<DashboardData.ResourceInventory> getResourceInventory(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Fetching resource inventory for account {}...", account.getAwsAccountId());
+        
+        List<CompletableFuture<Map<String, Integer>>> regionalFutures = activeRegions.stream()
+            .map(region -> CompletableFuture.supplyAsync(() -> {
+                Map<String, Integer> regionalCounts = new HashMap<>();
+                String regionId = region.getRegionId();
+                
+                try {
+                    Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+                    regionalCounts.put("ec2", ec2.describeInstances().reservations().stream().mapToInt(r -> r.instances().size()).sum());
+                    regionalCounts.put("ebs", ec2.describeVolumes().volumes().size());
+                    regionalCounts.put("images", ec2.describeImages(r -> r.owners("self")).images().size());
+                    regionalCounts.put("snapshots", ec2.describeSnapshots(r -> r.ownerIds("self")).snapshots().size());
+                    regionalCounts.put("vpc", ec2.describeVpcs().vpcs().size());
+                } catch (Exception e) { logger.error("Inventory check failed for EC2-related services in region {} for account {}", regionId, account.getAwsAccountId(), e); }
 
-        // This method will now aggregate counts from all active regions.
-        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
-            
-            List<CompletableFuture<Map<String, Integer>>> regionalFutures = activeRegions.stream()
-                .map(region -> CompletableFuture.supplyAsync(() -> {
-                    Map<String, Integer> regionalCounts = new HashMap<>();
-                    String regionId = region.getRegionId();
-                    
-                    try {
-                        Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-                        regionalCounts.put("ec2", ec2.describeInstances().reservations().stream().mapToInt(r -> r.instances().size()).sum());
-                        regionalCounts.put("ebs", ec2.describeVolumes().volumes().size());
-                        regionalCounts.put("images", ec2.describeImages(r -> r.owners("self")).images().size());
-                        regionalCounts.put("snapshots", ec2.describeSnapshots(r -> r.ownerIds("self")).snapshots().size());
-                        regionalCounts.put("vpc", ec2.describeVpcs().vpcs().size());
-                    } catch (Exception e) { logger.error("Inventory check failed for EC2-related services in region {} for account {}", regionId, account.getAwsAccountId(), e); }
+                try {
+                    EcsClient ecs = awsClientProvider.getEcsClient(account, regionId);
+                    regionalCounts.put("ecs", ecs.listClusters().clusterArns().size());
+                } catch (Exception e) { logger.error("Inventory check failed for ECS in region {} for account {}", regionId, account.getAwsAccountId(), e); }
 
-                    try {
-                        EcsClient ecs = awsClientProvider.getEcsClient(account, regionId);
-                        regionalCounts.put("ecs", ecs.listClusters().clusterArns().size());
-                    } catch (Exception e) { logger.error("Inventory check failed for ECS in region {} for account {}", regionId, account.getAwsAccountId(), e); }
+                try {
+                    EksClient eks = awsClientProvider.getEksClient(account, regionId);
+                    regionalCounts.put("k8s", eks.listClusters().clusters().size());
+                } catch (Exception e) { logger.error("Inventory check failed for EKS in region {} for account {}", regionId, account.getAwsAccountId(), e); }
 
-                    try {
-                        EksClient eks = awsClientProvider.getEksClient(account, regionId);
-                        regionalCounts.put("k8s", eks.listClusters().clusters().size());
-                    } catch (Exception e) { logger.error("Inventory check failed for EKS in region {} for account {}", regionId, account.getAwsAccountId(), e); }
+                try {
+                    LambdaClient lambda = awsClientProvider.getLambdaClient(account, regionId);
+                    regionalCounts.put("lambdas", lambda.listFunctions().functions().size());
+                } catch (Exception e) { logger.error("Inventory check failed for Lambda in region {} for account {}", regionId, account.getAwsAccountId(), e); }
 
-                    try {
-                        LambdaClient lambda = awsClientProvider.getLambdaClient(account, regionId);
-                        regionalCounts.put("lambdas", lambda.listFunctions().functions().size());
-                    } catch (Exception e) { logger.error("Inventory check failed for Lambda in region {} for account {}", regionId, account.getAwsAccountId(), e); }
+                return regionalCounts;
+            }))
+            .collect(Collectors.toList());
 
-                    return regionalCounts;
-                }))
-                .collect(Collectors.toList());
-
-            return CompletableFuture.allOf(regionalFutures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> {
-                    DashboardData.ResourceInventory totalInventory = new DashboardData.ResourceInventory();
-                    regionalFutures.stream()
-                        .map(CompletableFuture::join)
-                        .forEach(regionalCounts -> {
-                            totalInventory.setVpc(totalInventory.getVpc() + regionalCounts.getOrDefault("vpc", 0));
-                            totalInventory.setEcs(totalInventory.getEcs() + regionalCounts.getOrDefault("ecs", 0));
-                            totalInventory.setEc2(totalInventory.getEc2() + regionalCounts.getOrDefault("ec2", 0));
-                            totalInventory.setKubernetes(totalInventory.getKubernetes() + regionalCounts.getOrDefault("k8s", 0));
-                            totalInventory.setLambdas(totalInventory.getLambdas() + regionalCounts.getOrDefault("lambdas", 0));
-                            totalInventory.setEbsVolumes(totalInventory.getEbsVolumes() + regionalCounts.getOrDefault("ebs", 0));
-                            totalInventory.setImages(totalInventory.getImages() + regionalCounts.getOrDefault("images", 0));
-                            totalInventory.setSnapshots(totalInventory.getSnapshots() + regionalCounts.getOrDefault("snapshots", 0));
-                        });
-                    logger.debug("Aggregated total inventory for account {}: {}", account.getAwsAccountId(), totalInventory);
-                    return totalInventory;
-                });
-        });
+        return CompletableFuture.allOf(regionalFutures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> {
+                DashboardData.ResourceInventory totalInventory = new DashboardData.ResourceInventory();
+                regionalFutures.stream()
+                    .map(CompletableFuture::join)
+                    .forEach(regionalCounts -> {
+                        totalInventory.setVpc(totalInventory.getVpc() + regionalCounts.getOrDefault("vpc", 0));
+                        totalInventory.setEcs(totalInventory.getEcs() + regionalCounts.getOrDefault("ecs", 0));
+                        totalInventory.setEc2(totalInventory.getEc2() + regionalCounts.getOrDefault("ec2", 0));
+                        totalInventory.setKubernetes(totalInventory.getKubernetes() + regionalCounts.getOrDefault("k8s", 0));
+                        totalInventory.setLambdas(totalInventory.getLambdas() + regionalCounts.getOrDefault("lambdas", 0));
+                        totalInventory.setEbsVolumes(totalInventory.getEbsVolumes() + regionalCounts.getOrDefault("ebs", 0));
+                        totalInventory.setImages(totalInventory.getImages() + regionalCounts.getOrDefault("images", 0));
+                        totalInventory.setSnapshots(totalInventory.getSnapshots() + regionalCounts.getOrDefault("snapshots", 0));
+                    });
+                logger.debug("Aggregated total inventory for account {}: {}", account.getAwsAccountId(), totalInventory);
+                return totalInventory;
+            });
     }
 
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("eu-west-1", "eu-north-1", "ca-central-1", "us-west-2");
@@ -435,43 +442,51 @@ public class AwsDataService {
     @Cacheable(value = "allRecommendations", key = "#accountId")
     public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getAllOptimizationRecommendations(String accountId) {
         CloudAccount account = getAccount(accountId);
-        logger.info("Fetching all optimization recommendations for account {}...", account.getAwsAccountId());
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2 = getEc2InstanceRecommendations(account);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebs = getEbsVolumeRecommendations(account);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambda = getLambdaFunctionRecommendations(account);
-        return CompletableFuture.allOf(ec2, ebs, lambda).thenApply(v -> {
-            List<DashboardData.OptimizationRecommendation> allRecs = Stream.of(ec2.join(), ebs.join(), lambda.join()).flatMap(List::stream).collect(Collectors.toList());
-            logger.debug("Fetched a total of {} optimization recommendations for account {}", allRecs.size(), accountId);
-            return allRecs;
+        // **MODIFIED**: Fetch regions once and pass to recommendation methods
+        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+            logger.info("Fetching all optimization recommendations for account {}...", account.getAwsAccountId());
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2 = getEc2InstanceRecommendations(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebs = getEbsVolumeRecommendations(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambda = getLambdaFunctionRecommendations(account, activeRegions);
+            return CompletableFuture.allOf(ec2, ebs, lambda).thenApply(v -> {
+                List<DashboardData.OptimizationRecommendation> allRecs = Stream.of(ec2.join(), ebs.join(), lambda.join()).flatMap(List::stream).collect(Collectors.toList());
+                logger.debug("Fetched a total of {} optimization recommendations for account {}", allRecs.size(), accountId);
+                return allRecs;
+            });
         });
     }
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "cloudlistResources", key = "#account.awsAccountId")
     public CompletableFuture<List<ResourceDto>> getAllResources(CloudAccount account) {
-        logger.info("Fetching all resources for Cloudlist (flat list) for account {}...", account.getAwsAccountId());
+        // **MODIFIED**: Fetch regions once and pass to resource fetching methods
+        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+            logger.info("Fetching all resources for Cloudlist (flat list) for account {}...", account.getAwsAccountId());
 
-        List<CompletableFuture<List<ResourceDto>>> resourceFutures = List.of(
-                fetchEc2InstancesForCloudlist(account), fetchEbsVolumesForCloudlist(account),
-                fetchRdsInstancesForCloudlist(account), fetchLambdaFunctionsForCloudlist(account),
-                fetchVpcsForCloudlist(account), fetchSecurityGroupsForCloudlist(account),
-                fetchS3BucketsForCloudlist(account), fetchLoadBalancersForCloudlist(account),
-                fetchAutoScalingGroupsForCloudlist(account), fetchElastiCacheClustersForCloudlist(account),
-                fetchDynamoDbTablesForCloudlist(account), fetchEcrRepositoriesForCloudlist(account),
-                fetchRoute53HostedZonesForCloudlist(account), fetchCloudTrailsForCloudlist(account),
-                fetchAcmCertificatesForCloudlist(account), fetchCloudWatchLogGroupsForCloudlist(account),
-                fetchSnsTopicsForCloudlist(account), fetchSqsQueuesForCloudlist(account)
-        );
+            List<CompletableFuture<List<ResourceDto>>> resourceFutures = List.of(
+                    fetchEc2InstancesForCloudlist(account, activeRegions), fetchEbsVolumesForCloudlist(account, activeRegions),
+                    fetchRdsInstancesForCloudlist(account, activeRegions), fetchLambdaFunctionsForCloudlist(account, activeRegions),
+                    fetchVpcsForCloudlist(account, activeRegions), fetchSecurityGroupsForCloudlist(account, activeRegions),
+                    fetchS3BucketsForCloudlist(account), // S3 is global, doesn't need active regions list
+                    fetchLoadBalancersForCloudlist(account, activeRegions),
+                    fetchAutoScalingGroupsForCloudlist(account, activeRegions), fetchElastiCacheClustersForCloudlist(account, activeRegions),
+                    fetchDynamoDbTablesForCloudlist(account, activeRegions), fetchEcrRepositoriesForCloudlist(account, activeRegions),
+                    fetchRoute53HostedZonesForCloudlist(account), // Route53 is global
+                    fetchCloudTrailsForCloudlist(account, activeRegions),
+                    fetchAcmCertificatesForCloudlist(account, activeRegions), fetchCloudWatchLogGroupsForCloudlist(account, activeRegions),
+                    fetchSnsTopicsForCloudlist(account, activeRegions), fetchSqsQueuesForCloudlist(account, activeRegions)
+            );
 
-        return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> {
-                    List<ResourceDto> allResources = resourceFutures.stream()
-                        .map(future -> future.getNow(Collections.emptyList()))
-                        .flatMap(Collection::stream)
-                        .collect(Collectors.toList());
-                    logger.debug("Fetched a total of {} resources for Cloudlist for account {}", allResources.size(), account.getAwsAccountId());
-                    return allResources;
-                });
+            return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(v -> {
+                        List<ResourceDto> allResources = resourceFutures.stream()
+                            .map(future -> future.getNow(Collections.emptyList()))
+                            .flatMap(Collection::stream)
+                            .collect(Collectors.toList());
+                        logger.debug("Fetched a total of {} resources for Cloudlist for account {}", allResources.size(), account.getAwsAccountId());
+                        return allResources;
+                    });
+        });
     }
 
     @CacheEvict(value = {"dashboardData", "cloudlistResources", "groupedCloudlistResources", "wastedResources", "regionStatus", "inventory", "cloudwatchStatus", "securityInsights", "ec2Recs", "costAnomalies", "ebsRecs", "lambdaRecs", "reservationAnalysis", "reservationPurchaseRecs", "billingSummary", "iamResources", "costHistory", "allRecommendations", "securityFindings", "serviceQuotas", "reservationPageData", "reservationInventory", "historicalReservationData", "reservationModificationRecs", "eksClusters", "k8sNodes", "k8sNamespaces", "k8sDeployments", "k8sPods", "finopsReport", "costByTag", "budgets", "taggingCompliance", "costByRegion"}, allEntries = true)
@@ -495,40 +510,32 @@ public class AwsDataService {
         });
     }
     
-    /**
-     * Generic helper method to fetch resources from all active regions for a given account.
-     * @param account The cloud account.
-     * @param fetchFunction A function that takes a region ID and returns a list of resources for that region.
-     * @param serviceName A descriptive name of the service for logging.
-     * @return A CompletableFuture containing a list of all resources aggregated from all active regions.
-     */
-    private <T> CompletableFuture<List<T>> fetchAllRegionalResources(CloudAccount account, Function<String, List<T>> fetchFunction, String serviceName) {
-        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
-            List<CompletableFuture<List<T>>> futures = activeRegions.stream()
-                .map(regionStatus -> CompletableFuture.supplyAsync(() -> {
-                    try {
-                        return fetchFunction.apply(regionStatus.getRegionId());
-                    } catch (Exception e) {
-                        logger.error("Cloudlist sub-task failed for account {}: {} in region {}.", account.getAwsAccountId(), serviceName, regionStatus.getRegionId(), e);
-                        return Collections.<T>emptyList();
-                    }
-                }))
-                .collect(Collectors.toList());
+    // **MODIFIED**: This helper now accepts the list of active regions.
+    private <T> CompletableFuture<List<T>> fetchAllRegionalResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, Function<String, List<T>> fetchFunction, String serviceName) {
+        List<CompletableFuture<List<T>>> futures = activeRegions.stream()
+            .map(regionStatus -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    return fetchFunction.apply(regionStatus.getRegionId());
+                } catch (Exception e) {
+                    logger.error("Cloudlist sub-task failed for account {}: {} in region {}.", account.getAwsAccountId(), serviceName, regionStatus.getRegionId(), e);
+                    return Collections.<T>emptyList();
+                }
+            }))
+            .collect(Collectors.toList());
 
-            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenApply(v -> {
-                        List<T> allResources = futures.stream()
-                                .map(CompletableFuture::join)
-                                .flatMap(List::stream)
-                                .collect(Collectors.toList());
-                        logger.debug("Fetched a total of {} {} resources across all regions for account {}", allResources.size(), serviceName, account.getAwsAccountId());
-                        return allResources;
-                    });
-        });
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(v -> {
+                    List<T> allResources = futures.stream()
+                            .map(CompletableFuture::join)
+                            .flatMap(List::stream)
+                            .collect(Collectors.toList());
+                    logger.debug("Fetched a total of {} {} resources across all regions for account {}", allResources.size(), serviceName, account.getAwsAccountId());
+                    return allResources;
+                });
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchEc2InstancesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeInstances().reservations().stream()
                     .flatMap(r -> r.instances().stream())
@@ -537,8 +544,8 @@ public class AwsDataService {
         }, "EC2 Instances");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchEbsVolumesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchEbsVolumesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeVolumes().volumes().stream()
                     .map(v -> new ResourceDto(v.volumeId(), getTagName(v.tags(), "N/A"), "EBS Volume", v.availabilityZone().replaceAll(".$", ""), v.stateAsString(), v.createTime(), Map.of("Size", v.size() + " GiB", "Type", v.volumeTypeAsString(), "Attached to", v.attachments().isEmpty() ? "N/A" : v.attachments().get(0).instanceId())))
@@ -546,8 +553,8 @@ public class AwsDataService {
         }, "EBS Volumes");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchRdsInstancesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchRdsInstancesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             RdsClient rds = awsClientProvider.getRdsClient(account, regionId);
             return rds.describeDBInstances().dbInstances().stream()
                     .map(i -> new ResourceDto(i.dbInstanceIdentifier(), i.dbInstanceIdentifier(), "RDS Instance", i.availabilityZone().replaceAll(".$", ""), i.dbInstanceStatus(), i.instanceCreateTime(), Map.of("Engine", i.engine() + " " + i.engineVersion(), "Class", i.dbInstanceClass(), "Multi-AZ", i.multiAZ().toString())))
@@ -555,8 +562,8 @@ public class AwsDataService {
         }, "RDS Instances");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchLambdaFunctionsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchLambdaFunctionsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             LambdaClient lambda = awsClientProvider.getLambdaClient(account, regionId);
             return lambda.listFunctions().functions().stream()
                     .map(f -> {
@@ -568,8 +575,8 @@ public class AwsDataService {
         }, "Lambda Functions");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchVpcsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchVpcsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeVpcs().vpcs().stream()
                     .map(v -> new ResourceDto(v.vpcId(), getTagName(v.tags(), v.vpcId()), "VPC", regionId, v.stateAsString(), null, Map.of("CIDR Block", v.cidrBlock(), "Is Default", v.isDefault().toString())))
@@ -577,8 +584,8 @@ public class AwsDataService {
         }, "VPCs");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchSecurityGroupsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchSecurityGroupsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeSecurityGroups().securityGroups().stream()
                     .map(sg -> new ResourceDto(sg.groupId(), sg.groupName(), "Security Group", regionId, "Available", null, Map.of("VPC ID", sg.vpcId(), "Inbound Rules", String.valueOf(sg.ipPermissions().size()), "Outbound Rules", String.valueOf(sg.ipPermissionsEgress().size()))))
@@ -586,8 +593,8 @@ public class AwsDataService {
         }, "Security Groups");
     }
     
-    private CompletableFuture<List<ResourceDto>> fetchLoadBalancersForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchLoadBalancersForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ElasticLoadBalancingV2Client elbv2 = awsClientProvider.getElbv2Client(account, regionId);
             return elbv2.describeLoadBalancers().loadBalancers().stream()
                     .map(lb -> new ResourceDto(lb.loadBalancerName(), lb.loadBalancerName(), "Load Balancer", lb.availabilityZones().isEmpty() ? regionId : lb.availabilityZones().get(0).zoneName().replaceAll(".$", ""), lb.state().codeAsString(), lb.createdTime(), Map.of("Type", lb.typeAsString(), "Scheme", lb.schemeAsString(), "VPC ID", lb.vpcId())))
@@ -595,8 +602,8 @@ public class AwsDataService {
         }, "Load Balancers");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchAutoScalingGroupsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchAutoScalingGroupsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             AutoScalingClient asgClient = awsClientProvider.getAutoScalingClient(account, regionId);
             return asgClient.describeAutoScalingGroups().autoScalingGroups().stream()
                     .map(asg -> new ResourceDto(asg.autoScalingGroupName(), asg.autoScalingGroupName(), "Auto Scaling Group", asg.availabilityZones().isEmpty() ? regionId : asg.availabilityZones().get(0).replaceAll(".$", ""), "Active", asg.createdTime(), Map.of("Desired", asg.desiredCapacity().toString(), "Min", asg.minSize().toString(), "Max", asg.maxSize().toString())))
@@ -604,8 +611,8 @@ public class AwsDataService {
         }, "Auto Scaling Groups");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchElastiCacheClustersForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchElastiCacheClustersForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ElastiCacheClient elastiCache = awsClientProvider.getElastiCacheClient(account, regionId);
             return elastiCache.describeCacheClusters().cacheClusters().stream()
                     .map(c -> new ResourceDto(c.cacheClusterId(), c.cacheClusterId(), "ElastiCache Cluster", c.preferredAvailabilityZone().replaceAll(".$", ""), c.cacheClusterStatus(), c.cacheClusterCreateTime(), Map.of("Engine", c.engine() + " " + c.engineVersion(), "NodeType", c.cacheNodeType(), "Nodes", c.numCacheNodes().toString())))
@@ -613,8 +620,8 @@ public class AwsDataService {
         }, "ElastiCache Clusters");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchDynamoDbTablesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchDynamoDbTablesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             DynamoDbClient ddb = awsClientProvider.getDynamoDbClient(account, regionId);
             return ddb.listTables().tableNames().stream()
                     .map(tableName -> {
@@ -625,8 +632,8 @@ public class AwsDataService {
         }, "DynamoDB Tables");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchEcrRepositoriesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchEcrRepositoriesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             EcrClient ecr = awsClientProvider.getEcrClient(account, regionId);
             return ecr.describeRepositories().repositories().stream()
                     .map(r -> new ResourceDto(r.repositoryName(), r.repositoryName(), "ECR Repository", getRegionFromArn(r.repositoryArn()), "Available", r.createdAt(), Map.of("URI", r.repositoryUri())))
@@ -634,8 +641,8 @@ public class AwsDataService {
         }, "ECR Repositories");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchSnsTopicsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchSnsTopicsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             SnsClient sns = awsClientProvider.getSnsClient(account, regionId);
             return sns.listTopics().topics().stream()
                     .map(t -> new ResourceDto(t.topicArn(), t.topicArn().substring(t.topicArn().lastIndexOf(':') + 1), "SNS Topic", getRegionFromArn(t.topicArn()), "Active", null, Collections.emptyMap()))
@@ -643,8 +650,8 @@ public class AwsDataService {
         }, "SNS Topics");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchSqsQueuesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchSqsQueuesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             SqsClient sqs = awsClientProvider.getSqsClient(account, regionId);
             return sqs.listQueues().queueUrls().stream()
                     .map(queueUrl -> {
@@ -655,8 +662,8 @@ public class AwsDataService {
         }, "SQS Queues");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchCloudWatchLogGroupsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchCloudWatchLogGroupsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             CloudWatchLogsClient cwLogs = awsClientProvider.getCloudWatchLogsClient(account, regionId);
             return cwLogs.describeLogGroups().logGroups().stream()
                     .map(lg -> new ResourceDto(lg.arn(), lg.logGroupName(), "CloudWatch Log Group", getRegionFromArn(lg.arn()), "Active", Instant.ofEpochMilli(lg.creationTime()), Map.of("Retention (Days)", lg.retentionInDays() != null ? lg.retentionInDays().toString() : "Never Expire", "Stored Bytes", String.format("%,d", lg.storedBytes()))))
@@ -664,8 +671,8 @@ public class AwsDataService {
         }, "CloudWatch Log Groups");
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchCloudTrailsForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchCloudTrailsForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, regionId);
             return cloudTrail.describeTrails().trailList().stream()
                     .map(t -> new ResourceDto(t.trailARN(), t.name(), "CloudTrail", t.homeRegion(), "Active", null, Map.of("IsMultiRegion", t.isMultiRegionTrail().toString(), "S3Bucket", t.s3BucketName())))
@@ -725,8 +732,8 @@ public class AwsDataService {
         });
     }
 
-    private CompletableFuture<List<ResourceDto>> fetchAcmCertificatesForCloudlist(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<ResourceDto>> fetchAcmCertificatesForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             AcmClient acm = awsClientProvider.getAcmClient(account, regionId);
             return acm.listCertificates().certificateSummaryList().stream()
                     .map(c -> new ResourceDto(c.certificateArn(), c.domainName(), "Certificate Manager", regionId, c.statusAsString(), c.createdAt(), Map.of("Type", c.typeAsString(), "InUse", c.inUse().toString())))
@@ -761,18 +768,18 @@ public class AwsDataService {
     // --- WASTED RESOURCES (MULTI-REGION) ---
     @Async("awsTaskExecutor")
     @Cacheable(value = "wastedResources", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.WastedResource>> getWastedResources(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.WastedResource>> getWastedResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Fetching wasted resources for account {}...", account.getAwsAccountId());
         List<CompletableFuture<List<DashboardData.WastedResource>>> futures = List.of(
-                findUnattachedEbsVolumes(account),
-                findUnusedElasticIps(account),
-                findOldSnapshots(account),
-                findDeregisteredAmis(account),
-                findIdleRdsInstances(account),
-                findIdleLoadBalancers(account),
-                findUnusedSecurityGroups(account),
-                findIdleEc2Instances(account),
-                findUnattachedEnis(account)
+                findUnattachedEbsVolumes(account, activeRegions),
+                findUnusedElasticIps(account, activeRegions),
+                findOldSnapshots(account, activeRegions),
+                findDeregisteredAmis(account, activeRegions),
+                findIdleRdsInstances(account, activeRegions),
+                findIdleLoadBalancers(account, activeRegions),
+                findUnusedSecurityGroups(account, activeRegions),
+                findIdleEc2Instances(account, activeRegions),
+                findUnattachedEnis(account, activeRegions)
         );
 
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
@@ -786,8 +793,8 @@ public class AwsDataService {
                 });
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEbsVolumes(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEbsVolumes(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeVolumes(req -> req.filters(f -> f.name("status").values("available")))
                     .volumes().stream()
@@ -799,8 +806,8 @@ public class AwsDataService {
         }, "Unattached EBS Volumes");
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findUnusedElasticIps(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findUnusedElasticIps(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeAddresses().addresses().stream()
                     .filter(address -> address.associationId() == null)
@@ -809,8 +816,8 @@ public class AwsDataService {
         }, "Unused Elastic IPs");
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findOldSnapshots(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findOldSnapshots(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             Instant ninetyDaysAgo = Instant.now().minus(90, ChronoUnit.DAYS);
             return ec2.describeSnapshots(r -> r.ownerIds("self")).snapshots().stream()
@@ -820,8 +827,8 @@ public class AwsDataService {
         }, "Old Snapshots");
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findDeregisteredAmis(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findDeregisteredAmis(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             DescribeImagesRequest imagesRequest = DescribeImagesRequest.builder().owners("self").build();
             return ec2.describeImages(imagesRequest).images().stream()
@@ -831,8 +838,8 @@ public class AwsDataService {
         }, "Deregistered AMIs");
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findIdleRdsInstances(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findIdleRdsInstances(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             RdsClient rds = awsClientProvider.getRdsClient(account, regionId);
             return rds.describeDBInstances().dbInstances().stream()
                     .filter(db -> isRdsInstanceIdle(account, db, regionId))
@@ -863,8 +870,8 @@ public class AwsDataService {
         return false;
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findIdleLoadBalancers(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findIdleLoadBalancers(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ElasticLoadBalancingV2Client elbv2 = awsClientProvider.getElbv2Client(account, regionId);
             return elbv2.describeLoadBalancers().loadBalancers().stream()
                 .filter(lb -> {
@@ -878,8 +885,8 @@ public class AwsDataService {
         }, "Idle Load Balancers");
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findUnusedSecurityGroups(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findUnusedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeSecurityGroups().securityGroups().stream()
                     .filter(sg -> sg.vpcId() != null && isSecurityGroupUnused(account, sg.groupId(), regionId))
@@ -900,8 +907,8 @@ public class AwsDataService {
         return false;
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findIdleEc2Instances(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findIdleEc2Instances(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeInstances().reservations().stream()
                     .flatMap(r -> r.instances().stream())
@@ -925,8 +932,8 @@ public class AwsDataService {
         return false;
     }
 
-    private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEnis(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEnis(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeNetworkInterfaces(req -> req.filters(f -> f.name("status").values("available")))
                     .networkInterfaces().stream()
@@ -938,8 +945,8 @@ public class AwsDataService {
 
    @Async("awsTaskExecutor")
     @Cacheable(value = "cloudwatchStatus", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, regionId);
             return cwClient.describeAlarms().metricAlarms();
         }, "CloudWatch Alarms")
@@ -953,8 +960,8 @@ public class AwsDataService {
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "ec2Recs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEc2InstanceRecommendations(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEc2InstanceRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
             GetEc2InstanceRecommendationsRequest request = GetEc2InstanceRecommendationsRequest.builder().build();
             return co.getEC2InstanceRecommendations(request).instanceRecommendations().stream()
@@ -985,15 +992,15 @@ public class AwsDataService {
                     ))
                     .collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Could not fetch Cost Anomalies for account {}", account.getAwsAccountId(), e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
+            logger.error("Could not fetch Cost Anomalies for account {}. This might be a permissions issue or the service is not enabled.", account.getAwsAccountId(), e);
+            return CompletableFuture.failedFuture(e);
         }
     }
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "ebsRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEbsVolumeRecommendations(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEbsVolumeRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
             GetEbsVolumeRecommendationsRequest request = GetEbsVolumeRecommendationsRequest.builder().build();
             return co.getEBSVolumeRecommendations(request).volumeRecommendations().stream()
@@ -1009,24 +1016,30 @@ public class AwsDataService {
                     .collect(Collectors.toList());
         }, "EBS Recommendations");
     }
+    
     @Async("awsTaskExecutor")
     @Cacheable(value = "lambdaRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getLambdaFunctionRecommendations(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
-            ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
-            GetLambdaFunctionRecommendationsRequest request = GetLambdaFunctionRecommendationsRequest.builder().build();
-            return co.getLambdaFunctionRecommendations(request).lambdaFunctionRecommendations().stream()
-                    .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.memorySizeRecommendationOptions() != null && !r.memorySizeRecommendationOptions().isEmpty())
-                    .map(r -> {
-                        LambdaFunctionMemoryRecommendationOption opt = r.memorySizeRecommendationOptions().get(0);
-                        return new DashboardData.OptimizationRecommendation("Lambda",
-                                r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1),
-                                r.currentMemorySize() + " MB", opt.memorySize() + " MB",
-                                opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0,
-                                r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")));
-                    })
-                    .collect(Collectors.toList());
-        }, "Lambda Recommendations");
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getLambdaFunctionRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        try {
+            return fetchAllRegionalResources(account, activeRegions, regionId -> {
+                ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
+                GetLambdaFunctionRecommendationsRequest request = GetLambdaFunctionRecommendationsRequest.builder().build();
+                return co.getLambdaFunctionRecommendations(request).lambdaFunctionRecommendations().stream()
+                        .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.memorySizeRecommendationOptions() != null && !r.memorySizeRecommendationOptions().isEmpty())
+                        .map(r -> {
+                            LambdaFunctionMemoryRecommendationOption opt = r.memorySizeRecommendationOptions().get(0);
+                            return new DashboardData.OptimizationRecommendation("Lambda",
+                                    r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1),
+                                    r.currentMemorySize() + " MB", opt.memorySize() + " MB",
+                                    opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0,
+                                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")));
+                        })
+                        .collect(Collectors.toList());
+            }, "Lambda Recommendations");
+        } catch (Exception e) {
+            logger.error("Could not fetch Lambda Recommendations for account {}. This might be a permissions issue or Compute Optimizer is not enabled.", account.getAwsAccountId(), e);
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
    @Async("awsTaskExecutor")
@@ -1166,12 +1179,14 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     public CompletableFuture<List<ResourceDto>> getVpcListForCloudmap(String accountId) {
         CloudAccount account = getAccount(accountId);
         logger.info("Fetching list of VPCs for Cloudmap for account {}...", accountId);
-        return fetchAllRegionalResources(account, regionId -> {
-            Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-            return ec2.describeVpcs().vpcs().stream()
-                    .map(v -> new ResourceDto(v.vpcId(), getTagName(v.tags(), v.vpcId()), "VPC", regionId, v.stateAsString(), null, Map.of("CIDR Block", v.cidrBlock(), "Is Default", v.isDefault().toString())))
-                    .collect(Collectors.toList());
-        }, "VPCs List for Cloudmap");
+        return getRegionStatusForAccount(account).thenCompose(activeRegions -> 
+            fetchAllRegionalResources(account, activeRegions, regionId -> {
+                Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+                return ec2.describeVpcs().vpcs().stream()
+                        .map(v -> new ResourceDto(v.vpcId(), getTagName(v.tags(), v.vpcId()), "VPC", regionId, v.stateAsString(), null, Map.of("CIDR Block", v.cidrBlock(), "Is Default", v.isDefault().toString())))
+                        .collect(Collectors.toList());
+            }, "VPCs List for Cloudmap")
+        );
     }
 
 
@@ -1365,11 +1380,11 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     // --- COMPREHENSIVE SECURITY FINDINGS ---
     @Async("awsTaskExecutor")
     @Cacheable(value = "securityFindings", key = "#account.awsAccountId")
-    public CompletableFuture<List<SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account) {
+    public CompletableFuture<List<SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Starting comprehensive security scan for account {}...", account.getAwsAccountId());
         List<CompletableFuture<List<SecurityFinding>>> futures = List.of(
-            findUsersWithoutMfa(account), findPublicS3Buckets(account), findUnrestrictedSecurityGroups(account),
-            findVpcsWithoutFlowLogs(account), checkCloudTrailStatus(account), findUnusedIamRoles(account)
+            findUsersWithoutMfa(account), findPublicS3Buckets(account), findUnrestrictedSecurityGroups(account, activeRegions),
+            findVpcsWithoutFlowLogs(account, activeRegions), checkCloudTrailStatus(account, activeRegions), findUnusedIamRoles(account)
         );
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .thenApply(v -> futures.stream().map(CompletableFuture::join).flatMap(List::stream).collect(Collectors.toList()));
@@ -1443,51 +1458,43 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
         });
     }
 
-    private CompletableFuture<List<SecurityFinding>> findUnrestrictedSecurityGroups(CloudAccount account) {
-        return CompletableFuture.supplyAsync(() -> {
-            logger.info("Security Scan for account {}: Checking for unrestricted security groups...", account.getAwsAccountId());
+    private CompletableFuture<List<SecurityFinding>> findUnrestrictedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            logger.info("Security Scan for account {}: Checking for unrestricted security groups in {}...", account.getAwsAccountId(), regionId);
             List<SecurityFinding> findings = new ArrayList<>();
-            Ec2Client ec2 = awsClientProvider.getEc2Client(account, configuredRegion);
-            try {
-                ec2.describeSecurityGroups().securityGroups().forEach(sg -> {
-                    sg.ipPermissions().forEach(perm -> {
-                        boolean openToWorld = perm.ipRanges().stream().anyMatch(ip -> "0.0.0.0/0".equals(ip.cidrIp()));
-                        if (openToWorld) {
-                            String description = String.format("Allows inbound traffic from anywhere (0.0.0.0/0) on port(s) %s",
-                                perm.fromPort() == null ? "ALL" : (Objects.equals(perm.fromPort(), perm.toPort()) ? perm.fromPort().toString() : perm.fromPort() + "-" + perm.toPort()));
-                            findings.add(new SecurityFinding(sg.groupId(), this.configuredRegion, "VPC", "Critical", description, "CIS AWS Foundations", "4.1"));
-                        }
-                    });
+            Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+            ec2.describeSecurityGroups().securityGroups().forEach(sg -> {
+                sg.ipPermissions().forEach(perm -> {
+                    boolean openToWorld = perm.ipRanges().stream().anyMatch(ip -> "0.0.0.0/0".equals(ip.cidrIp()));
+                    if (openToWorld) {
+                        String description = String.format("Allows inbound traffic from anywhere (0.0.0.0/0) on port(s) %s",
+                            perm.fromPort() == null ? "ALL" : (Objects.equals(perm.fromPort(), perm.toPort()) ? perm.fromPort().toString() : perm.fromPort() + "-" + perm.toPort()));
+                        findings.add(new SecurityFinding(sg.groupId(), regionId, "VPC", "Critical", description, "CIS AWS Foundations", "4.1"));
+                    }
                 });
-            } catch (Exception e) {
-                logger.error("Security Scan failed for account {}: Could not check security groups.", account.getAwsAccountId(), e);
-            }
+            });
             return findings;
-        });
+        }, "Unrestricted Security Groups");
     }
 
-    private CompletableFuture<List<SecurityFinding>> findVpcsWithoutFlowLogs(CloudAccount account) {
-        return CompletableFuture.supplyAsync(() -> {
-            logger.info("Security Scan for account {}: Checking for VPCs without Flow Logs...", account.getAwsAccountId());
-            Ec2Client ec2 = awsClientProvider.getEc2Client(account, configuredRegion);
-            try {
-                Set<String> vpcsWithFlowLogs = ec2.describeFlowLogs().flowLogs().stream().map(FlowLog::resourceId).collect(Collectors.toSet());
-                return ec2.describeVpcs().vpcs().stream()
-                        .filter(vpc -> !vpcsWithFlowLogs.contains(vpc.vpcId()))
-                        .map(vpc -> new SecurityFinding(vpc.vpcId(), this.configuredRegion, "VPC", "Medium", "VPC does not have Flow Logs enabled.", "CIS AWS Foundations", "2.9"))
-                        .collect(Collectors.toList());
-            } catch (Exception e) {
-                logger.error("Security Scan failed for account {}: Could not check for VPC flow logs.", account.getAwsAccountId(), e);
-                return Collections.emptyList();
-            }
-        });
+    private CompletableFuture<List<SecurityFinding>> findVpcsWithoutFlowLogs(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            logger.info("Security Scan for account {}: Checking for VPCs without Flow Logs in {}...", account.getAwsAccountId(), regionId);
+            Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+            Set<String> vpcsWithFlowLogs = ec2.describeFlowLogs().flowLogs().stream().map(FlowLog::resourceId).collect(Collectors.toSet());
+            return ec2.describeVpcs().vpcs().stream()
+                    .filter(vpc -> !vpcsWithFlowLogs.contains(vpc.vpcId()))
+                    .map(vpc -> new SecurityFinding(vpc.vpcId(), regionId, "VPC", "Medium", "VPC does not have Flow Logs enabled.", "CIS AWS Foundations", "2.9"))
+                    .collect(Collectors.toList());
+        }, "VPCs without Flow Logs");
     }
 
-    private CompletableFuture<List<SecurityFinding>> checkCloudTrailStatus(CloudAccount account) {
+    private CompletableFuture<List<SecurityFinding>> checkCloudTrailStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking CloudTrail status...", account.getAwsAccountId());
             List<SecurityFinding> findings = new ArrayList<>();
-            CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, configuredRegion);
+            // Check in one region, as we are looking for a multi-region trail
+            CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, activeRegions.get(0).getRegionId());
             try {
                 List<Trail> trails = cloudTrail.describeTrails().trailList();
                 if (trails.isEmpty()) {
@@ -1543,51 +1550,53 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     @Cacheable(value = "finopsReport", key = "#accountId")
     public CompletableFuture<FinOpsReportDto> getFinOpsReport(String accountId) {
         CloudAccount account = getAccount(accountId);
-        logger.info("--- LAUNCHING ASYNC DATA FETCH FOR FINOPS REPORT for account {}---", account.getAwsAccountId());
+        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+            logger.info("--- LAUNCHING ASYNC DATA FETCH FOR FINOPS REPORT for account {}---", account.getAwsAccountId());
 
-        CompletableFuture<List<DashboardData.BillingSummary>> billingSummaryFuture = getBillingSummary(account);
-        CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = getWastedResources(account);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> rightsizingFuture = getAllOptimizationRecommendations(accountId);
-        CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
-        CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
-        CompletableFuture<TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account);
-        CompletableFuture<List<BudgetDetails>> budgetsFuture = getAccountBudgets(account);
+            CompletableFuture<List<DashboardData.BillingSummary>> billingSummaryFuture = getBillingSummary(account);
+            CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = getWastedResources(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> rightsizingFuture = getAllOptimizationRecommendations(accountId);
+            CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
+            CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
+            CompletableFuture<TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account, activeRegions);
+            CompletableFuture<List<BudgetDetails>> budgetsFuture = getAccountBudgets(account);
 
-        return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture)
-                .thenApply(v -> {
-                    logger.info("--- ALL FINOPS DATA FETCHES COMPLETE, AGGREGATING NOW ---");
+            return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture)
+                    .thenApply(v -> {
+                        logger.info("--- ALL FINOPS DATA FETCHES COMPLETE, AGGREGATING NOW ---");
 
-                    List<DashboardData.BillingSummary> billingSummary = billingSummaryFuture.join();
-                    List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.join();
-                    List<DashboardData.OptimizationRecommendation> rightsizingRecommendations = rightsizingFuture.join();
-                     List<DashboardData.CostAnomaly> costAnomalies = anomaliesFuture.join();
-                    DashboardData.CostHistory costHistory = costHistoryFuture.join();
-                    TaggingCompliance taggingCompliance = taggingComplianceFuture.join();
-                    List<BudgetDetails> budgets = budgetsFuture.join();
+                        List<DashboardData.BillingSummary> billingSummary = billingSummaryFuture.join();
+                        List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.join();
+                        List<DashboardData.OptimizationRecommendation> rightsizingRecommendations = rightsizingFuture.join();
+                         List<DashboardData.CostAnomaly> costAnomalies = anomaliesFuture.join();
+                        DashboardData.CostHistory costHistory = costHistoryFuture.join();
+                        TaggingCompliance taggingCompliance = taggingComplianceFuture.join();
+                        List<BudgetDetails> budgets = budgetsFuture.join();
 
-                    double mtdSpend = billingSummary.stream().mapToDouble(DashboardData.BillingSummary::getMonthToDateCost).sum();
-                    double lastMonthSpend = 0.0;
-                    if (costHistory.getLabels() != null && costHistory.getLabels().size() > 1) {
-                        int lastMonthIndex = costHistory.getLabels().size() - 2;
-                        if (lastMonthIndex >= 0 && lastMonthIndex < costHistory.getCosts().size()) {
-                            lastMonthSpend = costHistory.getCosts().get(lastMonthIndex);
+                        double mtdSpend = billingSummary.stream().mapToDouble(DashboardData.BillingSummary::getMonthToDateCost).sum();
+                        double lastMonthSpend = 0.0;
+                        if (costHistory.getLabels() != null && costHistory.getLabels().size() > 1) {
+                            int lastMonthIndex = costHistory.getLabels().size() - 2;
+                            if (lastMonthIndex >= 0 && lastMonthIndex < costHistory.getCosts().size()) {
+                                lastMonthSpend = costHistory.getCosts().get(lastMonthIndex);
+                            }
                         }
-                    }
-                    double daysInMonth = YearMonth.now().lengthOfMonth();
-                    double currentDayOfMonth = LocalDate.now().getDayOfMonth();
-                    double forecastedSpend = (currentDayOfMonth > 0) ? (mtdSpend / currentDayOfMonth) * daysInMonth : 0;
-                    double rightsizingSavings = rightsizingRecommendations.stream().mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).sum();
-                    double wasteSavings = wastedResources.stream().mapToDouble(DashboardData.WastedResource::getMonthlySavings).sum();
-                    double totalPotentialSavings = rightsizingSavings + wasteSavings;
-                    FinOpsReportDto.Kpis kpis = new FinOpsReportDto.Kpis(mtdSpend, lastMonthSpend, forecastedSpend, totalPotentialSavings);
-                    List<Map<String, Object>> costByService = billingSummary.stream().sorted(Comparator.comparingDouble(DashboardData.BillingSummary::getMonthToDateCost).reversed()).limit(10).map(s -> Map.<String, Object>of("service", s.getServiceName(), "cost", s.getMonthToDateCost())).collect(Collectors.toList());
-                    List<Map<String, Object>> costByRegion = new ArrayList<>();
-                    try { costByRegion = getCostByRegion(account).join(); }
-                    catch (Exception e) { logger.error("Could not fetch cost by region data for FinOps report.", e); }
-                    FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegion);
+                        double daysInMonth = YearMonth.now().lengthOfMonth();
+                        double currentDayOfMonth = LocalDate.now().getDayOfMonth();
+                        double forecastedSpend = (currentDayOfMonth > 0) ? (mtdSpend / currentDayOfMonth) * daysInMonth : 0;
+                        double rightsizingSavings = rightsizingRecommendations.stream().mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).sum();
+                        double wasteSavings = wastedResources.stream().mapToDouble(DashboardData.WastedResource::getMonthlySavings).sum();
+                        double totalPotentialSavings = rightsizingSavings + wasteSavings;
+                        FinOpsReportDto.Kpis kpis = new FinOpsReportDto.Kpis(mtdSpend, lastMonthSpend, forecastedSpend, totalPotentialSavings);
+                        List<Map<String, Object>> costByService = billingSummary.stream().sorted(Comparator.comparingDouble(DashboardData.BillingSummary::getMonthToDateCost).reversed()).limit(10).map(s -> Map.<String, Object>of("service", s.getServiceName(), "cost", s.getMonthToDateCost())).collect(Collectors.toList());
+                        List<Map<String, Object>> costByRegion = new ArrayList<>();
+                        try { costByRegion = getCostByRegion(account).join(); }
+                        catch (Exception e) { logger.error("Could not fetch cost by region data for FinOps report.", e); }
+                        FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegion);
 
-                    return new FinOpsReportDto(kpis, costBreakdown, rightsizingRecommendations, wastedResources, costAnomalies, taggingCompliance, budgets);
-                });
+                        return new FinOpsReportDto(kpis, costBreakdown, rightsizingRecommendations, wastedResources, costAnomalies, taggingCompliance, budgets);
+                    });
+        });
     }
 
     @Async("awsTaskExecutor")
@@ -1632,11 +1641,11 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "taggingCompliance", key = "#account.awsAccountId")
-    public CompletableFuture<TaggingCompliance> getTaggingCompliance(CloudAccount account) {
+    public CompletableFuture<TaggingCompliance> getTaggingCompliance(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("FinOps Scan: Checking tagging compliance for account {}...", account.getAwsAccountId());
 
-        CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist(account);
-        CompletableFuture<List<ResourceDto>> rdsFuture = fetchRdsInstancesForCloudlist(account);
+        CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist(account, activeRegions);
+        CompletableFuture<List<ResourceDto>> rdsFuture = fetchRdsInstancesForCloudlist(account, activeRegions);
         CompletableFuture<List<ResourceDto>> s3Future = fetchS3BucketsForCloudlist(account);
 
         return CompletableFuture.allOf(ec2Future, rdsFuture, s3Future).thenApply(v -> {
@@ -1720,9 +1729,13 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "serviceQuotas", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.ServiceQuotaInfo>> getServiceQuotaInfo(CloudAccount account) {
-        ServiceQuotasClient sqClient = awsClientProvider.getServiceQuotasClient(account, configuredRegion);
-        logger.info("Fetching service quota info for account {}...", account.getAwsAccountId());
+    public CompletableFuture<List<DashboardData.ServiceQuotaInfo>> getServiceQuotaInfo(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        // **MODIFIED**: This method now accepts the list of active regions.
+        // We will check quotas in the primary configured region for simplicity, as many are global or consistent.
+        // A more advanced implementation could check quotas in all active regions.
+        String primaryRegion = activeRegions.isEmpty() ? this.configuredRegion : activeRegions.get(0).getRegionId();
+        ServiceQuotasClient sqClient = awsClientProvider.getServiceQuotasClient(account, primaryRegion);
+        logger.info("Fetching service quota info for account {} in region {}...", account.getAwsAccountId(), primaryRegion);
         List<DashboardData.ServiceQuotaInfo> quotaInfos = new ArrayList<>();
         List<String> serviceCodes = Arrays.asList("ec2", "vpc", "rds", "lambda", "elasticloadbalancing");
 
@@ -1766,28 +1779,30 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     @Cacheable(value = "reservationPageData", key = "#accountId")
     public CompletableFuture<ReservationDto> getReservationPageData(String accountId) {
         CloudAccount account = getAccount(accountId);
-        logger.info("--- LAUNCHING ASYNC DATA FETCH FOR RESERVATION PAGE for account {}---", account.getAwsAccountId());
-        CompletableFuture<DashboardData.ReservationAnalysis> analysisFuture = getReservationAnalysis(account);
-        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations(account);
-        CompletableFuture<List<ReservationInventoryDto>> inventoryFuture = getReservationInventory(account);
-        CompletableFuture<HistoricalReservationDataDto> historicalDataFuture = getHistoricalReservationData(account);
-        CompletableFuture<List<ReservationModificationRecommendationDto>> modificationRecsFuture = getReservationModificationRecommendations(account);
+        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+            logger.info("--- LAUNCHING ASYNC DATA FETCH FOR RESERVATION PAGE for account {}---", account.getAwsAccountId());
+            CompletableFuture<DashboardData.ReservationAnalysis> analysisFuture = getReservationAnalysis(account);
+            CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations(account);
+            CompletableFuture<List<ReservationInventoryDto>> inventoryFuture = getReservationInventory(account, activeRegions);
+            CompletableFuture<HistoricalReservationDataDto> historicalDataFuture = getHistoricalReservationData(account);
+            CompletableFuture<List<ReservationModificationRecommendationDto>> modificationRecsFuture = getReservationModificationRecommendations(account, activeRegions);
 
-        return CompletableFuture.allOf(analysisFuture, purchaseRecsFuture, inventoryFuture, historicalDataFuture, modificationRecsFuture).thenApply(v -> {
-            logger.info("--- RESERVATION PAGE DATA FETCH COMPLETE, COMBINING NOW ---");
-            DashboardData.ReservationAnalysis analysis = analysisFuture.join();
-            List<DashboardData.ReservationPurchaseRecommendation> recommendations = purchaseRecsFuture.join();
-            List<ReservationInventoryDto> inventory = inventoryFuture.join();
-            HistoricalReservationDataDto historicalData = historicalDataFuture.join();
-            List<ReservationModificationRecommendationDto> modificationRecs = modificationRecsFuture.join();
-            return new ReservationDto(analysis, recommendations, inventory, historicalData, modificationRecs);
+            return CompletableFuture.allOf(analysisFuture, purchaseRecsFuture, inventoryFuture, historicalDataFuture, modificationRecsFuture).thenApply(v -> {
+                logger.info("--- RESERVATION PAGE DATA FETCH COMPLETE, COMBINING NOW ---");
+                DashboardData.ReservationAnalysis analysis = analysisFuture.join();
+                List<DashboardData.ReservationPurchaseRecommendation> recommendations = purchaseRecsFuture.join();
+                List<ReservationInventoryDto> inventory = inventoryFuture.join();
+                HistoricalReservationDataDto historicalData = historicalDataFuture.join();
+                List<ReservationModificationRecommendationDto> modificationRecs = modificationRecsFuture.join();
+                return new ReservationDto(analysis, recommendations, inventory, historicalData, modificationRecs);
+            });
         });
     }
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "reservationInventory", key = "#account.awsAccountId")
-    public CompletableFuture<List<ReservationInventoryDto>> getReservationInventory(CloudAccount account) {
-        return fetchAllRegionalResources(account, regionId -> {
+    public CompletableFuture<List<ReservationInventoryDto>> getReservationInventory(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             software.amazon.awssdk.services.ec2.model.Filter activeFilter = software.amazon.awssdk.services.ec2.model.Filter.builder().name("state").values("active").build();
             DescribeReservedInstancesRequest request = DescribeReservedInstancesRequest.builder()
@@ -1857,10 +1872,10 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "reservationModificationRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations(CloudAccount account) {
+    public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Fetching reservation modification recommendations based on utilization for account {}...", account.getAwsAccountId());
 
-        return getReservationInventory(account).thenCompose(activeReservations -> {
+        return getReservationInventory(account, activeRegions).thenCompose(activeReservations -> {
             if (activeReservations.isEmpty()) {
                 logger.info("No active reservations found for account {}. Skipping modification check.", account.getAwsAccountId());
                 return CompletableFuture.completedFuture(Collections.emptyList());

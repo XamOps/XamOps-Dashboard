@@ -45,7 +45,11 @@ public class DashboardController {
     public ResponseEntity<List<DashboardData.WastedResource>> getWastedResources(@RequestParam String accountId) throws ExecutionException, InterruptedException {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-        List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources(account).get();
+        
+        // **FIXED**: Fetch active regions first, then pass them to the service method.
+        List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
+        List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources(account, activeRegions).get();
+        
         return ResponseEntity.ok(wastedResources);
     }
 

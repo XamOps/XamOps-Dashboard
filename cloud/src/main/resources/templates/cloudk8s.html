@@ -217,7 +217,7 @@ function cloudK8s() {
                 this.isLoading.clusters = false;
                 return;
             }
-            this.fetchClusters();
+            this.fetchClusters(false); // Check cache first
         },
 
         refreshAll() {
@@ -228,15 +228,19 @@ function cloudK8s() {
         },
 
         fetchClusters(force = false) {
-            this.isLoading.clusters = true;
             const cacheKey = `k8sClusters-${this.selectedAccountId}`;
-            if (force) sessionStorage.removeItem(cacheKey);
-            const cached = sessionStorage.getItem(cacheKey);
-            if (cached && !force) {
-                this.clusters = JSON.parse(cached);
-                this.isLoading.clusters = false;
-                return;
+            if (!force) {
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    this.clusters = JSON.parse(cached);
+                    this.isLoading.clusters = false;
+                    return;
+                }
             }
+            
+            this.isLoading.clusters = true;
+            sessionStorage.removeItem(cacheKey);
+            
             fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
@@ -263,15 +267,19 @@ function cloudK8s() {
         },
 
         fetchData(type, url, force = false) {
-            this.isLoading[type] = true;
             const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-${type}-${this.selectedNamespace || ''}`;
-            if (force) sessionStorage.removeItem(key);
-            const cached = sessionStorage.getItem(key);
-            if (cached && !force) {
-                this[type] = JSON.parse(cached);
-                this.isLoading[type] = false;
-                return;
+            if (!force) {
+                const cached = sessionStorage.getItem(key);
+                if (cached) {
+                    this[type] = JSON.parse(cached);
+                    this.isLoading[type] = false;
+                    return;
+                }
             }
+
+            this.isLoading[type] = true;
+            sessionStorage.removeItem(key);
+
             fetch(url)
                 .then(res => res.json())
                 .then(data => {
@@ -287,16 +295,20 @@ function cloudK8s() {
         },
 
         fetchNamespaces(force = false) {
-            this.isLoading.namespaces = true;
-             const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-namespaces`;
-            if (force) sessionStorage.removeItem(key);
-            const cached = sessionStorage.getItem(key);
-            if(cached && !force){
-                this.namespaces = JSON.parse(cached);
-                this.isLoading.namespaces = false;
-                this.onNamespaceChange(force);
-                return;
+            const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-namespaces`;
+            if (!force) {
+                const cached = sessionStorage.getItem(key);
+                if(cached){
+                    this.namespaces = JSON.parse(cached);
+                    this.isLoading.namespaces = false;
+                    this.onNamespaceChange(force);
+                    return;
+                }
             }
+
+            this.isLoading.namespaces = true;
+            sessionStorage.removeItem(key);
+
             fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {

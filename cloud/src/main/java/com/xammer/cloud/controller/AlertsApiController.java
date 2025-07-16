@@ -26,10 +26,14 @@ public class AlertsApiController {
     }
 
     @GetMapping("/quotas")
-    public ResponseEntity<List<DashboardData.ServiceQuotaInfo>> getQuotaDetails(@RequestParam String accountId) throws ExecutionException, InterruptedException {
+    public ResponseEntity<List<DashboardData.ServiceQuotaInfo>> getQuotaAlerts(@RequestParam String accountId) throws ExecutionException, InterruptedException {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-        List<DashboardData.ServiceQuotaInfo> quotas = awsDataService.getServiceQuotaInfo(account).get();
+
+        // **FIXED**: Fetch active regions first, then pass them to the service method.
+        List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
+        List<DashboardData.ServiceQuotaInfo> quotas = awsDataService.getServiceQuotaInfo(account, activeRegions).get();
+
         return ResponseEntity.ok(quotas);
     }
 }

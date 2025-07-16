@@ -52,13 +52,20 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                 <!-- KPI Skeleton Loaders -->
+                 <div x-show="isLoading" x-cloak class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
+                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
+                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
+                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
+                 </div>
+
+                 <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     <div class="bg-white rounded-xl p-5 card-shadow">
                         <div class="flex justify-between items-start">
                             <div>
                                 <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
-                                <div x-show="isLoading" class="skeleton h-8 w-24 mt-2 rounded"></div>
-                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
                             </div>
                             <div class="bg-blue-100 p-3 rounded-lg"><i class="fas fa-coins text-blue-500 text-lg"></i></div>
                         </div>
@@ -67,8 +74,7 @@
                         <div class="flex justify-between items-start">
                             <div>
                                 <h3 class="text-gray-500 text-sm font-medium">Resources Found</h3>
-                                 <div x-show="isLoading" class="skeleton h-8 w-16 mt-2 rounded"></div>
-                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="resourceCount"></p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="resourceCount"></p>
                             </div>
                             <div class="bg-red-100 p-3 rounded-lg"><i class="fas fa-trash-alt text-red-500 text-lg"></i></div>
                         </div>
@@ -77,8 +83,7 @@
                         <div class="flex justify-between items-start">
                             <div>
                                 <h3 class="text-gray-500 text-sm font-medium">Top Waste Category</h3>
-                                <div x-show="isLoading" class="skeleton h-8 w-28 mt-2 rounded"></div>
-                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="topCategory"></p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="topCategory"></p>
                             </div>
                             <div class="bg-yellow-100 p-3 rounded-lg"><i class="fas fa-exclamation-triangle text-yellow-500 text-lg"></i></div>
                         </div>
@@ -87,8 +92,7 @@
                         <div class="flex justify-between items-start">
                             <div>
                                 <h3 class="text-gray-500 text-sm font-medium">Last Scanned</h3>
-                                <div x-show="isLoading" class="skeleton h-8 w-24 mt-2 rounded"></div>
-                                <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1">Just now</p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1">Just now</p>
                             </div>
                             <div class="bg-green-100 p-3 rounded-lg"><i class="fas fa-check-circle text-green-500 text-lg"></i></div>
                         </div>
@@ -116,6 +120,35 @@
                             <button @click="filter = 'ENI'" :class="{ 'bg-indigo-600 text-white': filter === 'ENI', 'bg-gray-100 text-gray-700': filter !== 'ENI' }" class="px-3 py-1.5 text-sm rounded-lg transition">ENI</button>
                         </div>
                     </div>
+
+                    <!-- Table Skeleton Loader -->
+                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-28"></div></th>
+                                    <th class="px-6 py-3 text-center"><div class="h-4 skeleton rounded w-16 mx-auto"></div></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="i in 5" :key="i">
+                                    <tr class="border-b">
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div><div class="h-3 skeleton rounded w-2/3 mt-2"></div></td>
+                                        <td class="px-6 py-4"><div class="h-6 skeleton rounded-full w-24"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
+                                        <td class="px-6 py-4"><div class="h-8 skeleton rounded w-20 mx-auto"></div></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
                     <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-600">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -169,11 +202,8 @@ function wasteManagement() {
         filter: 'All',
         wastedResources: [],
         
+        // **MODIFIED**: init() now checks cache first.
         init() {
-            this.loadWastedResources();
-        },
-
-        loadWastedResources(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 console.error("No account selected");
@@ -184,10 +214,34 @@ function wasteManagement() {
             const cacheKey = `wasteData-${selectedAccountId}`;
             const cachedData = sessionStorage.getItem(cacheKey);
 
-            if (!forceRefresh && cachedData) {
+            if (cachedData) {
                 this.wastedResources = JSON.parse(cachedData);
                 this.isLoading = false;
+            } else {
+                this.loadWastedResources(true); // Force fetch if no cache
+            }
+        },
+
+        // **MODIFIED**: This function is now primarily for fetching data.
+        loadWastedResources(forceRefresh = false) {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isLoading = false;
                 return;
+            }
+
+            const cacheKey = `wasteData-${selectedAccountId}`;
+            if (forceRefresh) {
+                sessionStorage.removeItem(cacheKey);
+                this.isLoading = true;
+            } else {
+                // This path should not be hit from init anymore, but is a safeguard.
+                const cachedData = sessionStorage.getItem(cacheKey);
+                if (cachedData) {
+                    this.wastedResources = JSON.parse(cachedData);
+                    this.isLoading = false;
+                    return;
+                }
             }
 
             this.isLoading = true;

@@ -26,6 +26,12 @@
         .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
         .sidebar-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
         .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e5e7eb; }
+        @keyframes pulse {
+            50% {
+                opacity: .5;
+            }
+        }
     </style>
 </head>
 <body x-data="dashboardApp()"
@@ -36,13 +42,6 @@
         fetchMetricsForModal($event.detail.resourceId);
       ">
 
-    <!-- Full-screen loading overlay, only for initial data fetch -->
-    <div id="loadingState" class="fixed inset-0 flex items-center justify-center bg-white z-50">
-        <div class="flex flex-col items-center">
-             <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              <p class="mt-4 text-gray-600 font-semibold">Fetching live data from AWS...</p>
-        </div>
-    </div>
     <div id="errorState" class="hidden fixed inset-0 flex items-center justify-center bg-red-50 text-red-700 z-50">
         <div><h2 class="text-2xl font-bold">Error</h2><p id="errorMessage"></p></div>
     </div>
@@ -66,7 +65,7 @@
     </div>
 
     <!-- Main Application Body -->
-    <div id="appBody" class="hidden">
+    <div id="appBody">
         <div class="flex">
             <!-- Sidebar -->
             <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20">
@@ -80,9 +79,9 @@
                         <div>
                             <span id="updateTime" class="text-gray-500 text-sm"></span>
                         </div>
-                        <button id="refreshButton" @click="fetchDashboardData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800">
-                            <i class="fas fa-sync-alt mr-2"></i>
-                            <span>Refresh</span>
+                        <button id="refreshButton" @click="fetchDashboardData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
+                            <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isLoading}"></i>
+                            <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
                         </button>
                     </header>
 
@@ -93,9 +92,19 @@
                         <p class="text-gray-500">Please select an account from the sidebar to view its dashboard.</p>
                     </div>
 
-                    <!-- This div contains the actual dashboard content -->
-                    <div id="dashboardContent" class="hidden space-y-6">
+                    <!-- Skeleton loader for the dashboard content -->
+                    <div x-show="isLoading" id="dashboardSkeleton" class="space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow-sm border h-24 skeleton"></div>
+                        <div class="bg-white p-6 rounded-lg shadow-sm h-96 skeleton"></div>
+                        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                            <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm h-48 skeleton"></div>
+                            <div class="bg-white p-6 rounded-lg shadow-sm h-48 skeleton"></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-sm h-64 skeleton"></div>
+                    </div>
 
+                    <!-- This div contains the actual dashboard content -->
+                    <div x-show="!isLoading" id="dashboardContent" class="hidden space-y-6">
                         <!-- AI Smart Advisor -->
                         <div class="bg-white p-6 rounded-lg shadow-sm border border-indigo-200">
                             <div class="flex justify-between items-center mb-3">
@@ -156,6 +165,7 @@
     <script>
     function dashboardApp() {
         return {
+            isLoading: true,
             isModalOpen: false,
             modalTitle: '',
             modalResourceId: '',
@@ -194,54 +204,70 @@
                     });
             },
 
+            init() {
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                if (!selectedAccountId) {
+                    this.isLoading = false;
+                    document.getElementById('unselectedState').classList.remove('hidden');
+                    return;
+                }
+
+                const cacheKey = `dashboardData-${selectedAccountId}`;
+                const cachedData = sessionStorage.getItem(cacheKey);
+
+                if (cachedData) {
+                    console.log("Dashboard data loaded from cache.");
+                    this.isLoading = false;
+                    document.getElementById('dashboardContent').classList.remove('hidden');
+                    this.populatePage(JSON.parse(cachedData));
+                } else {
+                    console.log("No dashboard data in cache. Fetching from API.");
+                    this.fetchDashboardData(true); // Force fetch if no cache
+                }
+
+                window.dashboardFunctions = {
+                    fetchDashboardData: this.fetchDashboardData.bind(this),
+                    showMetricsModal: this.showMetricsModal.bind(this)
+                };
+            },
+
             fetchDashboardData(forceRefresh = false) {
-                const loadingEl = document.getElementById('loadingState');
                 const errorEl = document.getElementById('errorState');
                 const errorMessageEl = document.getElementById('errorMessage');
-                const appBodyEl = document.getElementById('appBody');
-                const refreshButton = document.getElementById('refreshButton').querySelector('i');
                 const unselectedStateEl = document.getElementById('unselectedState');
                 const dashboardContentEl = document.getElementById('dashboardContent');
 
                 const selectedAccountId = sessionStorage.getItem('selectedAccountId');
                 
                 if (!selectedAccountId) {
-                    loadingEl.classList.add('hidden');
-                    appBodyEl.classList.remove('hidden');
+                    this.isLoading = false;
                     unselectedStateEl.classList.remove('hidden');
                     dashboardContentEl.classList.add('hidden');
                     return;
                 }
 
                 unselectedStateEl.classList.add('hidden');
-                dashboardContentEl.classList.remove('hidden');
                 
                 const cacheKey = `dashboardData-${selectedAccountId}`;
 
                 if (forceRefresh) {
                     sessionStorage.removeItem(cacheKey);
-                    this.ai.summary = ''; // Clear AI summary on refresh
-                }
-
-                const cachedData = sessionStorage.getItem(cacheKey);
-
-                if (cachedData && !forceRefresh) {
-                    this.populatePage(JSON.parse(cachedData));
-                    loadingEl.classList.add('hidden');
-                    appBodyEl.classList.remove('hidden');
-                    return;
-                }
-                
-                loadingEl.classList.remove('hidden');
-                if (forceRefresh) {
-                    refreshButton.classList.add('fa-spin');
+                    this.ai.summary = '';
+                    this.isLoading = true;
+                    dashboardContentEl.classList.add('hidden');
+                } else {
+                    const cachedData = sessionStorage.getItem(cacheKey);
+                    if(cachedData) {
+                        this.populatePage(JSON.parse(cachedData));
+                        this.isLoading = false;
+                        dashboardContentEl.classList.remove('hidden');
+                        return;
+                    }
                 }
 
                 const apiUrl = new URL(`${window.location.origin}/api/dashboard`);
                 apiUrl.searchParams.append('accountId', selectedAccountId);
-                if (forceRefresh) {
-                    apiUrl.searchParams.append('force', 'true');
-                }
+                apiUrl.searchParams.append('force', 'true');
 
                 fetch(apiUrl)
                     .then(response => {
@@ -255,7 +281,6 @@
                         if (!data) return;
                         sessionStorage.setItem(cacheKey, JSON.stringify(data));
                         this.populatePage(data);
-                        appBodyEl.classList.remove('hidden');
                     })
                     .catch(error => {
                         console.error('Failed to fetch dashboard data:', error);
@@ -263,10 +288,8 @@
                         errorEl.classList.remove('hidden');
                     })
                     .finally(() => {
-                        loadingEl.classList.add('hidden');
-                        if (forceRefresh) {
-                            refreshButton.classList.remove('fa-spin');
-                        }
+                        this.isLoading = false;
+                        dashboardContentEl.classList.remove('hidden');
                     });
             },
 
@@ -312,14 +335,20 @@
             populateRecTable(containerId, title, headers, recs) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
-                let tableHtml = '';
-                if (recs && recs.length > 0) {
+                
+                let contentHtml = '';
+                
+                if (recs === null) {
+                    let errorMessage = 'Please ensure the IAM role has the required permissions and that AWS Compute Optimizer is enabled in this account.';
+                    contentHtml = this.errorStateHtml(`Could not load ${title}`, errorMessage);
+                } else if (recs.length > 0) {
                     const isClickable = containerId === 'ec2RecSection';
-                    tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr>${headers.map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50 ${isClickable ? 'clickable-row' : ''}" ${isClickable ? `onclick="document.body.__x.$data.showMetricsModal('EC2', '${rec.resourceId}')"` : ''}><th class="px-6 py-4 font-medium text-gray-900">${rec.resourceId}</th><td class="px-6 py-4">${rec.currentType}</td><td class="px-6 py-4 font-semibold text-green-600">${rec.recommendedType}</td><td class="px-6 py-4">${rec.recommendationReason}</td><td class="px-6 py-4 text-right font-mono text-green-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td></tr>`).join('')}</tbody></table></div>`;
+                    contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr>${headers.map(h => `<th class="px-6 py-3">${h}</th>`).join('')}</tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50 ${isClickable ? 'clickable-row' : ''}" ${isClickable ? `onclick="document.body.__x.$data.showMetricsModal('EC2', '${rec.resourceId}')"` : ''}><th class="px-6 py-4 font-medium text-gray-900">${rec.resourceId}</th><td class="px-6 py-4">${rec.currentType}</td><td class="px-6 py-4 font-semibold text-green-600">${rec.recommendedType}</td><td class="px-6 py-4">${rec.recommendationReason}</td><td class="px-6 py-4 text-right font-mono text-green-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td></tr>`).join('')}</tbody></table></div>`;
                 } else {
-                    tableHtml = this.emptyStateHtml(`All ${title.split(' ')[0]} resources are optimized!`);
+                    contentHtml = this.emptyStateHtml(`All ${title.split(' ')[0]} resources are optimized!`);
                 }
-                container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">${title}</h4>${tableHtml}`;
+                
+                container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">${title}</h4>${contentHtml}`;
             },
             
             populateRiPurchaseRecs(recs) { const container = document.getElementById('riPurchaseRecSection'); if (!container) return; let tableHtml = ''; if (recs && recs.length > 0) { tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr><th class="px-6 py-3">Instance Family</th><th class="px-6 py-3">Term</th><th class="px-6 py-3 text-right">Recommended #</th><th class="px-6 py-3 text-right">Est. Monthly Savings</th></tr></thead><tbody>${recs.map(rec => `<tr class="border-b hover:bg-gray-50"><th class="px-6 py-4 font-medium text-gray-900">${rec.instanceFamily}</th><td class="px-6 py-4">${rec.term}</td><td class="px-6 py-4 text-right">${rec.recommendedInstances}</td><td class="px-6 py-4 text-right font-mono text-green-600">$${rec.monthlySavings}</td></tr>`).join('')}</tbody></table></div>`; } else { tableHtml = this.emptyStateHtml('No RI purchase recommendations.'); } container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">RI Purchase Recommendations</h4>${tableHtml}`; },
@@ -381,14 +410,17 @@
             
             renderAnomalyChart(anomalies) {
                 const container = document.getElementById('costAnomalySection');
-                if (!container || !anomalies) return;
+                if (!container) return;
                 
                 if (window.costAnomalyChartInstance) {
                     window.costAnomalyChartInstance.destroy();
                 }
 
                 let contentHtml = '';
-                if (anomalies.length > 0) {
+                if (anomalies === null) {
+                    contentHtml = this.errorStateHtml('Could not load Cost Anomaly data', 'Please ensure the IAM role has the required Cost Explorer permissions (ce:GetAnomalies).');
+                    container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>${contentHtml}`;
+                } else if (anomalies.length > 0) {
                     contentHtml = `<div class="bg-gray-50 p-4 rounded-lg"><canvas id="costAnomalyChartCanvas"></canvas></div>`;
                     container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>${contentHtml}`;
                     setTimeout(() => {
@@ -415,7 +447,8 @@
                         });
                     }, 0);
                 } else {
-                    container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>` + this.emptyStateHtml('No cost anomalies detected.');
+                    contentHtml = this.emptyStateHtml('No cost anomalies detected.');
+                    container.innerHTML = `<h4 class="font-semibold text-sm text-gray-600 mb-2">Cost Anomaly Detection (Last 60 Days)</h4>${contentHtml}`;
                 }
             },
             
@@ -505,14 +538,13 @@
             emptyStateHtml(title) {
                 return `<div class="text-center py-8 px-4 border-2 border-dashed rounded-lg"><h3 class="mt-2 text-sm font-medium text-gray-900">${title}</h3></div>`;
             },
-
-            init() {
-                this.fetchDashboardData();
-                // Make the functions available in the global scope for onclick attributes
-                window.dashboardFunctions = {
-                    fetchDashboardData: this.fetchDashboardData.bind(this),
-                    showMetricsModal: this.showMetricsModal.bind(this)
-                };
+            
+            errorStateHtml(title, message) {
+                return `<div class="text-center py-6 px-4 border-2 border-dashed border-red-200 rounded-lg bg-red-50">
+                            <i class="fas fa-exclamation-triangle text-red-500 fa-lg"></i>
+                            <h3 class="mt-2 text-sm font-semibold text-red-800">${title}</h3>
+                            <p class="mt-1 text-xs text-red-600">${message}</p>
+                        </div>`;
             }
         }
     }
@@ -520,6 +552,8 @@
     // A separate script to initialize the main Alpine component
     document.addEventListener('alpine:init', () => {
         Alpine.data('dashboardApp', dashboardApp);
+        // **MODIFIED**: Trigger the init function after Alpine is ready.
+        document.dispatchEvent(new Event('DOMContentLoaded'));
     });
     </script>
 </body>

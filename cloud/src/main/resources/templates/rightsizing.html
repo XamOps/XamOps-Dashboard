@@ -11,6 +11,8 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -34,7 +36,14 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- KPI Skeleton Loader -->
+                <div x-show="isLoading" x-cloak class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-lg p-5 shadow-sm border skeleton h-28"></div>
+                    <div class="bg-white rounded-lg p-5 shadow-sm border skeleton h-28"></div>
+                    <div class="bg-white rounded-lg p-5 shadow-sm border skeleton h-28"></div>
+                </div>
+                
+                <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="bg-white rounded-lg p-5 shadow-sm border">
                         <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
                         <p class="text-3xl font-bold text-green-600 mt-2" x-text="'$' + potentialSavings.toFixed(2)"></p>
@@ -65,7 +74,33 @@
                         </div>
                     </div>
 
-                    <div x-show="isLoading" class="text-center p-8"> <i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
+                    <!-- Table Skeleton Loader -->
+                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-28"></div></th>
+                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
+                                    <th class="px-6 py-3 text-center"><div class="h-4 skeleton rounded w-16 mx-auto"></div></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="i in 5" :key="i">
+                                    <tr class="border-b">
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
+                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
+                                        <td class="px-6 py-4"><div class="h-8 skeleton rounded w-20 mx-auto"></div></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
                     
                     <div x-show="!isLoading && filteredRecommendations.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
                         <h3 class="mt-2 text-sm font-medium text-gray-900">No recommendations found.</h3>
@@ -120,11 +155,6 @@ function rightsizing() {
         services: ['All', 'EC2', 'EBS', 'Lambda'],
 
         init() {
-            this.loadRecommendations();
-        },
-
-        loadRecommendations(forceRefresh = false) {
-            this.isLoading = true;
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 console.error("No account selected");
@@ -132,13 +162,27 @@ function rightsizing() {
                 return;
             }
             const cacheKey = `rightsizingData-${selectedAccountId}`;
-            if(forceRefresh) sessionStorage.removeItem(cacheKey);
             const cachedData = sessionStorage.getItem(cacheKey);
 
-            if(cachedData && !forceRefresh) {
+            if (cachedData) {
                 this.recommendations = JSON.parse(cachedData);
                 this.isLoading = false;
+            } else {
+                this.loadRecommendations(true);
+            }
+        },
+
+        loadRecommendations(forceRefresh = false) {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isLoading = false;
                 return;
+            }
+            
+            const cacheKey = `rightsizingData-${selectedAccountId}`;
+            if (forceRefresh) {
+                sessionStorage.removeItem(cacheKey);
+                this.isLoading = true;
             }
 
             fetch(`/api/rightsizing/recommendations?accountId=${selectedAccountId}`)
