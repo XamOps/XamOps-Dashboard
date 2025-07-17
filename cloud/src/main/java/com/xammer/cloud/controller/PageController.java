@@ -75,4 +75,9 @@ public class PageController {
     public String costPage() {
         return "cost";
     }
+    
+    @GetMapping("/resourcedetail")
+    public String resourceDetailPage() {
+        return "resourcedetail";
+    }
 }

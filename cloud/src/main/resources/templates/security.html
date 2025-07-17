@@ -24,7 +24,7 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="securityCenter()">
-            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-20">
                 <div>
                     <h1 class="text-xl font-semibold text-gray-800">Security Center</h1>
                     <p class="text-xs text-gray-500">Review security findings and compliance status</p>
@@ -42,115 +42,110 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                <!-- Summary Cards Skeleton -->
-                <div x-show="isLoading" x-cloak class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
-                </div>
-
                 <!-- Summary Cards -->
-                <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <div class="bg-white rounded-xl p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">Total Findings</h3>
-                        <p class="text-3xl font-bold text-gray-800 mt-1" x-text="findings.length"></p>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">Critical</h3>
-                        <p class="text-3xl font-bold text-red-600 mt-1" x-text="severityCounts.Critical || 0"></p>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">High</h3>
-                        <p class="text-3xl font-bold text-orange-500 mt-1" x-text="severityCounts.High || 0"></p>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">Medium & Low</h3>
-                        <p class="text-3xl font-bold text-yellow-500 mt-1" x-text="(severityCounts.Medium || 0) + (severityCounts.Low || 0)"></p>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <!-- Skeletons -->
+                    <template x-if="isLoading">
+                        <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                        <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                        <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                        <div class="bg-white rounded-xl p-5 shadow-sm border skeleton h-24"></div>
+                    </template>
+                    <!-- Actual Cards -->
+                    <template x-if="!isLoading">
+                        <div class="bg-white rounded-xl p-5 shadow-sm border">
+                            <h3 class="text-gray-500 text-sm font-medium">Total Findings</h3>
+                            <p class="text-3xl font-bold text-gray-800 mt-1" x-text="findings.length"></p>
+                        </div>
+                        <div class="bg-white rounded-xl p-5 shadow-sm border">
+                            <h3 class="text-gray-500 text-sm font-medium">Critical</h3>
+                            <p class="text-3xl font-bold text-red-600 mt-1" x-text="severityCounts.Critical || 0"></p>
+                        </div>
+                        <div class="bg-white rounded-xl p-5 shadow-sm border">
+                            <h3 class="text-gray-500 text-sm font-medium">High</h3>
+                            <p class="text-3xl font-bold text-orange-500 mt-1" x-text="severityCounts.High || 0"></p>
+                        </div>
+                        <div class="bg-white rounded-xl p-5 shadow-sm border">
+                            <h3 class="text-gray-500 text-sm font-medium">Medium & Low</h3>
+                            <p class="text-3xl font-bold text-yellow-500 mt-1" x-text="(severityCounts.Medium || 0) + (severityCounts.Low || 0)"></p>
+                        </div>
+                    </template>
                 </div>
 
-                <!-- Findings Table -->
-                <div class="bg-white rounded-xl p-6 shadow-sm border">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-lg font-semibold text-gray-800">Security Findings</h2>
-                        <div class="flex items-center gap-2">
-                            <label for="severity-filter" class="text-sm font-medium">Severity:</label>
-                            <select x-model="filter.severity" id="severity-filter" class="form-select text-sm rounded-md">
-                                <option value="All">All</option>
-                                <option value="Critical">Critical</option>
-                                <option value="High">High</option>
-                                <option value="Medium">Medium</option>
-                                <option value="Low">Low</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <!-- Table Skeleton Loader -->
-                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-48"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-28"></div></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <template x-for="i in 5" :key="i">
-                                    <tr class="border-b">
-                                        <td class="px-6 py-4"><div class="h-6 skeleton rounded-full w-20"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
-                                        <td class="px-6 py-4"><div class="h-6 skeleton rounded-md w-32"></div></td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div x-show="!isLoading && filteredFindings.length === 0" x-cloak class="text-center py-12 border-2 border-dashed rounded-lg">
+                <!-- Findings Table grouped by Severity -->
+                <div class="space-y-6">
+                     <div x-show="isLoading" class="bg-white rounded-xl p-6 shadow-sm border skeleton h-96"></div>
+                     <div x-show="!isLoading && findings.length === 0" x-cloak class="text-center py-16 border-2 border-dashed rounded-lg">
                         <i class="fas fa-shield-alt fa-3x text-green-500"></i>
                         <h3 class="mt-4 text-lg font-medium">No Findings</h3>
-                        <p class="mt-1 text-sm text-gray-500">No security findings match your current filters. Great job!</p>
+                        <p class="mt-1 text-sm text-gray-500">Your environment appears to be secure. Great job!</p>
                     </div>
 
-                    <div x-show="!isLoading && filteredFindings.length > 0" x-cloak class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-600">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3">Severity</th>
-                                    <th class="px-6 py-3">Category</th>
-                                    <th class="px-6 py-3">Description</th>
-                                    <th class="px-6 py-3">Resource</th>
-                                    <th class="px-6 py-3">Compliance</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <template x-for="finding in filteredFindings" :key="finding.resourceId + finding.description">
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-6 py-4">
-                                            <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full" :class="getSeverityColor(finding.severity)" x-text="finding.severity"></span>
-                                        </td>
-                                        <td class="px-6 py-4 font-semibold" x-text="finding.category"></td>
-                                        <td class="px-6 py-4" x-text="finding.description"></td>
-                                        <td class="px-6 py-4">
-                                            <p class="font-mono text-xs" x-text="finding.resourceId"></p>
-                                            <p class="text-xs text-gray-500" x-text="finding.region"></p>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <span class="text-xs font-semibold bg-gray-200 text-gray-700 px-2 py-1 rounded-md" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
-                                        </td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                    </div>
+                    <template x-for="severity in ['Critical', 'High', 'Medium', 'Low']" :key="severity">
+                        <div x-show="!isLoading && getFindingsBySeverity(severity).length > 0" x-cloak>
+                            <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <button @click="toggleSeverity(severity)" class="w-full flex justify-between items-center p-4" :class="getSeverityHeaderColor(severity)">
+                                    <h3 class="font-bold text-lg" x-text="`${severity} Severity Findings`"></h3>
+                                    <div class="flex items-center gap-4">
+                                        <span class="px-3 py-1 text-sm font-bold rounded-full" :class="getSeverityPillColor(severity)" x-text="getFindingsBySeverity(severity).length"></span>
+                                        <i class="fas fa-chevron-down transition-transform" :class="{'rotate-180': openSeverities.includes(severity)}"></i>
+                                    </div>
+                                </button>
+                                <div x-show="openSeverities.includes(severity)" class="p-4 bg-white">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-sm text-left text-gray-600">
+                                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                                <tr>
+                                                    <th class="px-6 py-3">Category</th>
+                                                    <th class="px-6 py-3">Description</th>
+                                                    <th class="px-6 py-3">Resource</th>
+                                                    <th class="px-6 py-3">Compliance</th>
+                                                    <th class="px-6 py-3 text-center">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200">
+                                                <template x-for="finding in getFindingsBySeverity(severity)" :key="finding.resourceId + finding.description">
+                                                    <tr class="hover:bg-gray-50">
+                                                        <td class="px-6 py-4 font-semibold" x-text="finding.category"></td>
+                                                        <td class="px-6 py-4" x-text="finding.description"></td>
+                                                        <td class="px-6 py-4">
+                                                            <p class="font-mono text-xs" x-text="finding.resourceId"></p>
+                                                            <p class="text-xs text-gray-500" x-text="finding.region"></p>
+                                                        </td>
+                                                        <td class="px-6 py-4">
+                                                            <span class="text-xs font-semibold bg-gray-200 text-gray-700 px-2 py-1 rounded-md" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
+                                                        </td>
+                                                        <td class="px-6 py-4 text-center">
+                                                            <button @click="openRemediationModal(finding)" class="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200">
+                                                                <i class="fas fa-wrench mr-1"></i>Remediate
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
+
+            <!-- Remediation Modal -->
+            <div x-show="isModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isModalOpen = false">
+                <div class="bg-white rounded-lg p-8 w-full max-w-3xl shadow-xl" @click.stop>
+                     <div class="flex justify-between items-center pb-3 border-b">
+                        <div>
+                            <h3 class="text-lg font-bold">Remediation Steps</h3>
+                            <p class="text-sm text-gray-500" x-text="selectedFinding.description"></p>
+                        </div>
+                        <button @click="isModalOpen = false" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                    </div>
+                     <div class="mt-4 prose max-w-none text-sm" x-html="remediationSteps"></div>
+                </div>
+            </div>
+
         </main>
     </div>
 </div>
@@ -160,25 +155,13 @@ function securityCenter() {
     return {
         isLoading: true,
         findings: [],
-        filter: {
-            severity: 'All'
-        },
-        init() {
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                console.error("No account selected");
-                this.isLoading = false;
-                return;
-            }
-            const cacheKey = `securityFindings-${selectedAccountId}`;
-            const cachedData = sessionStorage.getItem(cacheKey);
+        openSeverities: ['Critical', 'High'], // Auto-expand critical and high
+        isModalOpen: false,
+        selectedFinding: {},
+        remediationSteps: '',
 
-            if (cachedData) {
-                this.processFindings(JSON.parse(cachedData));
-                this.isLoading = false;
-            } else {
-                this.loadFindings(true);
-            }
+        init() {
+            this.loadFindings();
         },
         loadFindings(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
@@ -188,11 +171,14 @@ function securityCenter() {
             }
             
             const cacheKey = `securityFindings-${selectedAccountId}`;
-            if (forceRefresh) {
-                sessionStorage.removeItem(cacheKey);
-                this.isLoading = true;
+            if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
+                this.processFindings(JSON.parse(sessionStorage.getItem(cacheKey)));
+                this.isLoading = false;
+                return;
             }
 
+            this.isLoading = true;
+            sessionStorage.removeItem(cacheKey);
             fetch(`/api/security/findings?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
@@ -225,20 +211,53 @@ function securityCenter() {
                 return acc;
             }, {});
         },
-        get filteredFindings() {
-            return this.findings.filter(finding => {
-                const severityMatch = this.filter.severity === 'All' || finding.severity === this.filter.severity;
-                return severityMatch;
-            });
+        getFindingsBySeverity(severity) {
+            return this.findings.filter(f => f.severity === severity);
         },
-        getSeverityColor(severity) {
+        toggleSeverity(severity) {
+            if (this.openSeverities.includes(severity)) {
+                this.openSeverities = this.openSeverities.filter(s => s !== severity);
+            } else {
+                this.openSeverities.push(severity);
+            }
+        },
+        getSeverityHeaderColor(severity) {
             const colors = {
-                'Critical': 'bg-red-100 text-red-800',
-                'High': 'bg-orange-100 text-orange-800',
-                'Medium': 'bg-yellow-100 text-yellow-800',
-                'Low': 'bg-blue-100 text-blue-800'
+                'Critical': 'bg-red-100 text-red-800', 'High': 'bg-orange-100 text-orange-800',
+                'Medium': 'bg-yellow-100 text-yellow-800', 'Low': 'bg-blue-100 text-blue-800'
             };
             return colors[severity] || 'bg-gray-100 text-gray-800';
+        },
+        getSeverityPillColor(severity) {
+            const colors = {
+                'Critical': 'bg-red-500 text-white', 'High': 'bg-orange-500 text-white',
+                'Medium': 'bg-yellow-500 text-white', 'Low': 'bg-blue-500 text-white'
+            };
+            return colors[severity] || 'bg-gray-500 text-white';
+        },
+        openRemediationModal(finding) {
+            this.selectedFinding = finding;
+            this.remediationSteps = this.getRemediationForFinding(finding);
+            this.isModalOpen = true;
+        },
+        getRemediationForFinding(finding) {
+            // This is a placeholder. In a real application, this might come from an API or a more complex mapping.
+            const genericSteps = `
+                <p><strong>1. Identify the Resource:</strong> Locate the resource <strong>${finding.resourceId}</strong> in the AWS console in the <strong>${finding.region}</strong> region.</p>
+                <p><strong>2. Analyze the Finding:</strong> Understand why this is flagged. The description is: <em>"${finding.description}"</em>.</p>
+                <p><strong>3. Follow Best Practices:</strong> Consult the official AWS documentation for the service (<strong>${finding.category}</strong>) and the compliance framework (<strong>${finding.complianceFramework}</strong>) to apply the recommended fix.</p>
+                <p><strong>4. Verify the Fix:</strong> After applying changes, re-run the security scan or wait for the next scheduled scan to confirm the issue is resolved.</p>
+            `;
+
+            const specificSteps = {
+                'CIS AWS Foundations-1.2': `<p><strong>Specific Action:</strong> Navigate to the IAM user and enforce Multi-Factor Authentication (MFA). This is critical for preventing unauthorized access.</p>`,
+                'CIS AWS Foundations-2.1.2': `<p><strong>Specific Action:</strong> Go to the S3 bucket settings. Enable "Block all public access" and review bucket policies and ACLs to remove public grants.</p>`,
+                'CIS AWS Foundations-4.1': `<p><strong>Specific Action:</strong> Edit the inbound rules for the security group. Restrict the source IP range from '0.0.0.0/0' to a specific, known IP address or range. Avoid opening ports like SSH (22) or RDP (3389) to the world.</p>`,
+                'CIS AWS Foundations-2.9': `<p><strong>Specific Action:</strong> In the VPC console, select the VPC and choose to create a new Flow Log. Configure it to send logs to a CloudWatch Log Group or an S3 bucket for traffic analysis.</p>`
+            };
+
+            const key = `${finding.complianceFramework}-${finding.controlId}`;
+            return specificSteps[key] ? `<h4>Specific Guidance:</h4>${specificSteps[key]}<hr class="my-4"><h4>General Steps:</h4>${genericSteps}` : `<h4>General Steps:</h4>${genericSteps}`;
         }
     }
 }

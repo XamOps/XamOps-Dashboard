@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.xammer.cloud.dto.AiAdvisorSummaryDto;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.FinOpsReportDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -35,48 +37,54 @@ public class AiAdvisorService {
     }
 
     /**
-     * Gathers key dashboard data and uses an LLM to generate a summary.
+     * Gathers key dashboard data and uses an LLM to generate a structured summary with actions.
      * @param accountId The AWS account ID.
-     * @return A CompletableFuture containing the natural language summary.
+     * @return A CompletableFuture containing the structured AI summary.
      */
     @Async("awsTaskExecutor")
-    public CompletableFuture<String> getDashboardSummary(String accountId) {
+    public CompletableFuture<AiAdvisorSummaryDto> getDashboardSummary(String accountId) {
         logger.info("Generating AI dashboard summary for account: {}", accountId);
 
-        // Fetch all necessary data in parallel
         CompletableFuture<FinOpsReportDto> finOpsReportFuture = awsDataService.getFinOpsReport(accountId);
 
         return finOpsReportFuture.thenCompose(finOpsReport -> {
             try {
-                // Prepare the data for the prompt
                 Map<String, Object> promptData = new HashMap<>();
                 
-                // Add top 3 cost services
                 if (finOpsReport.getCostBreakdown() != null && finOpsReport.getCostBreakdown().getByService() != null) {
                     promptData.put("topCostServices", finOpsReport.getCostBreakdown().getByService().stream().limit(3).collect(Collectors.toList()));
                 }
 
-                // Add top 3 rightsizing recommendations by savings
                 if (finOpsReport.getRightsizingRecommendations() != null) {
                     promptData.put("topRightsizingSavings", finOpsReport.getRightsizingRecommendations().stream()
                         .sorted(Comparator.comparing(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).reversed())
                         .limit(3).collect(Collectors.toList()));
                 }
 
-                // Add top 3 wasted resources by savings
                 if (finOpsReport.getWastedResources() != null) {
                     promptData.put("topWastedResources", finOpsReport.getWastedResources().stream()
                         .sorted(Comparator.comparing(DashboardData.WastedResource::getMonthlySavings).reversed())
                         .limit(3).collect(Collectors.toList()));
                 }
 
-                // Add KPIs
                 promptData.put("keyPerformanceIndicators", finOpsReport.getKpis());
 
                 String jsonData = objectMapper.writeValueAsString(promptData);
                 String prompt = buildPrompt(jsonData);
 
-                return callGeminiApi(prompt);
+                return callGeminiApi(prompt).thenApply(summaryText -> {
+                    List<AiAdvisorSummaryDto.SuggestedAction> actions = new ArrayList<>();
+                    if (finOpsReport.getRightsizingRecommendations() != null && !finOpsReport.getRightsizingRecommendations().isEmpty()) {
+                        actions.add(new AiAdvisorSummaryDto.SuggestedAction("Review Rightsizing", "navigate", "/rightsizing"));
+                    }
+                    if (finOpsReport.getWastedResources() != null && !finOpsReport.getWastedResources().isEmpty()) {
+                         actions.add(new AiAdvisorSummaryDto.SuggestedAction("Analyze Waste", "navigate", "/waste"));
+                    }
+                     if (finOpsReport.getCostAnomalies() != null && !finOpsReport.getCostAnomalies().isEmpty()) {
+                        actions.add(new AiAdvisorSummaryDto.SuggestedAction("Investigate Anomalies", "navigate", "/finops"));
+                    }
+                    return new AiAdvisorSummaryDto(summaryText, actions);
+                });
 
             } catch (Exception e) {
                 logger.error("Error preparing data for AI summary for account {}", accountId, e);
@@ -85,11 +93,6 @@ public class AiAdvisorService {
         });
     }
 
-    /**
-     * Constructs the prompt to be sent to the Gemini API.
-     * @param jsonData The JSON string of data to be analyzed.
-     * @return The full prompt string.
-     */
     private String buildPrompt(String jsonData) {
         return "You are an expert FinOps advisor for a company called XamOps. " +
                "Your tone is professional, concise, and helpful. " +
@@ -119,8 +122,9 @@ public class AiAdvisorService {
                 }
             """.formatted(prompt.replace("\"", "\\\""));
 
+            // *** FIXED: Changed model from "gemini-pro" to "gemini-1.5-flash-latest" to resolve 404 error ***
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + geminiApiKey))
+                    .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + geminiApiKey))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();

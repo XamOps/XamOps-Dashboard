@@ -14,6 +14,7 @@
         [x-cloak] { display: none !important; }
         .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -39,59 +40,68 @@
             <div class="flex-1 p-6 space-y-6">
                 <!-- Cost Breakdown Section -->
                 <div class="bg-white rounded-lg p-6 shadow-sm border">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Cost Breakdown</h2>
-                    <div class="flex items-center space-x-2 mb-4">
-                        <span class="text-sm font-medium">Group by:</span>
-                        <select x-model="groupBy" @change="loadCostData(true)" class="form-select text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            <option value="SERVICE">Service</option>
-                            <option value="REGION">Region</option>
-                            <option value="TAG">Tag</option>
-                        </select>
-                        <input type="text" x-show="groupBy === 'TAG'" x-model="tagKey" @input.debounce.500ms="loadCostData(true)" placeholder="Enter Tag Key" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                        <h2 class="text-lg font-semibold text-gray-800">Cost Breakdown (Month to Date)</h2>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-medium">Group by:</span>
+                            <select x-model="groupBy" @change="loadCostData(true)" class="form-select text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                <option value="SERVICE">Service</option>
+                                <option value="REGION">Region</option>
+                                <option value="TAG">Tag</option>
+                            </select>
+                            <input type="text" x-show="groupBy === 'TAG'" x-model="tagKey" @input.debounce.500ms="loadCostData(true)" placeholder="Enter Tag Key" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        </div>
                     </div>
                     
-                    <!-- Skeleton Loader -->
-                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
-                                    <th class="px-6 py-3 text-right"><div class="h-4 skeleton rounded w-24 ml-auto"></div></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <template x-for="i in 8" :key="i">
-                                    <tr class="border-b">
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/4 ml-auto"></div></td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
+                    <!-- Loading State -->
+                    <div x-show="isLoading" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-1 skeleton h-64 rounded-lg"></div>
+                        <div class="lg:col-span-2 skeleton h-96 rounded-lg"></div>
                     </div>
 
+                    <!-- Empty State -->
                     <div x-show="!isLoading && costData.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                        <i class="fas fa-dollar-sign fa-3x text-gray-400"></i>
                         <h3 class="mt-2 text-sm font-medium text-gray-900">No cost data found.</h3>
                         <p class="mt-1 text-sm text-gray-500">There is no cost data for the selected criteria, or the tag key is invalid.</p>
                     </div>
 
-                    <div x-show="!isLoading && costData.length > 0" x-cloak class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-600">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3" x-text="groupBy === 'TAG' ? 'Tag: ' + tagKey : groupBy.charAt(0).toUpperCase() + groupBy.slice(1).toLowerCase()"></th>
-                                    <th class="px-6 py-3 text-right">Cost (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <template x-for="item in costData" :key="item.name">
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 font-medium text-gray-800" x-text="item.name || '(No Value)'"></td>
-                                        <td class="px-6 py-4 text-right font-mono text-gray-800" x-text="'$' + item.amount.toFixed(2)"></td>
+                    <!-- Chart and Table -->
+                    <div x-show="!isLoading && costData.length > 0" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                        <!-- Chart -->
+                        <div class="lg:col-span-1 h-80">
+                            <canvas id="costChart"></canvas>
+                        </div>
+                        <!-- Table -->
+                        <div class="lg:col-span-2 overflow-x-auto max-h-[60vh]">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3" x-text="groupBy === 'TAG' ? 'Tag: ' + tagKey : groupBy.charAt(0).toUpperCase() + groupBy.slice(1).toLowerCase()"></th>
+                                        <th class="px-6 py-3 text-right">Cost (USD)</th>
                                     </tr>
-                                </template>
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <template x-for="item in sortedCostData" :key="item.name">
+                                        <tr class="hover:bg-gray-50 cursor-pointer" @click="fetchHistoricalData(item.name)">
+                                            <td class="px-6 py-4 font-medium text-gray-800" x-text="item.name || '(No Value)'"></td>
+                                            <td class="px-6 py-4 text-right font-mono text-gray-800" x-text="'$' + item.amount.toFixed(2)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historical Cost Trend Section -->
+                <div x-show="historical.dimension" x-cloak class="bg-white rounded-lg p-6 shadow-sm border mt-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                        6-Month Cost Trend for: <span class="text-indigo-600" x-text="historical.dimension"></span>
+                    </h2>
+                    <div x-show="historical.isLoading" class="skeleton h-64 rounded-lg"></div>
+                    <div x-show="!historical.isLoading" class="h-64">
+                        <canvas id="historicalCostChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -106,12 +116,21 @@ function costManagement() {
         costData: [],
         groupBy: 'SERVICE',
         tagKey: 'Name',
+        costChart: null,
+        historical: {
+            isLoading: false,
+            dimension: null,
+            data: null,
+            chart: null
+        },
 
         init() {
-            this.loadCostData(false); // Initial load from cache if available
+            this.loadCostData(false);
+            this.$watch('costData', () => this.renderChart());
         },
 
         loadCostData(forceRefresh = false) {
+            this.historical.dimension = null; // Reset historical view
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 this.isLoading = false;
@@ -121,16 +140,12 @@ function costManagement() {
             
             const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
             
-            if (!forceRefresh) {
-                const cachedData = sessionStorage.getItem(cacheKey);
-                if (cachedData) {
-                    this.costData = JSON.parse(cachedData);
-                    this.isLoading = false;
-                    return;
-                }
+            if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
+                this.costData = JSON.parse(sessionStorage.getItem(cacheKey));
+                this.isLoading = false;
+                return;
             }
 
-            // If forcing refresh or cache is empty, set loading and fetch
             this.isLoading = true;
             sessionStorage.removeItem(cacheKey);
 
@@ -157,6 +172,124 @@ function costManagement() {
                 })
                 .finally(() => this.isLoading = false);
         },
+        
+        get sortedCostData() {
+            return [...this.costData].sort((a, b) => b.amount - a.amount);
+        },
+
+        renderChart() {
+            const ctx = document.getElementById('costChart');
+            if (!ctx) return;
+            
+            if (this.costChart) {
+                this.costChart.destroy();
+            }
+
+            const topN = 10;
+            const sortedData = this.sortedCostData;
+            const chartData = sortedData.slice(0, topN);
+            const otherData = sortedData.slice(topN);
+
+            const labels = chartData.map(d => d.name);
+            const data = chartData.map(d => d.amount);
+
+            if (otherData.length > 0) {
+                labels.push('Other');
+                data.push(otherData.reduce((sum, item) => sum + item.amount, 0));
+            }
+            
+            this.costChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cost',
+                        data: data,
+                        backgroundColor: [
+                            '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe',
+                            '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c'
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12,
+                                font: { size: 12 }
+                            }
+                        }
+                    },
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const clickedLabel = this.costChart.data.labels[elements[0].index];
+                            if (clickedLabel !== 'Other') {
+                                this.fetchHistoricalData(clickedLabel);
+                            }
+                        }
+                    }
+                }
+            });
+        },
+
+        fetchHistoricalData(dimensionValue) {
+            this.historical.isLoading = true;
+            this.historical.dimension = dimensionValue;
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            // NOTE: Backend endpoint /api/costs/historical needs to be created
+            // For now, we will simulate the data.
+            console.log(`Simulating fetch for historical data: ${dimensionValue}`);
+            setTimeout(() => {
+                // Mock data simulation
+                const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+                const data = labels.map(() => Math.random() * 1000 + 500);
+                this.historical.data = { labels, costs: data };
+                this.renderHistoricalChart();
+                this.historical.isLoading = false;
+            }, 1000);
+        },
+
+        renderHistoricalChart() {
+            const ctx = document.getElementById('historicalCostChart');
+            if (!ctx || !this.historical.data) return;
+
+            if (this.historical.chart) {
+                this.historical.chart.destroy();
+            }
+
+            this.historical.chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: this.historical.data.labels,
+                    datasets: [{
+                        label: `Monthly Cost for ${this.historical.dimension}`,
+                        data: this.historical.data.costs,
+                        backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: (value) => '$' + value.toLocaleString()
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 </script>

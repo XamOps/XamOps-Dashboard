@@ -1,3 +1,4 @@
+<!-- src/main/resources/templates/fragments/_sidebar.html -->
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -18,11 +19,17 @@
 </head>
 <body>
 <div th:fragment="sidebar" class="h-full flex flex-col bg-white">
+    <!-- Logo -->
+    <div class="flex items-center justify-center h-16 border-b">
+        <a href="/" class="text-2xl font-bold text-indigo-600">XamOps</a>
+    </div>
+
     <!-- Account Switcher -->
     <div x-data="{
         open: false,
         accounts: [],
         selectedAccount: null,
+        searchTerm: '',
         init() {
             this.fetchAccounts();
         },
@@ -47,6 +54,15 @@
             sessionStorage.setItem('selectedAccountId', account.id);
             this.open = false;
             window.location.reload(); // Reload the page to fetch data for the new account
+        },
+        get filteredAccounts() {
+            if (this.searchTerm === '') {
+                return this.accounts;
+            }
+            return this.accounts.filter(account => {
+                return account.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                       account.id.toLowerCase().includes(this.searchTerm.toLowerCase());
+            });
         }
     }" class="p-3 border-b flex-shrink-0">
         
@@ -70,8 +86,11 @@
                  @click.outside="open = false" 
                  x-cloak
                  class="absolute left-0 right-0 mt-1 mx-2 bg-white border border-gray-200 rounded-md shadow-lg z-50 overflow-hidden">
+                <div class="p-2">
+                    <input type="text" x-model="searchTerm" placeholder="Search accounts..." class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
                 <div class="py-1 max-h-60 overflow-y-auto">
-                    <template x-for="account in accounts" :key="account.dbId">
+                    <template x-for="account in filteredAccounts" :key="account.dbId">
                         <div @click.stop="selectAccount(account)"
                              class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 cursor-pointer">
                             <span class="font-medium" x-text="account.name"></span>
@@ -89,7 +108,6 @@
             <span>Dashboard</span>
         </a>
         
-        <!-- FIXED: Using Thymeleaf to set the initial 'open' state on the server-side -->
         <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap')}]] }">
             <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
                 <div class="flex items-center gap-3"><i class="fas fa-cloud fa-fw w-5 text-center"></i><span class="font-semibold">Cloudview</span></div>
@@ -102,7 +120,6 @@
             </div>
         </div>
 
-        <!-- FIXED: Using Thymeleaf to set the initial 'open' state on the server-side -->
         <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') || #strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation')}]] }">
             <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
                 <div class="flex items-center gap-3"><i class="fas fa-cogs fa-fw w-5 text-center"></i><span class="font-semibold">Optimization</span></div>
@@ -118,7 +135,6 @@
             </div>
         </div>
 
-        <!-- FIXED: Using Thymeleaf to set the initial 'open' state on the server-side -->
         <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts')}]] }">
             <button @click="open = !open" class="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2.5" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-100'}">
                 <div class="flex items-center gap-3"><i class="fas fa-shield-alt fa-fw w-5 text-center"></i><span class="font-semibold">Cloudguard</span></div>

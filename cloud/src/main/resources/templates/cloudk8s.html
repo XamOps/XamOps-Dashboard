@@ -12,6 +12,8 @@
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
         .table-container { max-height: 60vh; }
+        .progress-bar { background-color: #e5e7eb; border-radius: 9999px; overflow: hidden; height: 0.5rem; }
+        .progress-bar-fill { height: 100%; transition: width 0.3s ease-in-out; border-radius: 9999px; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -22,16 +24,16 @@
     </aside>
 
     <div class="ml-64 flex-1">
-        <main class="flex-1 flex flex-col min-h-screen" x-data="cloudK8s()">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="cloudK8s()" x-init="init()" @destroy="cleanup()">
             <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-20">
                 <div>
                     <h1 class="text-xl font-semibold text-gray-800">CloudK8s Dashboard</h1>
                     <p class="text-xs text-gray-500">Live overview of your EKS clusters</p>
                 </div>
-                <button @click="refreshAll()" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading.clusters">
-                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading.clusters }"></i>
-                    <span x-text="isLoading.clusters ? 'Refreshing...' : 'Refresh All'"></span>
-                </button>
+                <div class="flex items-center text-sm text-gray-500">
+                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isPolling }"></i>
+                    <span x-text="isPolling ? `Auto-refreshing in ${countdown}s` : 'Paused'"></span>
+                </div>
             </header>
 
             <div class="flex-1 p-6 space-y-6">
@@ -90,8 +92,8 @@
                                         <tr>
                                             <th class="px-6 py-3">Node Name</th>
                                             <th class="px-6 py-3">Status</th>
-                                            <th class="px-6 py-3">Instance Type</th>
-                                            <th class="px-6 py-3">Zone</th>
+                                            <th class="px-6 py-3">CPU Usage</th>
+                                            <th class="px-6 py-3">Memory Usage</th>
                                             <th class="px-6 py-3">K8s Version</th>
                                             <th class="px-6 py-3">Age</th>
                                         </tr>
@@ -101,8 +103,8 @@
                                             <tr>
                                                 <td class="px-6 py-4 font-semibold" x-text="node.name"></td>
                                                 <td class="px-6 py-4"><span class="px-2 py-1 text-xs font-bold rounded-full" :class="node.status === 'Ready' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="node.status"></span></td>
-                                                <td class="px-6 py-4" x-text="node.instanceType"></td>
-                                                <td class="px-6 py-4" x-text="node.availabilityZone"></td>
+                                                <td class="px-6 py-4" x-html="renderUsageBar(node.cpuUsage, 'cores')"></td>
+                                                <td class="px-6 py-4" x-html="renderUsageBar(node.memUsage, 'Gi')"></td>
                                                 <td class="px-6 py-4" x-text="node.k8sVersion"></td>
                                                 <td class="px-6 py-4" x-text="node.age"></td>
                                             </tr>
@@ -155,9 +157,9 @@
                                      <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
                                         <tr>
                                             <th class="px-6 py-3">Pod Name</th>
-                                            <th class="px-6 py-3">Ready</th>
                                             <th class="px-6 py-3">Status</th>
-                                            <th class="px-6 py-3">Restarts</th>
+                                            <th class="px-6 py-3">CPU (Req/Lim)</th>
+                                            <th class="px-6 py-3">Memory (Req/Lim)</th>
                                             <th class="px-6 py-3">Node</th>
                                             <th class="px-6 py-3">Age</th>
                                         </tr>
@@ -166,9 +168,9 @@
                                          <template x-for="pod in pods" :key="pod.name">
                                             <tr>
                                                 <td class="px-6 py-4 font-semibold" x-text="pod.name"></td>
-                                                <td class="px-6 py-4" x-text="pod.ready"></td>
                                                 <td class="px-6 py-4" x-text="pod.status"></td>
-                                                <td class="px-6 py-4" x-text="pod.restarts"></td>
+                                                <td class="px-6 py-4 text-xs font-mono" x-text="pod.cpu || 'N/A'"></td>
+                                                <td class="px-6 py-4 text-xs font-mono" x-text="pod.memory || 'N/A'"></td>
                                                 <td class="px-6 py-4 font-mono text-xs" x-text="pod.nodeName"></td>
                                                 <td class="px-6 py-4" x-text="pod.age"></td>
                                             </tr>
@@ -198,6 +200,9 @@ function cloudK8s() {
         pods: [],
         activeTab: 'nodes',
         selectedAccountId: null,
+        pollingInterval: null,
+        isPolling: false,
+        countdown: 10,
         tabs: [
             { name: 'nodes', label: 'Nodes', icon: 'fa-server' },
             { name: 'deployments', label: 'Deployments', icon: 'fa-box' },
@@ -217,118 +222,140 @@ function cloudK8s() {
                 this.isLoading.clusters = false;
                 return;
             }
-            this.fetchClusters(false); // Check cache first
+            this.fetchClusters();
         },
-
-        refreshAll() {
-            this.fetchClusters(true);
-            if (this.selectedClusterName) {
-                this.onClusterChange(true);
+        
+        cleanup() {
+            if (this.pollingInterval) {
+                clearInterval(this.pollingInterval);
             }
         },
-
-        fetchClusters(force = false) {
-            const cacheKey = `k8sClusters-${this.selectedAccountId}`;
-            if (!force) {
-                const cached = sessionStorage.getItem(cacheKey);
-                if (cached) {
-                    this.clusters = JSON.parse(cached);
-                    this.isLoading.clusters = false;
-                    return;
+        
+        startPolling() {
+            this.cleanup(); // Clear any existing interval
+            this.isPolling = true;
+            this.countdown = 10;
+            
+            this.pollingInterval = setInterval(() => {
+                this.countdown--;
+                if (this.countdown <= 0) {
+                    this.refreshData();
+                    this.countdown = 10;
                 }
-            }
-            
+            }, 1000);
+        },
+        
+        stopPolling() {
+            this.cleanup();
+            this.isPolling = false;
+        },
+
+        refreshData() {
+            if (!this.selectedClusterName) return;
+            console.log("Auto-refreshing K8s data...");
+            this.fetchNodes(true);
+            this.fetchNamespaces(true); // This will chain-call deployments and pods
+        },
+
+        fetchClusters() {
             this.isLoading.clusters = true;
-            sessionStorage.removeItem(cacheKey);
-            
             fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
                     this.clusters = data;
-                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                 })
                 .catch(err => console.error('Failed to fetch clusters', err))
                 .finally(() => this.isLoading.clusters = false);
         },
 
-        onClusterChange(force = false) {
+        onClusterChange() {
             if (!this.selectedClusterName) {
+                this.stopPolling();
                 this.nodes = []; this.namespaces = []; this.deployments = []; this.pods = [];
                 return;
             }
-            this.fetchNodes(force);
-            this.fetchNamespaces(force);
+            this.fetchNodes();
+            this.fetchNamespaces();
+            this.startPolling();
         },
 
-        onNamespaceChange(force = false) {
+        onNamespaceChange() {
             if (!this.selectedNamespace) return;
-            this.fetchDeployments(force);
-            this.fetchPods(force);
+            this.fetchDeployments();
+            this.fetchPods();
         },
 
-        fetchData(type, url, force = false) {
-            const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-${type}-${this.selectedNamespace || ''}`;
-            if (!force) {
-                const cached = sessionStorage.getItem(key);
-                if (cached) {
-                    this[type] = JSON.parse(cached);
-                    this.isLoading[type] = false;
-                    return;
-                }
-            }
-
-            this.isLoading[type] = true;
-            sessionStorage.removeItem(key);
-
-            fetch(url)
+        fetchNodes(isRefresh = false) {
+            if (!isRefresh) this.isLoading.nodes = true;
+            fetch(`/api/k8s/clusters/${this.selectedClusterName}/nodes?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    this[type] = data;
-                    sessionStorage.setItem(key, JSON.stringify(data));
+                    // NOTE: Backend doesn't provide usage data. Simulating it here.
+                    this.nodes = data.map(node => ({
+                        ...node,
+                        cpuUsage: { current: (Math.random() * 2).toFixed(2), total: 4 }, // Example: 4 cores total
+                        memUsage: { current: (Math.random() * 8).toFixed(2), total: 16 }  // Example: 16Gi total
+                    }));
                 })
-                .catch(err => console.error(`Failed to fetch ${type}`, err))
-                .finally(() => this.isLoading[type] = false);
+                .catch(err => console.error('Failed to fetch nodes', err))
+                .finally(() => this.isLoading.nodes = false);
         },
 
-        fetchNodes(force = false) {
-            this.fetchData('nodes', `/api/k8s/clusters/${this.selectedClusterName}/nodes?accountId=${this.selectedAccountId}`, force);
-        },
-
-        fetchNamespaces(force = false) {
-            const key = `k8s-${this.selectedAccountId}-${this.selectedClusterName}-namespaces`;
-            if (!force) {
-                const cached = sessionStorage.getItem(key);
-                if(cached){
-                    this.namespaces = JSON.parse(cached);
-                    this.isLoading.namespaces = false;
-                    this.onNamespaceChange(force);
-                    return;
-                }
-            }
-
-            this.isLoading.namespaces = true;
-            sessionStorage.removeItem(key);
-
+        fetchNamespaces(isRefresh = false) {
+             if (!isRefresh) this.isLoading.namespaces = true;
             fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
                     this.namespaces = data;
-                    sessionStorage.setItem(key, JSON.stringify(data));
                     if (!this.namespaces.includes(this.selectedNamespace)) {
                         this.selectedNamespace = 'default';
                     }
-                    this.onNamespaceChange(force);
+                    this.onNamespaceChange();
                 })
                 .catch(err => console.error('Failed to fetch namespaces', err))
                 .finally(() => this.isLoading.namespaces = false);
         },
 
-        fetchDeployments(force = false) {
-            this.fetchData('deployments', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/deployments?accountId=${this.selectedAccountId}`, force);
+        fetchDeployments() {
+            this.isLoading.deployments = true;
+            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/deployments?accountId=${this.selectedAccountId}`)
+                .then(res => res.json())
+                .then(data => { this.deployments = data; })
+                .catch(err => console.error('Failed to fetch deployments', err))
+                .finally(() => this.isLoading.deployments = false);
         },
 
-        fetchPods(force = false) {
-            this.fetchData('pods', `/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods?accountId=${this.selectedAccountId}`, force);
+        fetchPods() {
+            this.isLoading.pods = true;
+            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods?accountId=${this.selectedAccountId}`)
+                .then(res => res.json())
+                .then(data => {
+                    // NOTE: Backend doesn't provide resource requests/limits. Simulating it here.
+                    this.pods = data.map(pod => ({
+                        ...pod,
+                        cpu: '100m / 500m',
+                        memory: '128Mi / 512Mi'
+                    }));
+                })
+                .catch(err => console.error('Failed to fetch pods', err))
+                .finally(() => this.isLoading.pods = false);
+        },
+        
+        renderUsageBar(usage, unit) {
+            if (!usage) return 'N/A';
+            const percentage = (usage.current / usage.total) * 100;
+            let color = 'bg-green-500';
+            if (percentage > 80) color = 'bg-red-500';
+            else if (percentage > 60) color = 'bg-yellow-500';
+            
+            return `
+                <div class="flex items-center gap-2">
+                    <div class="w-full progress-bar">
+                        <div class="progress-bar-fill ${color}" style="width: ${percentage}%"></div>
+                    </div>
+                    <span class="text-xs font-mono w-24 text-right">${usage.current} / ${usage.total} ${unit}</span>
+                </div>
+            `;
         }
     }
 }

@@ -45,13 +45,17 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     <template x-for="kpi in kpis" :key="kpi.label">
                         <div class="bg-white rounded-xl p-5 card-shadow">
-                            <div class="flex justify-between items-start">
-                                <div>
+                            <div x-show="isLoading" class="skeleton h-24 w-full rounded-lg"></div>
+                            <div x-show="!isLoading">
+                                <div class="flex justify-between items-start">
                                     <h3 class="text-gray-500 text-sm font-medium" x-text="kpi.label"></h3>
-                                    <div x-show="isLoading" class="skeleton h-8 w-24 mt-2 rounded"></div>
-                                    <p x-show="!isLoading" class="text-2xl font-bold text-gray-800 mt-1" x-text="kpi.value"></p>
+                                    <div class="p-3 rounded-lg" :class="kpi.color.bg"><i class="fas text-lg" :class="[kpi.icon, kpi.color.text]"></i></div>
                                 </div>
-                                <div class="p-3 rounded-lg" :class="kpi.color"><i class="fas text-lg" :class="kpi.icon"></i></div>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="kpi.value"></p>
+                                <div class="flex items-center text-xs mt-1" :class="kpi.trendColor">
+                                    <i class="fas" :class="kpi.trendIcon"></i>
+                                    <span class="ml-1" x-text="kpi.trendText"></span>
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -149,20 +153,45 @@
                    <div class="bg-white rounded-xl p-6 card-shadow">
                         <h3 class="font-semibold text-gray-800 mb-4">Cost Breakdown by Service (Top 10)</h3>
                         <div x-show="isLoading" class="skeleton h-64 w-full rounded"></div>
-                        <div x-show="!isLoading"><canvas id="costByServiceChart"></canvas></div>
+                        <div x-show="!isLoading" class="h-64"><canvas id="costByServiceChart"></canvas></div>
                     </div>
                     <div class="bg-white rounded-xl p-6 card-shadow">
                         <h3 class="font-semibold text-gray-800 mb-4">Cost Breakdown by Region</h3>
                          <div x-show="isLoading" class="skeleton h-64 w-full rounded"></div>
-                        <div x-show="!isLoading"><canvas id="costByRegionChart"></canvas></div>
+                        <div x-show="!isLoading" class="h-64"><canvas id="costByRegionChart"></canvas></div>
                     </div>
                 </div>
                 
-                <!-- Optimization Tables -->
-                <div class="bg-white rounded-xl p-6 card-shadow" x-show="!isLoading && (reportData.rightsizingRecommendations.length > 0 || reportData.wastedResources.length > 0)">
-                    <h3 class="font-semibold text-gray-800 mb-4">Optimization Opportunities</h3>
+                <!-- Optimization & Anomaly Tables -->
+                <div class="bg-white rounded-xl p-6 card-shadow" x-show="!isLoading && (reportData.rightsizingRecommendations.length > 0 || reportData.wastedResources.length > 0 || reportData.costAnomalies.length > 0)">
+                    <h3 class="font-semibold text-gray-800 mb-4">Insights & Opportunities</h3>
+                    
+                    <!-- Cost Anomalies -->
+                    <div x-show="reportData.costAnomalies.length > 0">
+                        <h4 class="text-md font-semibold text-gray-700 mb-2">Cost Anomaly Detection</h4>
+                        <div class="overflow-x-auto max-h-96">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3">Service</th><th class="px-6 py-3">Date Range</th>
+                                        <th class="px-6 py-3">Unexpected Spend</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <template x-for="anomaly in reportData.costAnomalies" :key="anomaly.anomalyId">
+                                        <tr>
+                                            <td class="px-6 py-3 font-semibold" x-text="anomaly.service"></td>
+                                            <td class="px-6 py-3" x-text="`${anomaly.startDate} to ${anomaly.endDate}`"></td>
+                                            <td class="px-6 py-3 text-red-600 font-semibold" x-text="formatCurrency(anomaly.unexpectedSpend)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Rightsizing -->
-                    <div x-show="reportData.rightsizingRecommendations.length > 0">
+                    <div x-show="reportData.rightsizingRecommendations.length > 0" class="mt-6">
                         <h4 class="text-md font-semibold text-gray-700 mb-2">Rightsizing Recommendations</h4>
                          <div class="overflow-x-auto max-h-96">
                             <table class="w-full text-sm text-left text-gray-600">
@@ -285,16 +314,61 @@ function finopsReport() {
         },
         get kpis() {
             const k = this.reportData.kpis;
+            const mtdSpend = k.monthToDateSpend || 0;
+            const lastMonthSpend = k.lastMonthSpend || 0;
+            const forecast = k.forecastedSpend || 0;
+
+            const mtdTrend = lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend) * 100 : 0;
+            const forecastTrend = lastMonthSpend > 0 ? ((forecast - lastMonthSpend) / lastMonthSpend) * 100 : 0;
+
             return [
-                { label: 'Month-to-Date Spend', value: this.formatCurrency(k.monthToDateSpend), icon: 'fa-dollar-sign', color: 'bg-blue-100 text-blue-500' },
-                { label: 'Forecasted Spend', value: this.formatCurrency(k.forecastedSpend), icon: 'fa-chart-line', color: 'bg-yellow-100 text-yellow-500' },
-                { label: 'Last Month Spend', value: this.formatCurrency(k.lastMonthSpend), icon: 'fa-calendar-alt', color: 'bg-gray-100 text-gray-500' },
-                { label: 'Potential Savings', value: this.formatCurrency(k.potentialSavings), icon: 'fa-piggy-bank', color: 'bg-green-100 text-green-500' },
+                { 
+                    label: 'Month-to-Date Spend', 
+                    value: this.formatCurrency(mtdSpend), 
+                    icon: 'fa-dollar-sign', 
+                    color: { bg: 'bg-blue-100', text: 'text-blue-500' },
+                    trendIcon: mtdTrend >= 0 ? 'fa-arrow-up' : 'fa-arrow-down',
+                    trendColor: mtdTrend >= 0 ? 'text-red-500' : 'text-green-500',
+                    trendText: `${Math.abs(mtdTrend).toFixed(1)}% vs last month`
+                },
+                { 
+                    label: 'Forecasted Spend', 
+                    value: this.formatCurrency(forecast), 
+                    icon: 'fa-chart-line', 
+                    color: { bg: 'bg-yellow-100', text: 'text-yellow-500' },
+                    trendIcon: forecastTrend >= 0 ? 'fa-arrow-up' : 'fa-arrow-down',
+                    trendColor: forecastTrend >= 0 ? 'text-red-500' : 'text-green-500',
+                    trendText: `${Math.abs(forecastTrend).toFixed(1)}% vs last month`
+                },
+                { 
+                    label: 'Last Month Spend', 
+                    value: this.formatCurrency(lastMonthSpend), 
+                    icon: 'fa-calendar-alt', 
+                    color: { bg: 'bg-gray-100', text: 'text-gray-500' },
+                    trendIcon: '', trendColor: '', trendText: ''
+                },
+                { 
+                    label: 'Potential Savings', 
+                    value: this.formatCurrency(k.potentialSavings), 
+                    icon: 'fa-piggy-bank', 
+                    color: { bg: 'bg-green-100', text: 'text-green-500' },
+                    trendIcon: '', trendColor: '', trendText: ''
+                },
             ];
         },
         renderCharts() {
             this.renderServiceChart();
             this.renderRegionChart();
+        },
+        handleChartClick(event, chart, type) {
+            const points = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
+            if (points.length) {
+                const firstPoint = points[0];
+                const label = chart.data.labels[firstPoint.index];
+                // In a real app, you would redirect or filter based on the label
+                // For example: window.location.href = `/cost?groupBy=${type}&filter=${label}`;
+                alert(`Chart clicked! You selected ${type}: ${label}. You would now be redirected to a filtered view.`);
+            }
         },
         renderServiceChart() {
             const ctx = document.getElementById('costByServiceChart').getContext('2d');
@@ -306,7 +380,11 @@ function finopsReport() {
                     labels: data.map(d => d.service),
                     datasets: [{ data: data.map(d => d.cost), backgroundColor: ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#60a5fa', '#38bdf8', '#22d3ee', '#67e8f9'] }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { position: 'right' } },
+                    onClick: (e) => this.handleChartClick(e, this.charts.byService, 'SERVICE')
+                }
             });
         },
         renderRegionChart() {
@@ -319,7 +397,11 @@ function finopsReport() {
                     labels: data.map(d => d.region),
                     datasets: [{ label: 'Cost by Region', data: data.map(d => d.cost), backgroundColor: '#fb923c' }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } }
+                options: { 
+                    responsive: true, maintainAspectRatio: false, indexAxis: 'y', 
+                    plugins: { legend: { display: false } },
+                    onClick: (e) => this.handleChartClick(e, this.charts.byRegion, 'REGION')
+                }
             });
         },
         getCostByTag() {
@@ -348,7 +430,11 @@ function finopsReport() {
                     labels: data.map(d => d.tagValue),
                     datasets: [{ data: data.map(d => d.cost), backgroundColor: ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c', '#facc15'] }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { position: 'right' } },
+                    onClick: (e) => this.handleChartClick(e, this.charts.byTag, this.tagKey)
+                }
             });
         },
         createBudget() {

@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
@@ -74,8 +75,17 @@
                     <!-- Right Column: Metrics & Events -->
                     <div class="lg:col-span-2 space-y-6">
                         <div class="bg-white rounded-lg p-6 shadow-sm border">
-                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Performance Metrics (Last 30 Days)</h3>
-                            <canvas id="metricsChart"></canvas>
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-gray-800">Performance Metrics</h3>
+                                <select x-model="metricTimeRange" @change="renderMetricsChart(resource.metrics)" class="form-select text-sm rounded-md">
+                                    <option value="7">Last 7 Days</option>
+                                    <option value="14">Last 14 Days</option>
+                                    <option value="30">Last 30 Days</option>
+                                </select>
+                            </div>
+                            <div class="h-64">
+                                <canvas id="metricsChart"></canvas>
+                            </div>
                         </div>
                         <div class="bg-white rounded-lg p-6 shadow-sm border">
                             <h3 class="text-lg font-semibold text-gray-800 mb-4">Recent Activity (CloudTrail)</h3>
@@ -120,17 +130,24 @@ function resourceDetail() {
         isLoading: true,
         resource: {},
         metricsChartInstance: null,
+        metricTimeRange: '30',
 
         init() {
-            const pathParts = window.location.pathname.split('/');
-            const service = pathParts[2];
-            const resourceId = pathParts[3];
-            this.loadResourceDetails(service, resourceId);
+            const urlParams = new URLSearchParams(window.location.search);
+            const service = urlParams.get('service');
+            const resourceId = urlParams.get('id');
+            if (service && resourceId) {
+                this.loadResourceDetails(service, resourceId);
+            } else {
+                this.isLoading = false;
+                this.resource = { name: 'Error', id: 'Resource not specified.' };
+            }
         },
 
         loadResourceDetails(service, resourceId) {
             this.isLoading = true;
-            fetch(`/api/cloudlist/resource/${service}/${resourceId}`)
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            fetch(`/api/cloudlist/resource/${service}/${resourceId}?accountId=${selectedAccountId}`)
                 .then(res => {
                     if (!res.ok) throw new Error('Resource not found');
                     return res.json();
@@ -157,11 +174,13 @@ function resourceDetail() {
                 this.metricsChartInstance.destroy();
             }
 
+            const days = parseInt(this.metricTimeRange);
+
             const datasets = Object.entries(metrics).map(([name, data], index) => {
                 const colors = ['rgb(79, 70, 229)', 'rgb(34, 197, 94)'];
                 return {
                     label: name,
-                    data: data.map(dp => ({ x: new Date(dp.timestamp), y: dp.average })),
+                    data: data.slice(0, days).map(dp => ({ x: new Date(dp.timestamp), y: dp.average })).reverse(),
                     borderColor: colors[index % colors.length],
                     tension: 0.1,
                     yAxisID: name.toLowerCase().includes('cpu') ? 'y' : 'y1',
@@ -173,6 +192,7 @@ function resourceDetail() {
                 data: { datasets },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     scales: {
                         x: { type: 'time', time: { unit: 'day' } },
                         y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'CPU (%)' } },

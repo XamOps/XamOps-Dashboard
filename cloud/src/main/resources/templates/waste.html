@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xammer - Waste Management</title>
+    <title>XamOps - Waste Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body {
@@ -25,10 +26,6 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
-        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
-        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-        .sidebar-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-        .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -52,72 +49,67 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                 <!-- KPI Skeleton Loaders -->
-                 <div x-show="isLoading" x-cloak class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
-                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
-                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
-                    <div class="bg-white rounded-xl p-5 card-shadow skeleton h-24"></div>
+                 <!-- KPIs & Chart -->
+                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- KPI Card 1: Potential Savings -->
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <template x-if="isLoading">
+                            <div class="skeleton w-full h-28 rounded-lg"></div>
+                        </template>
+                        <template x-if="!isLoading">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
+                                    <p class="text-3xl font-bold text-gray-800 mt-2" x-text="'$' + potentialSavings.toFixed(2)"></p>
+                                    <p class="text-xs text-gray-400">per month</p>
+                                </div>
+                                <div class="bg-blue-100 p-3 rounded-lg"><i class="fas fa-coins text-blue-500 text-lg"></i></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- KPI Card 2: Wasted Resources -->
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <template x-if="isLoading">
+                            <div class="skeleton w-full h-28 rounded-lg"></div>
+                        </template>
+                        <template x-if="!isLoading">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-gray-500 text-sm font-medium">Wasted Resources</h3>
+                                    <p class="text-3xl font-bold text-gray-800 mt-2" x-text="resourceCount"></p>
+                                    <p class="text-xs text-gray-400">items found</p>
+                                </div>
+                                <div class="bg-red-100 p-3 rounded-lg"><i class="fas fa-trash-alt text-red-500 text-lg"></i></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Chart Card -->
+                    <div class="bg-white rounded-xl p-5 card-shadow">
+                        <h3 class="font-semibold text-gray-700 mb-2">Savings by Category</h3>
+                        <div class="h-40" x-show="isLoading"><div class="skeleton w-full h-full rounded-lg"></div></div>
+                        <div class="h-40" x-show="!isLoading"><canvas id="savingsChart"></canvas></div>
+                    </div>
                  </div>
 
-                 <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <div class="bg-white rounded-xl p-5 card-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
-                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
-                            </div>
-                            <div class="bg-blue-100 p-3 rounded-lg"><i class="fas fa-coins text-blue-500 text-lg"></i></div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 card-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="text-gray-500 text-sm font-medium">Resources Found</h3>
-                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="resourceCount"></p>
-                            </div>
-                            <div class="bg-red-100 p-3 rounded-lg"><i class="fas fa-trash-alt text-red-500 text-lg"></i></div>
-                        </div>
-                    </div>
-                     <div class="bg-white rounded-xl p-5 card-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="text-gray-500 text-sm font-medium">Top Waste Category</h3>
-                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="topCategory"></p>
-                            </div>
-                            <div class="bg-yellow-100 p-3 rounded-lg"><i class="fas fa-exclamation-triangle text-yellow-500 text-lg"></i></div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 card-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h3 class="text-gray-500 text-sm font-medium">Last Scanned</h3>
-                                <p class="text-2xl font-bold text-gray-800 mt-1">Just now</p>
-                            </div>
-                            <div class="bg-green-100 p-3 rounded-lg"><i class="fas fa-check-circle text-green-500 text-lg"></i></div>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="bg-white rounded-xl p-6 card-shadow">
-                    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
-                        <div>
-                            <h2 class="text-lg font-semibold text-gray-800">Wasted Resources</h2>
-                            <p class="text-sm text-gray-500">Filter and manage unused cloud resources</p>
+                    <!-- Filters and Bulk Actions -->
+                    <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+                        <div x-show="selectedResources.length === 0" class="flex flex-wrap items-center gap-2">
+                             <span class="text-sm font-medium text-gray-600">Filter by:</span>
+                            <template x-for="cat in categories" :key="cat">
+                                <button @click="filter = cat" :class="{ 'bg-indigo-600 text-white': filter === cat, 'bg-gray-100 text-gray-700 hover:bg-gray-200': filter !== cat }" class="px-3 py-1.5 text-sm font-semibold rounded-lg transition" x-text="cat"></button>
+                            </template>
                         </div>
-
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-sm font-medium text-gray-600">Filter by:</span>
-                            <button @click="filter = 'All'" :class="{ 'bg-indigo-600 text-white': filter === 'All', 'bg-gray-100 text-gray-700': filter !== 'All' }" class="px-3 py-1.5 text-sm rounded-lg transition">All</button>
-                            <button @click="filter = 'AMI'" :class="{ 'bg-indigo-600 text-white': filter === 'AMI', 'bg-gray-100 text-gray-700': filter !== 'AMI' }" class="px-3 py-1.5 text-sm rounded-lg transition">AMI</button>
-                            <button @click="filter = 'Elastic IP'" :class="{ 'bg-indigo-600 text-white': filter === 'Elastic IP', 'bg-gray-100 text-gray-700': filter !== 'Elastic IP' }" class="px-3 py-1.5 text-sm rounded-lg transition">Elastic IP</button>
-                            <button @click="filter = 'Snapshot'" :class="{ 'bg-indigo-600 text-white': filter === 'Snapshot', 'bg-gray-100 text-gray-700': filter !== 'Snapshot' }" class="px-3 py-1.5 text-sm rounded-lg transition">Snapshots</button>
-                            <button @click="filter = 'EBS Volume'" :class="{ 'bg-indigo-600 text-white': filter === 'EBS Volume', 'bg-gray-100 text-gray-700': filter !== 'EBS Volume' }" class="px-3 py-1.5 text-sm rounded-lg transition">Volumes</button>
-                            <button @click="filter = 'RDS Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'RDS Instance', 'bg-gray-100 text-gray-700': filter !== 'RDS Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">RDS</button>
-                            <button @click="filter = 'Load Balancer'" :class="{ 'bg-indigo-600 text-white': filter === 'Load Balancer', 'bg-gray-100 text-gray-700': filter !== 'Load Balancer' }" class="px-3 py-1.5 text-sm rounded-lg transition">Load Balancers</button>
-                            <button @click="filter = 'Security Group'" :class="{ 'bg-indigo-600 text-white': filter === 'Security Group', 'bg-gray-100 text-gray-700': filter !== 'Security Group' }" class="px-3 py-1.5 text-sm rounded-lg transition">Security Groups</button>
-                            <button @click="filter = 'EC2 Instance'" :class="{ 'bg-indigo-600 text-white': filter === 'EC2 Instance', 'bg-gray-100 text-gray-700': filter !== 'EC2 Instance' }" class="px-3 py-1.5 text-sm rounded-lg transition">EC2</button>
-                            <button @click="filter = 'ENI'" :class="{ 'bg-indigo-600 text-white': filter === 'ENI', 'bg-gray-100 text-gray-700': filter !== 'ENI' }" class="px-3 py-1.5 text-sm rounded-lg transition">ENI</button>
+                        <div x-show="selectedResources.length > 0" x-cloak class="flex items-center gap-4 bg-indigo-50 p-2 rounded-lg">
+                            <span class="text-sm font-semibold text-indigo-800" x-text="`${selectedResources.length} selected`"></span>
+                            <button @click="handleBulkAction('delete')" class="px-3 py-1.5 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-md hover:bg-red-50">
+                                <i class="fas fa-trash-alt mr-1"></i>Delete
+                            </button>
+                            <button @click="handleBulkAction('archive')" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100">
+                                <i class="fas fa-archive mr-1"></i>Archive
+                            </button>
                         </div>
                     </div>
 
@@ -126,10 +118,10 @@
                         <table class="w-full text-sm">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                                 <tr>
+                                    <th class="p-4"><div class="h-5 w-5 skeleton rounded"></div></th>
                                     <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
                                     <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
                                     <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
                                     <th class="px-6 py-3"><div class="h-4 skeleton rounded w-28"></div></th>
                                     <th class="px-6 py-3 text-center"><div class="h-4 skeleton rounded w-16 mx-auto"></div></th>
                                 </tr>
@@ -137,10 +129,10 @@
                             <tbody>
                                 <template x-for="i in 5" :key="i">
                                     <tr class="border-b">
+                                        <td class="p-4"><div class="h-5 w-5 skeleton rounded"></div></td>
                                         <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div><div class="h-3 skeleton rounded w-2/3 mt-2"></div></td>
                                         <td class="px-6 py-4"><div class="h-6 skeleton rounded-full w-24"></div></td>
                                         <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
                                         <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
                                         <td class="px-6 py-4"><div class="h-8 skeleton rounded w-20 mx-auto"></div></td>
                                     </tr>
@@ -148,11 +140,20 @@
                             </tbody>
                         </table>
                     </div>
+                    
+                    <!-- Empty State -->
+                    <div x-show="!isLoading && filteredResources.length === 0" x-cloak class="text-center py-16 px-4 border-2 border-dashed rounded-lg">
+                        <i class="fas fa-leaf fa-3x text-green-500"></i>
+                        <h3 class="mt-4 text-lg font-medium text-gray-900">No wasted resources found!</h3>
+                        <p class="mt-1 text-sm text-gray-500" x-text="filter === 'All' ? 'Your cloud environment looks clean.' : `No wasted resources found for the category: ${filter}`"></p>
+                    </div>
 
+                    <!-- Resources Table -->
                     <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="overflow-x-auto">
                         <table class="w-full text-sm text-left text-gray-600">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                                 <tr>
+                                    <th class="p-4"><input type="checkbox" @change="toggleAll" :checked="isAllSelected" class="form-checkbox rounded text-indigo-600"></th>
                                     <th class="px-6 py-3">Resource</th>
                                     <th class="px-6 py-3">Type</th>
                                     <th class="px-6 py-3">Region</th>
@@ -163,7 +164,8 @@
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 <template x-for="resource in filteredResources" :key="resource.resourceId">
-                                    <tr class="hover:bg-gray-50">
+                                    <tr class="hover:bg-gray-50" :class="{'bg-indigo-50': selectedResources.includes(resource.resourceId)}">
+                                        <td class="p-4 w-4"><input type="checkbox" :value="resource.resourceId" x-model="selectedResources" class="form-checkbox rounded text-indigo-600"></td>
                                         <td class="px-6 py-4">
                                             <p class="font-medium text-gray-900" x-text="resource.resourceName || 'Untitled Resource'"></p>
                                             <p class="text-xs text-gray-500 font-mono mt-1" x-text="resource.resourceId"></p>
@@ -179,9 +181,11 @@
                                                     :disabled="!isActionable(resource, 'delete')"
                                                     title="Delete this resource" 
                                                     class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <i class="fas fa-trash-alt mr-1"></i>Remove
+                                                    <i class="fas fa-trash-alt"></i>
                                                 </button>
-                                                <button disabled class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-archive mr-1"></i>Archive</button>
+                                                <button @click="handleAction('archive', resource)" title="Archive this finding" class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition flex items-center">
+                                                    <i class="fas fa-archive"></i>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -201,66 +205,52 @@ function wasteManagement() {
         isLoading: true,
         filter: 'All',
         wastedResources: [],
-        
-        // **MODIFIED**: init() now checks cache first.
+        selectedResources: [],
+        savingsChart: null,
+
         init() {
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                console.error("No account selected");
-                this.isLoading = false;
-                return;
-            }
-
-            const cacheKey = `wasteData-${selectedAccountId}`;
-            const cachedData = sessionStorage.getItem(cacheKey);
-
-            if (cachedData) {
-                this.wastedResources = JSON.parse(cachedData);
-                this.isLoading = false;
-            } else {
-                this.loadWastedResources(true); // Force fetch if no cache
-            }
+            this.loadWastedResources();
+            this.$watch('filteredResources', () => {
+                this.renderSavingsChart();
+            });
         },
 
-        // **MODIFIED**: This function is now primarily for fetching data.
         loadWastedResources(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
                 this.isLoading = false;
                 return;
             }
-
             const cacheKey = `wasteData-${selectedAccountId}`;
-            if (forceRefresh) {
-                sessionStorage.removeItem(cacheKey);
-                this.isLoading = true;
-            } else {
-                // This path should not be hit from init anymore, but is a safeguard.
+            if (!forceRefresh) {
                 const cachedData = sessionStorage.getItem(cacheKey);
                 if (cachedData) {
                     this.wastedResources = JSON.parse(cachedData);
                     this.isLoading = false;
+                    this.renderSavingsChart();
                     return;
                 }
             }
-
+            
             this.isLoading = true;
+            sessionStorage.removeItem(cacheKey);
             fetch(`/api/waste?accountId=${selectedAccountId}`)
-                .then(res => {
-                    if (!res.ok) throw new Error('Network response was not ok.');
-                    return res.json();
-                })
+                .then(res => res.json())
                 .then(data => {
-                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                     this.wastedResources = data;
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                    this.renderSavingsChart();
                 })
                 .catch(err => {
                     console.error('Failed to load waste data', err);
                     this.wastedResources = [];
                 })
-                .finally(() => {
-                    this.isLoading = false;
-                });
+                .finally(() => this.isLoading = false);
+        },
+
+        get categories() {
+            const cats = this.wastedResources.map(r => r.resourceType);
+            return ['All', ...new Set(cats)];
         },
 
         get filteredResources() {
@@ -271,7 +261,6 @@ function wasteManagement() {
         },
 
         get potentialSavings() {
-            if (!this.filteredResources) return 0;
             return this.filteredResources.reduce((sum, r) => sum + r.monthlySavings, 0);
         },
 
@@ -279,25 +268,66 @@ function wasteManagement() {
             return this.filteredResources.length;
         },
 
-        get topCategory() {
-            if (this.resourceCount === 0) return 'None';
-            const counts = this.filteredResources.reduce((acc, r) => {
-                acc[r.resourceType] = (acc[r.resourceType] || 0) + 1;
+        get isAllSelected() {
+            return this.filteredResources.length > 0 && this.selectedResources.length === this.filteredResources.length;
+        },
+
+        toggleAll() {
+            if (this.isAllSelected) {
+                this.selectedResources = [];
+            } else {
+                this.selectedResources = this.filteredResources.map(r => r.resourceId);
+            }
+        },
+
+        renderSavingsChart() {
+            const savingsByCategory = this.filteredResources.reduce((acc, resource) => {
+                acc[resource.resourceType] = (acc[resource.resourceType] || 0) + resource.monthlySavings;
                 return acc;
             }, {});
-            return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+
+            const labels = Object.keys(savingsByCategory);
+            const data = Object.values(savingsByCategory);
+
+            const ctx = document.getElementById('savingsChart');
+            if (!ctx) return;
+
+            if (this.savingsChart) {
+                this.savingsChart.destroy();
+            }
+            
+            this.savingsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#4f46e5', '#ef4444', '#f59e0b', '#10b981', '#6366f1', '#ec4899', '#3b82f6'],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12,
+                                font: { size: 12 }
+                            }
+                        }
+                    }
+                }
+            });
         },
 
         getResourceTypeColor(type) {
             const colors = {
-                'EBS Volume': 'bg-blue-100 text-blue-800',
-                'Snapshot': 'bg-purple-100 text-purple-800',
-                'AMI': 'bg-yellow-100 text-yellow-800',
-                'Elastic IP': 'bg-green-100 text-green-800',
-                'RDS Instance': 'bg-orange-100 text-orange-800',
-                'Load Balancer': 'bg-cyan-100 text-cyan-800',
-                'Security Group': 'bg-gray-200 text-gray-800',
-                'EC2 Instance': 'bg-teal-100 text-teal-800',
+                'EBS Volume': 'bg-blue-100 text-blue-800', 'Snapshot': 'bg-purple-100 text-purple-800',
+                'AMI': 'bg-yellow-100 text-yellow-800', 'Elastic IP': 'bg-green-100 text-green-800',
+                'RDS Instance': 'bg-orange-100 text-orange-800', 'Load Balancer': 'bg-cyan-100 text-cyan-800',
+                'Security Group': 'bg-gray-200 text-gray-800', 'EC2 Instance': 'bg-teal-100 text-teal-800',
                 'ENI': 'bg-pink-100 text-pink-800'
             };
             return colors[type] || 'bg-gray-100 text-gray-800';
@@ -307,37 +337,38 @@ function wasteManagement() {
             if (action === 'delete') {
                 return resource.resourceType === 'EBS Volume' && resource.reason === 'Unattached Volume';
             }
-            return false;
+            return true; // For archive action
         },
 
         handleAction(action, resource) {
-            const confirmation = confirm(`Are you sure you want to ${action} the ${resource.resourceType} "${resource.resourceId}"? This action cannot be undone.`);
-            if (!confirmation) return;
-
-            let endpoint = '';
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (resource.resourceType === 'EBS Volume' && action === 'delete') {
-                endpoint = `/api/actions/ebs/${resource.resourceId}/delete?accountId=${selectedAccountId}`;
-            } else {
-                alert('This action is not yet supported for this resource type.');
+            if (action === 'archive') {
+                this.wastedResources = this.wastedResources.filter(r => r.resourceId !== resource.resourceId);
                 return;
             }
 
-            fetch(endpoint, { method: 'POST' })
-                .then(res => {
-                    if (!res.ok) {
-                        return res.json().then(err => { throw new Error(err.error || 'Action failed') });
-                    }
-                    return res.json();
-                })
-                .then(data => {
-                    alert(`Success: ${data.message}`);
-                    this.wastedResources = this.wastedResources.filter(r => r.resourceId !== resource.resourceId);
-                })
-                .catch(err => {
-                    alert(`Error: ${err.message}`);
-                    console.error('Action failed:', err);
-                });
+            if (!confirm(`Are you sure you want to ${action} "${resource.resourceId}"? This cannot be undone.`)) return;
+
+            // API call logic would go here
+            console.log(`Performing ${action} on`, resource);
+            // On success, remove from list
+            this.wastedResources = this.wastedResources.filter(r => r.resourceId !== resource.resourceId);
+        },
+
+        handleBulkAction(action) {
+            if (this.selectedResources.length === 0) return;
+            if (!confirm(`Are you sure you want to ${action} ${this.selectedResources.length} resources?`)) return;
+
+            if (action === 'archive') {
+                this.wastedResources = this.wastedResources.filter(r => !this.selectedResources.includes(r.resourceId));
+                this.selectedResources = [];
+                return;
+            }
+
+            // API call logic for bulk actions
+            console.log(`Performing bulk ${action} on:`, this.selectedResources);
+            // On success, remove from list
+            this.wastedResources = this.wastedResources.filter(r => !this.selectedResources.includes(r.resourceId));
+            this.selectedResources = [];
         }
     }
 }

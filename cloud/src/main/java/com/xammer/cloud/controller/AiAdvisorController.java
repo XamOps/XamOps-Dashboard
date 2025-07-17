@@ -1,5 +1,6 @@
 package com.xammer.cloud.controller;
 
+import com.xammer.cloud.dto.AiAdvisorSummaryDto;
 import com.xammer.cloud.service.AiAdvisorService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,10 +22,10 @@ public class AiAdvisorController {
     }
 
     @GetMapping("/summary")
-    public ResponseEntity<Map<String, String>> getDashboardSummary(@RequestParam String accountId) {
+    public ResponseEntity<?> getDashboardSummary(@RequestParam String accountId) {
         try {
-            String summary = aiAdvisorService.getDashboardSummary(accountId).get();
-            return ResponseEntity.ok(Map.of("summary", summary));
+            AiAdvisorSummaryDto summary = aiAdvisorService.getDashboardSummary(accountId).get();
+            return ResponseEntity.ok(summary);
         } catch (InterruptedException | ExecutionException e) {
             Thread.currentThread().interrupt();
             return ResponseEntity.status(500).body(Map.of("error", "Failed to generate AI summary."));

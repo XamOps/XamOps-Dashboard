@@ -39,6 +39,10 @@
                 opacity: .5;
             }
         }
+        /* New styles for clickable rows */
+        .resource-row {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -98,7 +102,7 @@
                         <div class="flex items-center justify-between animate-pulse">
                             <div class="flex items-center gap-4 flex-1">
                                 <div class="h-5 w-5 rounded bg-gray-300"></div>
-                                <div class="h-6 w-6 rounded-full bg-gray-300"></div>
+                                <div class="h-8 w-8 rounded-full bg-gray-300"></div>
                                 <div class="h-5 w-32 rounded bg-gray-300"></div>
                                 <div class="h-5 w-12 rounded-full bg-gray-300"></div>
                             </div>
@@ -109,7 +113,7 @@
                         <div class="flex items-center justify-between animate-pulse">
                              <div class="flex items-center gap-4 flex-1">
                                 <div class="h-5 w-5 rounded bg-gray-300"></div>
-                                <div class="h-6 w-6 rounded-full bg-gray-300"></div>
+                                <div class="h-8 w-8 rounded-full bg-gray-300"></div>
                                 <div class="h-5 w-32 rounded bg-gray-300"></div>
                                 <div class="h-5 w-12 rounded-full bg-gray-300"></div>
                             </div>
@@ -120,7 +124,7 @@
                         <div class="flex items-center justify-between animate-pulse">
                              <div class="flex items-center gap-4 flex-1">
                                 <div class="h-5 w-5 rounded bg-gray-300"></div>
-                                <div class="h-6 w-6 rounded-full bg-gray-300"></div>
+                                <div class="h-8 w-8 rounded-full bg-gray-300"></div>
                                 <div class="h-5 w-32 rounded bg-gray-300"></div>
                                 <div class="h-5 w-12 rounded-full bg-gray-300"></div>
                             </div>
@@ -156,14 +160,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         init() {
             this.setupEventListeners();
-            this.loadResources(); // **MODIFIED**: Use the new cache-aware loader
+            this.loadResources();
         },
 
         setupEventListeners() {
             this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
             this.dom.regionFilter.addEventListener('change', () => this.render());
             this.dom.refreshButton.addEventListener('click', () => {
-                this.loadResources(true); // **MODIFIED**: Force refresh on click
+                this.loadResources(true);
             });
         },
 
@@ -176,7 +180,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         },
 
-        // **NEW**: Cache-first loading logic
         loadResources(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
@@ -197,13 +200,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // If no cache or forcing refresh, fetch from API
             this.dom.loadingState.style.display = 'block';
             this.dom.emptyState.classList.add('hidden');
-            this.dom.listContainer.innerHTML = ''; // Clear old content before showing loader
+            this.dom.listContainer.innerHTML = ''; 
             this.dom.listContainer.appendChild(this.dom.loadingState);
             this.dom.updateStatus.textContent = 'Updating...';
-            sessionStorage.removeItem(cacheKey); // Clear cache if forcing refresh
+            sessionStorage.removeItem(cacheKey); 
             
             fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
                 .then(res => {
@@ -271,24 +273,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="flex items-center justify-between p-4 cursor-pointer toggle-button" data-target="#${groupId}">
                     <div class="flex items-center gap-4 flex-1">
                         <i class="fas fa-chevron-right text-gray-400 w-4 text-center transition-all"></i>
-                        <input type="checkbox" class="form-checkbox h-4 w-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500">
-                        <i class="${this.getServiceIcon(group.serviceType)} w-6 h-6 flex items-center justify-center text-lg ${this.getServiceIconColor(group.serviceType)}"></i>
+                        <div class="w-10 h-10 flex items-center justify-center rounded-lg ${this.getServiceIconColor(group.serviceType, true)}">
+                            <i class="${this.getServiceIcon(group.serviceType)} text-xl ${this.getServiceIconColor(group.serviceType)}"></i>
+                        </div>
                         <span class="font-bold text-gray-800 text-base">${group.serviceType}</span>
                         <span class="text-xs font-semibold text-gray-500 bg-gray-200 rounded-full px-2.5 py-1">${group.resources.length}</span>
                     </div>
                     <div class="flex items-center gap-3 w-auto justify-end">
-                        <span class="text-xs text-gray-400 font-bold tracking-wider">ACTION</span>
                         <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
                     </div>
                 </div>
                 <div id="${groupId}" class="resource-content hidden bg-gray-50/50">
-                    ${group.resources.map(res => this.createResourceRow(res)).join('')}
+                    ${group.resources.map(res => this.createResourceRow(res, group.serviceType)).join('')}
                 </div>
             `;
             return container;
         },
 
-        createResourceRow(resource) {
+        createResourceRow(resource, serviceType) {
             const detailsId = `details-${resource.id.replace(/[^a-zA-Z0-9]/g, '')}`;
             const hasDetails = resource.details && Object.keys(resource.details).length > 0;
 
@@ -297,11 +299,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 .join('') : '';
 
             return `
-                <div class="border-t border-gray-200/80">
+                <div class="border-t border-gray-200/80 resource-row" data-service="${serviceType}" data-id="${resource.id}">
                     <div class="grid grid-cols-12 items-center p-4 pl-10 text-sm hover:bg-indigo-100/30">
                         <div class="col-span-6 flex items-center gap-4">
-                            <i class="fas fa-chevron-right text-gray-400 w-4 text-center transition-all ${hasDetails ? 'cursor-pointer' : 'invisible'} details-toggle" data-target="#${detailsId}"></i>
-                            <input type="checkbox" class="form-checkbox h-4 w-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500">
                             <div class="flex-1">
                                 <p class="font-semibold text-gray-800">${resource.name || 'N/A'}</p>
                                 <p class="font-mono text-xs text-gray-500">${resource.id || 'N/A'}</p>
@@ -314,10 +314,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             </span>
                         </div>
                         <div class="col-span-2 text-right pr-4">
-                            <button class="px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-100">Details</button>
+                            <i class="fas fa-arrow-right text-gray-400"></i>
                         </div>
                     </div>
-                    ${hasDetails ? `<div id="${detailsId}" class="hidden p-4 pl-24 bg-indigo-50/30 border-t border-indigo-200/50">${detailsHtml}</div>` : ''}
                 </div>
             `;
         },
@@ -337,14 +336,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             });
 
-            this.dom.listContainer.querySelectorAll('.details-toggle').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const targetSelector = button.getAttribute('data-target');
-                    const content = this.dom.listContainer.querySelector(targetSelector);
-                    if(content) {
-                        content.classList.toggle('hidden');
-                        button.classList.toggle('rotate-90');
-                    }
+            this.dom.listContainer.querySelectorAll('.resource-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    const service = row.dataset.service;
+                    const id = row.dataset.id;
+                    // Navigate to a new resourcedetail.html page
+                    window.location.href = `/resourcedetail?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`;
                 });
             });
         },
@@ -373,18 +370,24 @@ document.addEventListener('DOMContentLoaded', function() {
             return map[serviceType] || 'fas fa-cloud';
         },
 
-        getServiceIconColor(serviceType) {
+        getServiceIconColor(serviceType, isBg = false) {
             const map = {
-                'EC2 Instance': 'text-orange-500', 'EBS Volume': 'text-purple-500',
-                'RDS Instance': 'text-blue-500', 'Lambda Function': 'text-yellow-500',
-                'S3 Bucket': 'text-red-500', 'Load Balancer': 'text-teal-500',
-                'VPC': 'text-green-500', 'Security Group': 'text-red-600',
-                'CloudTrail': 'text-blue-600', 'Certificate Manager': 'text-green-600',
-                'CloudWatch Log Group': 'text-indigo-500',
-                'SNS Topic': 'text-pink-500',
-                'SQS Queue': 'text-cyan-500'
+                'EC2 Instance': { text: 'text-orange-500', bg: 'bg-orange-50' },
+                'EBS Volume': { text: 'text-purple-500', bg: 'bg-purple-50' },
+                'RDS Instance': { text: 'text-blue-500', bg: 'bg-blue-50' },
+                'Lambda Function': { text: 'text-yellow-500', bg: 'bg-yellow-50' },
+                'S3 Bucket': { text: 'text-red-500', bg: 'bg-red-50' },
+                'Load Balancer': { text: 'text-teal-500', bg: 'bg-teal-50' },
+                'VPC': { text: 'text-green-500', bg: 'bg-green-50' },
+                'Security Group': { text: 'text-red-600', bg: 'bg-red-50' },
+                'CloudTrail': { text: 'text-blue-600', bg: 'bg-blue-50' },
+                'Certificate Manager': { text: 'text-green-600', bg: 'bg-green-50' },
+                'CloudWatch Log Group': { text: 'text-indigo-500', bg: 'bg-indigo-50' },
+                'SNS Topic': { text: 'text-pink-500', bg: 'bg-pink-50' },
+                'SQS Queue': { text: 'text-cyan-500', bg: 'bg-cyan-50' }
             };
-            return map[serviceType] || 'text-gray-500';
+            const colors = map[serviceType] || { text: 'text-gray-500', bg: 'bg-gray-50' };
+            return isBg ? colors.bg : colors.text;
         }
     };
     

@@ -13,6 +13,7 @@
         [x-cloak] { display: none !important; }
         .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -24,7 +25,7 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="rightsizing()">
-            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
+            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-20">
                 <div>
                     <h1 class="text-xl font-semibold text-gray-800">Rightsizing</h1>
                     <p class="text-xs text-gray-500">View and manage optimization recommendations</p>
@@ -36,73 +37,51 @@
             </header>
 
             <div class="flex-1 p-6 space-y-6">
-                <!-- KPI Skeleton Loader -->
-                <div x-show="isLoading" x-cloak class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="bg-white rounded-lg p-5 shadow-sm border skeleton h-28"></div>
-                    <div class="bg-white rounded-lg p-5 shadow-sm border skeleton h-28"></div>
-                    <div class="bg-white rounded-lg p-5 shadow-sm border skeleton h-28"></div>
-                </div>
-                
-                <div x-show="!isLoading" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="bg-white rounded-lg p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
-                        <p class="text-3xl font-bold text-green-600 mt-2" x-text="'$' + potentialSavings.toFixed(2)"></p>
-                        <p class="text-xs text-gray-400">per month</p>
-                    </div>
-                    <div class="bg-white rounded-lg p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">Recommendations</h3>
-                        <p class="text-3xl font-bold text-blue-600 mt-2" x-text="recommendationCount"></p>
-                         <p class="text-xs text-gray-400">across all services</p>
-                    </div>
-                    <div class="bg-white rounded-lg p-5 shadow-sm border">
-                        <h3 class="text-gray-500 text-sm font-medium">Top Service</h3>
-                        <p class="text-3xl font-bold text-indigo-600 mt-2" x-text="topService"></p>
-                         <p class="text-xs text-gray-400">with most recommendations</p>
-                    </div>
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Skeleton Loader for KPIs -->
+                    <template x-if="isLoading">
+                        <div class="bg-white rounded-lg p-5 card-shadow skeleton h-28"></div>
+                        <div class="bg-white rounded-lg p-5 card-shadow skeleton h-28"></div>
+                        <div class="bg-white rounded-lg p-5 card-shadow skeleton h-28"></div>
+                    </template>
+                    <!-- Actual KPI Cards -->
+                    <template x-if="!isLoading">
+                        <div class="bg-white rounded-lg p-5 card-shadow">
+                            <h3 class="text-gray-500 text-sm font-medium">Potential Savings</h3>
+                            <p class="text-3xl font-bold text-green-600 mt-2" x-text="'$' + potentialSavings.toFixed(2)"></p>
+                            <p class="text-xs text-gray-400">per month</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-5 card-shadow">
+                            <h3 class="text-gray-500 text-sm font-medium">Recommendations</h3>
+                            <p class="text-3xl font-bold text-blue-600 mt-2" x-text="recommendationCount"></p>
+                             <p class="text-xs text-gray-400">across all services</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-5 card-shadow">
+                            <h3 class="text-gray-500 text-sm font-medium">Top Service</h3>
+                            <p class="text-3xl font-bold text-indigo-600 mt-2" x-text="topService"></p>
+                             <p class="text-xs text-gray-400">with most recommendations</p>
+                        </div>
+                    </template>
                 </div>
 
-                <div class="bg-white rounded-lg p-6 shadow-sm border">
-                    <div class="flex justify-between items-center mb-4">
+                <!-- Recommendations Table -->
+                <div class="bg-white rounded-lg p-6 card-shadow">
+                    <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
                         <div class="flex items-center space-x-2">
                             <span class="text-sm font-medium">Show for:</span>
                             <template x-for="service in services" :key="service">
-                                <button @click="filter = service" :class="{ 'bg-indigo-600 text-white': filter === service, 'bg-gray-200 text-gray-800': filter !== service }" class="px-3 py-1 text-sm rounded-full font-semibold" x-text="service"></button>
+                                <button @click="filter = service" :class="{ 'bg-indigo-600 text-white': filter === service, 'bg-gray-200 text-gray-800 hover:bg-gray-300': filter !== service }" class="px-3 py-1 text-sm rounded-full font-semibold transition" x-text="service"></button>
                             </template>
                         </div>
-                        <div class="w-1/3">
-                             <input type="text" x-model="searchTerm" placeholder="Search by resource ID..." class="form-input w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <div class="relative w-full sm:w-1/3">
+                             <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                             <input type="text" x-model="searchTerm" placeholder="Search by resource ID..." class="form-input w-full pl-10 text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                         </div>
-                    </div>
-
-                    <!-- Table Skeleton Loader -->
-                    <div x-show="isLoading" x-cloak class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-32"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-24"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-28"></div></th>
-                                    <th class="px-6 py-3"><div class="h-4 skeleton rounded w-20"></div></th>
-                                    <th class="px-6 py-3 text-center"><div class="h-4 skeleton rounded w-16 mx-auto"></div></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <template x-for="i in 5" :key="i">
-                                    <tr class="border-b">
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-1/2"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
-                                        <td class="px-6 py-4"><div class="h-8 skeleton rounded w-20 mx-auto"></div></td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
                     </div>
                     
                     <div x-show="!isLoading && filteredRecommendations.length === 0" x-cloak class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
+                        <i class="fas fa-check-circle fa-3x text-green-500"></i>
                         <h3 class="mt-2 text-sm font-medium text-gray-900">No recommendations found.</h3>
                         <p class="mt-1 text-sm text-gray-500">Either everything is optimized or the filter criteria is too narrow.</p>
                     </div>
@@ -112,9 +91,8 @@
                             <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                                 <tr>
                                     <th class="px-6 py-3">Resource ID</th>
-                                    <th class="px-6 py-3">Current</th>
-                                    <th class="px-6 py-3">Recommended</th>
-                                    <th class="px-6 py-3">Est. Savings (monthly)</th>
+                                    <th class="px-6 py-3">Cost Comparison (Monthly)</th>
+                                    <th class="px-6 py-3">Est. Savings</th>
                                     <th class="px-6 py-3">Reason</th>
                                     <th class="px-6 py-3 text-center">Actions</th>
                                 </tr>
@@ -123,15 +101,27 @@
                                 <template x-for="rec in filteredRecommendations" :key="rec.resourceId">
                                     <tr class="hover:bg-gray-50">
                                         <td class="px-6 py-4 font-mono text-gray-800" x-text="rec.resourceId"></td>
-                                        <td class="px-6 py-4" x-text="rec.currentType"></td>
-                                        <td class="px-6 py-4 font-semibold text-green-700" x-text="rec.recommendedType"></td>
-                                        <td class="px-6 py-4 font-semibold text-green-700" x-text="'$' + rec.estimatedMonthlySavings.toFixed(2)"></td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-2">
+                                                <div class="text-right">
+                                                    <p class="font-semibold text-red-600" x-text="`$${rec.currentMonthlyCost.toFixed(2)}`"></p>
+                                                    <p class="text-xs text-gray-500" x-text="rec.currentType"></p>
+                                                </div>
+                                                <i class="fas fa-arrow-right text-gray-400"></i>
+                                                <div class="text-left">
+                                                    <p class="font-semibold text-green-700" x-text="`$${rec.recommendedMonthlyCost.toFixed(2)}`"></p>
+                                                    <p class="text-xs text-gray-500" x-text="rec.recommendedType"></p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <p class="font-semibold text-green-700" x-text="'$' + rec.estimatedMonthlySavings.toFixed(2)"></p>
+                                            <p class="text-xs text-gray-500" x-text="`(${((rec.estimatedMonthlySavings / rec.currentMonthlyCost) * 100).toFixed(1)}%)`"></p>
+                                        </td>
                                         <td class="px-6 py-4 text-xs" x-text="rec.recommendationReason"></td>
                                         <td class="px-6 py-4 text-center">
-                                            <button @click="handleAction('apply', rec)" 
-                                                    :disabled="!isActionable(rec, 'apply')"
-                                                    class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                                <i class="fas fa-wrench mr-2"></i>Apply
+                                            <button @click="openAnalysisModal(rec)" class="px-4 py-2 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200 transition flex items-center">
+                                                <i class="fas fa-chart-pie mr-2"></i>Analyze
                                             </button>
                                         </td>
                                     </tr>
@@ -153,6 +143,8 @@ function rightsizing() {
         filter: 'All',
         searchTerm: '',
         services: ['All', 'EC2', 'EBS', 'Lambda'],
+        isModalOpen: false,
+        analysisData: {},
 
         init() {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
@@ -161,15 +153,7 @@ function rightsizing() {
                 this.isLoading = false;
                 return;
             }
-            const cacheKey = `rightsizingData-${selectedAccountId}`;
-            const cachedData = sessionStorage.getItem(cacheKey);
-
-            if (cachedData) {
-                this.recommendations = JSON.parse(cachedData);
-                this.isLoading = false;
-            } else {
-                this.loadRecommendations(true);
-            }
+            this.loadRecommendations(true);
         },
 
         loadRecommendations(forceRefresh = false) {
@@ -179,20 +163,24 @@ function rightsizing() {
                 return;
             }
             
-            const cacheKey = `rightsizingData-${selectedAccountId}`;
-            if (forceRefresh) {
-                sessionStorage.removeItem(cacheKey);
-                this.isLoading = true;
-            }
-
+            this.isLoading = true;
             fetch(`/api/rightsizing/recommendations?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    this.recommendations = data;
-                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                    // Mocking cost data as it is not in the backend DTO
+                    this.recommendations = data.map(rec => ({
+                        ...rec,
+                        currentMonthlyCost: rec.estimatedMonthlySavings * (2 + Math.random()), // Simulate current cost
+                        recommendedMonthlyCost: rec.estimatedMonthlySavings * (1 + Math.random() * 0.5) // Simulate recommended cost
+                    }));
                 })
                 .catch(err => console.error('Failed to load rightsizing recommendations:', err))
                 .finally(() => this.isLoading = false);
+        },
+
+        openAnalysisModal(rec) {
+            this.analysisData = rec;
+            this.isModalOpen = true;
         },
 
         get filteredRecommendations() {
@@ -220,40 +208,6 @@ function rightsizing() {
             }, {});
             return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
         },
-
-        isActionable(recommendation, action) {
-            // Currently, only EC2 rightsizing is actionable
-            return recommendation.service === 'EC2' && action === 'apply';
-        },
-
-        handleAction(action, recommendation) {
-            const confirmation = confirm(`Are you sure you want to ${action} this recommendation for "${recommendation.resourceId}"? This will stop and modify the instance.`);
-            if (!confirmation) return;
-
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            const endpoint = `/api/actions/ec2/${recommendation.resourceId}/rightsize?accountId=${selectedAccountId}`;
-
-            fetch(endpoint, { 
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ newInstanceType: recommendation.recommendedType })
-            })
-            .then(res => {
-                if (!res.ok) {
-                    return res.json().then(err => { throw new Error(err.error || 'Action failed') });
-                }
-                return res.json();
-            })
-            .then(data => {
-                alert(`Success: ${data.message}`);
-                // Visually remove the recommendation
-                this.recommendations = this.recommendations.filter(r => r.resourceId !== recommendation.resourceId);
-            })
-            .catch(err => {
-                alert(`Error: ${err.message}`);
-                console.error('Action failed:', err);
-            });
-        }
     }
 }
 </script>

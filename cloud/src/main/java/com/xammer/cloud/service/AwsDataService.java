@@ -1,6 +1,7 @@
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.CloudAccount;
+import com.xammer.cloud.dto.AiAdvisorSummaryDto;
 import com.xammer.cloud.dto.CostByTagDto;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.DashboardData.BudgetDetails;
@@ -15,6 +16,7 @@ import com.xammer.cloud.dto.ReservationDto;
 import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.dto.ReservationModificationRecommendationDto;
 import com.xammer.cloud.dto.ReservationModificationRequestDto;
+import com.xammer.cloud.dto.ResourceDetailDto;
 import com.xammer.cloud.dto.ResourceDto;
 import com.xammer.cloud.dto.VerifyAccountRequest;
 import com.xammer.cloud.dto.k8s.K8sClusterInfo;
@@ -50,6 +52,9 @@ import software.amazon.awssdk.services.budgets.model.DescribeBudgetsRequest;
 import software.amazon.awssdk.services.budgets.model.Spend;
 import software.amazon.awssdk.services.budgets.model.TimePeriod;
 import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
+import software.amazon.awssdk.services.cloudtrail.model.Event;
+import software.amazon.awssdk.services.cloudtrail.model.LookupAttribute;
+import software.amazon.awssdk.services.cloudtrail.model.LookupEventsRequest;
 import software.amazon.awssdk.services.cloudtrail.model.Trail;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatch.model.Dimension;
@@ -95,6 +100,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.DescribeImagesRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
 import software.amazon.awssdk.services.ec2.model.DescribeInternetGatewaysRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeNatGatewaysRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeNetworkInterfacesRequest;
@@ -103,6 +109,7 @@ import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesReques
 import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesResponse;
 import software.amazon.awssdk.services.ec2.model.DescribeSecurityGroupsRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeSubnetsRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeVolumesResponse;
 import software.amazon.awssdk.services.ec2.model.FlowLog;
 import software.amazon.awssdk.services.ec2.model.ImageState;
 import software.amazon.awssdk.services.ec2.model.Instance;
@@ -133,6 +140,7 @@ import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.Bucket;
 import software.amazon.awssdk.services.s3.model.GetPublicAccessBlockRequest;
+import software.amazon.awssdk.services.s3.model.HeadBucketResponse;
 import software.amazon.awssdk.services.s3.model.Permission;
 import software.amazon.awssdk.services.s3.model.PublicAccessBlockConfiguration;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -177,6 +185,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+
 
 @Service
 public class AwsDataService {
@@ -242,14 +251,11 @@ public class AwsDataService {
         logger.info("--- LAUNCHING OPTIMIZED ASYNC DATA FETCH FROM AWS for account {} ---", accountId);
         CloudAccount account = getAccount(accountId);
 
-        // **MODIFIED**: Fetch active regions ONCE.
         CompletableFuture<List<DashboardData.RegionStatus>> regionStatusFuture = getRegionStatusForAccount(account);
 
-        // **MODIFIED**: Use thenCompose to chain subsequent calls, passing the active regions list.
         return regionStatusFuture.thenCompose(activeRegions -> {
             logger.info("Active regions fetched for account {}, proceeding with dependent data calls.", accountId);
 
-            // All these futures will now receive the pre-fetched list of active regions.
             CompletableFuture<DashboardData.ResourceInventory> inventoryFuture = getResourceInventory(account, activeRegions);
             CompletableFuture<DashboardData.CloudWatchStatus> cwStatusFuture = getCloudWatchStatus(account, activeRegions);
             CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = getEc2InstanceRecommendations(account, activeRegions);
@@ -260,7 +266,6 @@ public class AwsDataService {
             CompletableFuture<List<DashboardData.ServiceQuotaInfo>> serviceQuotasFuture = getServiceQuotaInfo(account, activeRegions);
             CompletableFuture<List<ReservationInventoryDto>> reservationInventoryFuture = getReservationInventory(account, activeRegions);
 
-            // These futures do not depend on the region list and can run in parallel.
             CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
             CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = getBillingSummary(account);
             CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account);
@@ -269,7 +274,6 @@ public class AwsDataService {
             CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = getReservationAnalysis(account);
             CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = getReservationPurchaseRecommendations(account);
 
-            // Combine all futures
             return CompletableFuture.allOf(
                 inventoryFuture, cwStatusFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture,
                 wastedResourcesFuture, securityFindingsFuture, costHistoryFuture, billingFuture,
@@ -278,12 +282,14 @@ public class AwsDataService {
             ).thenApply(v -> {
                 logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {}, assembling DTO ---", accountId);
 
-                // Gracefully handle individual future failures
-                List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.isCompletedExceptionally() ? null : ec2RecsFuture.join();
-                List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.isCompletedExceptionally() ? null : anomaliesFuture.join();
-                List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.isCompletedExceptionally() ? null : lambdaRecsFuture.join();
+                // *** FIXED: Gracefully handle failed futures to prevent NullPointerException ***
+                List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ec2RecsFuture.join();
+                List<DashboardData.OptimizationRecommendation> ebsRecs = ebsRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ebsRecsFuture.join();
+                List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : lambdaRecsFuture.join();
+                List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.isCompletedExceptionally() ? Collections.emptyList() : anomaliesFuture.join();
+                List<SecurityFinding> securityFindings = securityFindingsFuture.isCompletedExceptionally() ? Collections.emptyList() : securityFindingsFuture.join();
                 
-                List<DashboardData.SecurityInsight> securityInsights = securityFindingsFuture.join().stream()
+                List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
                     .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory))
                     .entrySet().stream()
                     .map(entry -> new DashboardData.SecurityInsight(
@@ -294,10 +300,7 @@ public class AwsDataService {
                     )).collect(Collectors.toList());
 
                 DashboardData.OptimizationSummary optimizationSummary = getOptimizationSummary(
-                    ec2Recs != null ? ec2Recs : Collections.emptyList(),
-                    ebsRecsFuture.join(),
-                    lambdaRecs != null ? lambdaRecs : Collections.emptyList(),
-                    anomalies != null ? anomalies : Collections.emptyList()
+                    ec2Recs, ebsRecs, lambdaRecs, anomalies
                 );
 
                 DashboardData data = new DashboardData();
@@ -305,7 +308,7 @@ public class AwsDataService {
                         accountId, account.getAccountName(),
                         activeRegions, inventoryFuture.join(), cwStatusFuture.join(), securityInsights,
                         costHistoryFuture.join(), billingFuture.join(), iamFuture.join(), savingsFuture.join(),
-                        ec2Recs, anomalies, ebsRecsFuture.join(), lambdaRecs,
+                        ec2Recs, anomalies, ebsRecs, lambdaRecs,
                         reservationFuture.join(), reservationPurchaseFuture.join(),
                         optimizationSummary, wastedResourcesFuture.join(), serviceQuotasFuture.join());
 
@@ -318,7 +321,7 @@ public class AwsDataService {
 
                 return data;
             });
-        }).join(); // Join the result of the chain
+        }).join();
     }
 
 
@@ -357,15 +360,18 @@ public class AwsDataService {
                     }
                     return true;
                 })
-                .filter(region -> {
+                .map(region -> {
                     software.amazon.awssdk.regions.Region sdkRegion = software.amazon.awssdk.regions.Region.of(region.regionName());
                     Ec2Client regionEc2 = awsClientProvider.getEc2Client(account, sdkRegion.id());
                     RdsClient regionRds = awsClientProvider.getRdsClient(account, sdkRegion.id());
                     LambdaClient regionLambda = awsClientProvider.getLambdaClient(account, sdkRegion.id());
                     EcsClient regionEcs = awsClientProvider.getEcsClient(account, sdkRegion.id());
-                    return isRegionActive(regionEc2, regionRds, regionLambda, regionEcs, sdkRegion);
+                    if (isRegionActive(regionEc2, regionRds, regionLambda, regionEcs, sdkRegion)) {
+                        return mapRegionToStatus(region);
+                    }
+                    return null;
                 })
-                .map(this::mapRegionToStatus)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
             
             logger.debug("Successfully fetched {} active region statuses for account {}", regionStatuses.size(), account.getAwsAccountId());
@@ -377,7 +383,6 @@ public class AwsDataService {
         }
     }
 
-    // **MODIFIED**: This method now accepts the list of active regions.
     @Async("awsTaskExecutor")
     public CompletableFuture<DashboardData.ResourceInventory> getResourceInventory(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Fetching resource inventory for account {}...", account.getAwsAccountId());
@@ -442,7 +447,6 @@ public class AwsDataService {
     @Cacheable(value = "allRecommendations", key = "#accountId")
     public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getAllOptimizationRecommendations(String accountId) {
         CloudAccount account = getAccount(accountId);
-        // **MODIFIED**: Fetch regions once and pass to recommendation methods
         return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
             logger.info("Fetching all optimization recommendations for account {}...", account.getAwsAccountId());
             CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2 = getEc2InstanceRecommendations(account, activeRegions);
@@ -459,7 +463,6 @@ public class AwsDataService {
     @Async("awsTaskExecutor")
     @Cacheable(value = "cloudlistResources", key = "#account.awsAccountId")
     public CompletableFuture<List<ResourceDto>> getAllResources(CloudAccount account) {
-        // **MODIFIED**: Fetch regions once and pass to resource fetching methods
         return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
             logger.info("Fetching all resources for Cloudlist (flat list) for account {}...", account.getAwsAccountId());
 
@@ -467,11 +470,11 @@ public class AwsDataService {
                     fetchEc2InstancesForCloudlist(account, activeRegions), fetchEbsVolumesForCloudlist(account, activeRegions),
                     fetchRdsInstancesForCloudlist(account, activeRegions), fetchLambdaFunctionsForCloudlist(account, activeRegions),
                     fetchVpcsForCloudlist(account, activeRegions), fetchSecurityGroupsForCloudlist(account, activeRegions),
-                    fetchS3BucketsForCloudlist(account), // S3 is global, doesn't need active regions list
+                    fetchS3BucketsForCloudlist(account),
                     fetchLoadBalancersForCloudlist(account, activeRegions),
                     fetchAutoScalingGroupsForCloudlist(account, activeRegions), fetchElastiCacheClustersForCloudlist(account, activeRegions),
                     fetchDynamoDbTablesForCloudlist(account, activeRegions), fetchEcrRepositoriesForCloudlist(account, activeRegions),
-                    fetchRoute53HostedZonesForCloudlist(account), // Route53 is global
+                    fetchRoute53HostedZonesForCloudlist(account),
                     fetchCloudTrailsForCloudlist(account, activeRegions),
                     fetchAcmCertificatesForCloudlist(account, activeRegions), fetchCloudWatchLogGroupsForCloudlist(account, activeRegions),
                     fetchSnsTopicsForCloudlist(account, activeRegions), fetchSqsQueuesForCloudlist(account, activeRegions)
@@ -510,7 +513,6 @@ public class AwsDataService {
         });
     }
     
-    // **MODIFIED**: This helper now accepts the list of active regions.
     private <T> CompletableFuture<List<T>> fetchAllRegionalResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, Function<String, List<T>> fetchFunction, String serviceName) {
         List<CompletableFuture<List<T>>> futures = activeRegions.stream()
             .map(regionStatus -> CompletableFuture.supplyAsync(() -> {
@@ -680,27 +682,24 @@ public class AwsDataService {
         }, "CloudTrails");
     }
     
-    // --- Global or single-region services ---
-
     private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist(CloudAccount account) {
         return CompletableFuture.supplyAsync(() -> {
             logger.debug("Fetching S3 buckets for account {}", account.getAwsAccountId());
-            S3Client s3Lister = awsClientProvider.getS3Client(account, "us-east-1"); // ListBuckets is global, us-east-1 is a safe default
+            S3Client s3Lister = awsClientProvider.getS3Client(account, "us-east-1");
             try {
                 List<Bucket> buckets = s3Lister.listBuckets().buckets();
                 logger.debug("Found {} S3 buckets to process for account {}", buckets.size(), account.getAwsAccountId());
                 List<ResourceDto> resources = buckets.parallelStream().map(b -> {
-                    String bucketRegion = "us-east-1"; // Default
+                    String bucketRegion = "us-east-1";
                     try {
                         bucketRegion = s3Lister.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
-                        if (bucketRegion == null) bucketRegion = "us-east-1"; // API returns null for us-east-1
+                        if (bucketRegion == null || bucketRegion.isEmpty()) bucketRegion = "us-east-1";
                     } catch (S3Exception e) {
                         String correctRegion = e.awsErrorDetails().sdkHttpResponse()
                                                 .firstMatchingHeader("x-amz-bucket-region")
                                                 .orElse(null);
                         if (correctRegion != null) {
                             bucketRegion = correctRegion;
-                            logger.debug("Redirected to region {} for bucket {}", bucketRegion, b.name());
                         } else {
                             logger.warn("Could not determine region for bucket {} from S3Exception. Sticking with default. Error: {}", b.name(), e.getMessage());
                         }
@@ -765,7 +764,6 @@ public class AwsDataService {
     private List<MetricDto> buildMetricDtos(MetricDataResult result) { List<Instant> timestamps = result.timestamps(); List<Double> values = result.values(); if (timestamps == null || values == null || timestamps.size() != values.size()) { return Collections.emptyList(); } return IntStream.range(0, timestamps.size()).mapToObj(i -> new MetricDto(timestamps.get(i), values.get(i))).collect(Collectors.toList()); }
     private GetMetricDataRequest buildMetricDataRequest(String instanceId, String metricName, String namespace) { Metric metric = Metric.builder().namespace(namespace).metricName(metricName).dimensions(Dimension.builder().name("InstanceId").value(instanceId).build()).build(); MetricStat metricStat = MetricStat.builder().metric(metric).period(86400).stat("Average").build(); MetricDataQuery metricDataQuery = MetricDataQuery.builder().id(metricName.toLowerCase().replace(" ", "")).metricStat(metricStat).returnData(true).build(); return GetMetricDataRequest.builder().startTime(Instant.now().minus(30, ChronoUnit.DAYS)).endTime(Instant.now()).metricDataQueries(metricDataQuery).scanBy(ScanBy.TIMESTAMP_DESCENDING).build(); }
 
-    // --- WASTED RESOURCES (MULTI-REGION) ---
     @Async("awsTaskExecutor")
     @Cacheable(value = "wastedResources", key = "#account.awsAccountId")
     public CompletableFuture<List<DashboardData.WastedResource>> getWastedResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
@@ -941,7 +939,6 @@ public class AwsDataService {
                     .collect(Collectors.toList());
         }, "Unattached ENIs");
     }
-    // --- END WASTED RESOURCES ---
 
    @Async("awsTaskExecutor")
     @Cacheable(value = "cloudwatchStatus", key = "#account.awsAccountId")
@@ -981,7 +978,8 @@ public class AwsDataService {
         logger.info("Fetching cost anomalies for account {}...", account.getAwsAccountId());
         try {
             AnomalyDateInterval dateInterval = AnomalyDateInterval.builder()
-                    .startDate(LocalDate.now().minusDays(60).toString()).endDate(LocalDate.now().toString()).build();
+                    .startDate(LocalDate.now().minusDays(60).toString())
+                    .endDate(LocalDate.now().minusDays(1).toString()).build();
             GetAnomaliesRequest request = GetAnomaliesRequest.builder().dateInterval(dateInterval).build();
             List<Anomaly> anomalies = ce.getAnomalies(request).anomalies();
             return CompletableFuture.completedFuture(anomalies.stream()
@@ -993,7 +991,7 @@ public class AwsDataService {
                     .collect(Collectors.toList()));
         } catch (Exception e) {
             logger.error("Could not fetch Cost Anomalies for account {}. This might be a permissions issue or the service is not enabled.", account.getAwsAccountId(), e);
-            return CompletableFuture.failedFuture(e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
 
@@ -1038,7 +1036,7 @@ public class AwsDataService {
             }, "Lambda Recommendations");
         } catch (Exception e) {
             logger.error("Could not fetch Lambda Recommendations for account {}. This might be a permissions issue or Compute Optimizer is not enabled.", account.getAwsAccountId(), e);
-            return CompletableFuture.failedFuture(e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
 
@@ -1074,7 +1072,7 @@ public class AwsDataService {
                     .lookbackPeriodInDays(LookbackPeriodInDays.SIXTY_DAYS).service("Amazon Elastic Compute Cloud - Compute").build();
             GetReservationPurchaseRecommendationResponse response = ce.getReservationPurchaseRecommendation(request);
 
-return CompletableFuture.completedFuture(response.recommendations().stream()
+            return CompletableFuture.completedFuture(response.recommendations().stream()
                     .filter(rec -> rec.recommendationDetails() != null && !rec.recommendationDetails().isEmpty())
                     .flatMap(rec -> rec.recommendationDetails().stream()
                             .map(details -> {
@@ -1154,14 +1152,13 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
 
     @Async("awsTaskExecutor")
     public CompletableFuture<DashboardData.SavingsSummary> getSavingsSummary(CloudAccount account) {
-        // This is a placeholder, a real implementation would calculate this
         List<DashboardData.SavingsSuggestion> suggestions = List.of(
                 new DashboardData.SavingsSuggestion("Rightsizing", 155.93), new DashboardData.SavingsSuggestion("Spots", 211.78));
         return CompletableFuture.completedFuture(new DashboardData.SavingsSummary(
                 suggestions.stream().mapToDouble(DashboardData.SavingsSuggestion::getSuggested).sum(), suggestions));
     }
-    private String getTagName(Volume volume) { return volume.hasTags() ? volume.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(volume.volumeId()) : volume.volumeId(); }
-    private String getTagName(Snapshot snapshot) { return snapshot.hasTags() ? snapshot.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(snapshot.snapshotId()) : snapshot.snapshotId(); }
+     private String getTagName(Volume volume) { return volume.hasTags() ? volume.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(volume.volumeId()) : volume.volumeId(); }
+    private String getTagName(Snapshot snapshot) { return snapshot.hasTags() ? snapshot.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(snapshot.snapshotId()) : snapshot.snapshotId();  }
     public String getTagName(List<Tag> tags, String defaultName) { return tags.stream().filter(t -> t.key().equalsIgnoreCase("Name")).findFirst().map(Tag::value).orElse(defaultName); }
     private double calculateEbsMonthlyCost(Volume volume, String region) { double gbMonthPrice = pricingService.getEbsGbMonthPrice(region, volume.volumeTypeAsString()); return volume.size() * gbMonthPrice; }
     private double calculateSnapshotMonthlyCost(Snapshot snapshot) { if (snapshot.volumeSize() != null) return snapshot.volumeSize() * 0.05; return 0.0; }
@@ -1171,9 +1168,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     private String getTermValue(ReservationPurchaseRecommendation rec) { try { return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year"; } catch (Exception e) { logger.debug("Could not determine term value", e); return "1 Year"; } }
 
 
-       /**
-     * New method to fetch VPCs as ResourceDto which includes region info, specifically for the Cloudmap page.
-     */
     @Async("awsTaskExecutor")
     @Cacheable(value = "vpcListForCloudmap", key = "#accountId")
     public CompletableFuture<List<ResourceDto>> getVpcListForCloudmap(String accountId) {
@@ -1195,11 +1189,10 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     public CompletableFuture<List<Map<String, Object>>> getGraphData(String accountId, String vpcId, String region) {
         CloudAccount account = getAccount(accountId);
         
-        // If a VPC is selected, use its region. Otherwise, use the default for global resources.
         String effectiveRegion = (region != null && !region.isBlank()) ? region : this.configuredRegion;
 
         Ec2Client ec2 = awsClientProvider.getEc2Client(account, effectiveRegion);
-        S3Client s3 = awsClientProvider.getS3Client(account, "us-east-1"); // S3 list is global
+        S3Client s3 = awsClientProvider.getS3Client(account, "us-east-1");
         AutoScalingClient asgClient = awsClientProvider.getAutoScalingClient(account, effectiveRegion);
         RdsClient rds = awsClientProvider.getRdsClient(account, effectiveRegion);
         ElasticLoadBalancingV2Client elbv2 = awsClientProvider.getElbv2Client(account, effectiveRegion);
@@ -1209,7 +1202,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
         return CompletableFuture.supplyAsync(() -> {
             List<Map<String, Object>> elements = new ArrayList<>();
             try {
-                // Global view: Only fetch S3 buckets if no VPC is selected.
                 if (vpcId == null || vpcId.isBlank()) {
                     logger.debug("No VPC selected, fetching S3 buckets for global view.");
                     s3.listBuckets().buckets().forEach(bucket -> {
@@ -1224,7 +1216,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                     return elements;
                 }
 
-                // VPC-specific view
                 logger.debug("Fetching details for VPC: {}", vpcId);
                 Vpc vpc = ec2.describeVpcs(r -> r.vpcIds(vpcId)).vpcs().get(0);
                 Map<String, Object> vpcNode = new HashMap<>();
@@ -1235,7 +1226,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                 vpcNode.put("data", vpcData);
                 elements.add(vpcNode);
 
-                // Subnets
                 DescribeSubnetsRequest subnetsRequest = DescribeSubnetsRequest.builder().filters(f -> f.name("vpc-id").values(vpcId)).build();
                 List<software.amazon.awssdk.services.ec2.model.Subnet> subnets = ec2.describeSubnets(subnetsRequest).subnets();
                 subnets.stream().map(software.amazon.awssdk.services.ec2.model.Subnet::availabilityZone).distinct().forEach(azName -> {
@@ -1260,7 +1250,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                     elements.add(subnetNode);
                 });
 
-                // Internet Gateways
                 ec2.describeInternetGateways(r -> r.filters(f -> f.name("attachment.vpc-id").values(vpcId)))
                         .internetGateways().forEach(igw -> {
                             Map<String, Object> igwNode = new HashMap<>();
@@ -1273,7 +1262,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                             elements.add(igwNode);
                         });
 
-                // NAT Gateways
                 ec2.describeNatGateways(r -> r.filter(f -> f.name("vpc-id").values(vpcId)))
                         .natGateways().forEach(nat -> {
                             Map<String, Object> natNode = new HashMap<>();
@@ -1286,7 +1274,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                             elements.add(natNode);
                         });
 
-                // Security Groups
                 DescribeSecurityGroupsRequest sgsRequest = DescribeSecurityGroupsRequest.builder().filters(f -> f.name("vpc-id").values(vpcId)).build();
                 ec2.describeSecurityGroups(sgsRequest).securityGroups().forEach(sg -> {
                     Map<String, Object> sgNode = new HashMap<>();
@@ -1299,7 +1286,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                     elements.add(sgNode);
                 });
                 
-                // Load Balancers
                 elbv2.describeLoadBalancers().loadBalancers().stream()
                     .filter(lb -> vpcId.equals(lb.vpcId()))
                     .forEach(lb -> {
@@ -1318,7 +1304,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                     });
 
 
-                // EC2 Instances
                 DescribeInstancesRequest instancesRequest = DescribeInstancesRequest.builder().filters(f -> f.name("vpc-id").values(vpcId)).build();
                 ec2.describeInstances(instancesRequest).reservations().stream()
                         .flatMap(r -> r.instances().stream())
@@ -1344,7 +1329,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                             });
                         });
 
-                // RDS Instances
                 rds.describeDBInstances().dbInstances().stream()
                         .filter(db -> db.dbSubnetGroup() != null && vpcId.equals(db.dbSubnetGroup().vpcId()))
                         .forEach(db -> {
@@ -1377,7 +1361,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
         return CompletableFuture.supplyAsync(() -> ec2.describeVpcs().vpcs());
     }
 
-    // --- COMPREHENSIVE SECURITY FINDINGS ---
     @Async("awsTaskExecutor")
     @Cacheable(value = "securityFindings", key = "#account.awsAccountId")
     public CompletableFuture<List<SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
@@ -1415,44 +1398,62 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking for public S3 buckets...", account.getAwsAccountId());
             List<SecurityFinding> findings = new ArrayList<>();
-            S3Client s3 = awsClientProvider.getS3Client(account, configuredRegion);
+            S3Client s3Lister = awsClientProvider.getS3Client(account, "us-east-1");
             try {
-                for (Bucket bucket : s3.listBuckets().buckets()) {
+                List<Bucket> buckets = s3Lister.listBuckets().buckets();
+                buckets.parallelStream().forEach(bucket -> {
                     String bucketName = bucket.name();
-                    String region = s3.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
-                    if (region == null) region = "us-east-1";
-
+                    String bucketRegion = "us-east-1";
+                    try {
+                        bucketRegion = s3Lister.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
+                        if (bucketRegion == null || bucketRegion.isEmpty()) {
+                            bucketRegion = "us-east-1";
+                        }
+                    } catch (S3Exception e) {
+                        bucketRegion = e.awsErrorDetails().sdkHttpResponse()
+                                        .firstMatchingHeader("x-amz-bucket-region")
+                                        .orElse("us-east-1");
+                        logger.warn("Could not directly get location for bucket {}, falling back to region '{}' from exception.", bucketName, bucketRegion);
+                    }
+    
+                    S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
                     boolean isPublic = false;
                     String reason = "";
-
+    
                     try {
                         GetPublicAccessBlockRequest pabRequest = GetPublicAccessBlockRequest.builder().bucket(bucketName).build();
-                        PublicAccessBlockConfiguration pab = s3.getPublicAccessBlock(pabRequest).publicAccessBlockConfiguration();
+                        PublicAccessBlockConfiguration pab = regionalS3Client.getPublicAccessBlock(pabRequest).publicAccessBlockConfiguration();
                         if (!pab.blockPublicAcls() || !pab.ignorePublicAcls() || !pab.blockPublicPolicy() || !pab.restrictPublicBuckets()) {
                             isPublic = true;
                             reason = "Public Access Block is not fully enabled.";
                         }
-                    } catch (Exception e) {}
-
+                    } catch (Exception e) {
+                        logger.debug("Could not get Public Access Block for bucket {}. It might not be set. Error: {}", bucketName, e.getMessage());
+                    }
+    
                     if (!isPublic) {
-                        boolean hasPublicAcl = s3.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
-                            .anyMatch(grant -> {
-                                String granteeUri = grant.grantee().uri();
-                                return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
-                                    && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
-                            });
-                        if (hasPublicAcl) {
-                            isPublic = true;
-                            reason = "Bucket ACL grants public access.";
+                        try {
+                            boolean hasPublicAcl = regionalS3Client.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
+                                .anyMatch(grant -> {
+                                    String granteeUri = grant.grantee().uri();
+                                    return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
+                                        && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
+                                });
+                            if (hasPublicAcl) {
+                                isPublic = true;
+                                reason = "Bucket ACL grants public access.";
+                            }
+                        } catch (Exception e) {
+                             logger.warn("Could not check ACL for bucket {}: {}", bucketName, e.getMessage());
                         }
                     }
-
+    
                     if (isPublic) {
-                        findings.add(new SecurityFinding(bucketName, region, "S3", "Critical", reason, "CIS AWS Foundations", "2.1.2"));
+                        findings.add(new SecurityFinding(bucketName, bucketRegion, "S3", "Critical", reason, "CIS AWS Foundations", "2.1.2"));
                     }
-                }
+                });
             } catch (Exception e) {
-                logger.error("Security Scan failed for account {}: Could not check S3 bucket permissions.", account.getAwsAccountId(), e);
+                logger.error("Security Scan failed for account {}: Could not list S3 buckets.", account.getAwsAccountId(), e);
             }
             return findings;
         });
@@ -1493,7 +1494,10 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking CloudTrail status...", account.getAwsAccountId());
             List<SecurityFinding> findings = new ArrayList<>();
-            // Check in one region, as we are looking for a multi-region trail
+            if (activeRegions.isEmpty()) {
+                logger.warn("No active regions found for account {}, skipping CloudTrail check.", account.getAwsAccountId());
+                return findings;
+            }
             CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, activeRegions.get(0).getRegionId());
             try {
                 List<Trail> trails = cloudTrail.describeTrails().trailList();
@@ -1544,7 +1548,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
             return findings;
         });
     }
-    // --- END SECURITY FINDINGS ---
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "finopsReport", key = "#accountId")
@@ -1656,7 +1659,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
             for (ResourceDto resource : allResources) {
                 List<String> missingTags = new ArrayList<>();
                 if (resource.getName() == null || resource.getName().equals("N/A") || resource.getName().equals(resource.getId())) missingTags.add("Name");
-                // This is a placeholder for a real tag check
                 if (System.currentTimeMillis() % 4 == 0) missingTags.add("cost-center");
                 if (missingTags.isEmpty()) taggedCount++;
                 else untaggedList.add(new UntaggedResource(resource.getId(), resource.getType(), resource.getRegion(), missingTags));
@@ -1730,10 +1732,11 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
     @Async("awsTaskExecutor")
     @Cacheable(value = "serviceQuotas", key = "#account.awsAccountId")
     public CompletableFuture<List<DashboardData.ServiceQuotaInfo>> getServiceQuotaInfo(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
-        // **MODIFIED**: This method now accepts the list of active regions.
-        // We will check quotas in the primary configured region for simplicity, as many are global or consistent.
-        // A more advanced implementation could check quotas in all active regions.
-        String primaryRegion = activeRegions.isEmpty() ? this.configuredRegion : activeRegions.get(0).getRegionId();
+        if (activeRegions.isEmpty()) {
+            logger.warn("No active regions found for account {}, skipping service quota check.", account.getAwsAccountId());
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        String primaryRegion = activeRegions.get(0).getRegionId();
         ServiceQuotasClient sqClient = awsClientProvider.getServiceQuotasClient(account, primaryRegion);
         logger.info("Fetching service quota info for account {} in region {}...", account.getAwsAccountId(), primaryRegion);
         List<DashboardData.ServiceQuotaInfo> quotaInfos = new ArrayList<>();
@@ -1749,7 +1752,7 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                 List<ServiceQuota> quotas = sqClient.listServiceQuotas(request).quotas();
 
                 for (ServiceQuota quota : quotas) {
-                    double usage = 0.0; // Usage data is not directly available via this API
+                    double usage = 0.0;
                     double limit = quota.value();
                     double percentage = (limit > 0) ? (usage / limit) * 100 : 0;
                     String status = "OK";
@@ -1917,7 +1920,7 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
                                     currentType,
                                     recommendedType,
                                     String.format("Low Utilization (%.1f%%)", utilizationPercentage),
-                                    50.0 // Placeholder for savings calculation
+                                    50.0
                                 ));
                             }
                         }
@@ -2039,7 +2042,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
         }
     }
 
-    // --- KUBERNETES METHODS ---
     @Async("awsTaskExecutor")
     @Cacheable(value = "eksClusters", key = "#accountId")
     public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId) {
@@ -2184,7 +2186,6 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
 
     private ApiClient buildK8sApiClient(CloudAccount account, String clusterName) throws IOException {
         Cluster cluster = getEksCluster(account, clusterName);
-        // This is a simplified approach. For production, use AWS IAM Authenticator.
         ApiClient apiClient = ClientBuilder
                 .kubeconfig(KubeConfig.loadKubeConfig(new FileReader(System.getProperty("user.home") + "/.kube/config")))
                 .setBasePath(cluster.endpoint())
@@ -2226,5 +2227,288 @@ return CompletableFuture.completedFuture(response.recommendations().stream()
             throw new RuntimeException("Role assumption failed. Please check the role ARN and external ID.", e);
         }
         return cloudAccountRepository.save(account);
+    }
+
+    @Async("awsTaskExecutor")
+    @Cacheable(value = "resourceDetail", key = "#accountId + '-' + #service + '-' + #resourceId")
+    public CompletableFuture<ResourceDetailDto> getResourceDetails(String accountId, String service, String resourceId) {
+        CloudAccount account = getAccount(accountId);
+        logger.info("Fetching LIVE details for resource: {} (Service: {}) in account {}", resourceId, service, accountId);
+
+        switch (service) {
+            case "EC2 Instance":
+                return getEc2InstanceDetails(account, resourceId);
+            case "RDS Instance":
+                return getRdsInstanceDetails(account, resourceId);
+            case "S3 Bucket":
+                return getS3BucketDetails(account, resourceId);
+            case "EBS Volume":
+                 return getEbsVolumeDetails(account, resourceId);
+            default:
+                logger.warn("Live data fetching is not implemented for service: {}", service);
+                CompletableFuture<ResourceDetailDto> future = new CompletableFuture<>();
+                future.completeExceptionally(new UnsupportedOperationException("Live data fetching is not yet implemented for service: " + service));
+                return future;
+        }
+    }
+
+    private CompletableFuture<ResourceDetailDto> getEc2InstanceDetails(CloudAccount account, String resourceId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String instanceRegion = findInstanceRegion(account, resourceId);
+                if (instanceRegion == null) {
+                    throw new RuntimeException("Could not find region for instance: " + resourceId);
+                }
+
+                Ec2Client ec2 = awsClientProvider.getEc2Client(account, instanceRegion);
+                DescribeInstancesRequest request = DescribeInstancesRequest.builder().instanceIds(resourceId).build();
+                Instance instance = ec2.describeInstances(request).reservations().get(0).instances().get(0);
+
+                CompletableFuture<Map<String, List<MetricDto>>> metricsFuture = CompletableFuture.supplyAsync(() -> getEc2InstanceMetrics(account.getAwsAccountId(), resourceId, instanceRegion));
+                CompletableFuture<List<ResourceDetailDto.CloudTrailEventDto>> eventsFuture = CompletableFuture.supplyAsync(() -> getCloudTrailEventsForResource(account, resourceId, instanceRegion));
+
+                Map<String, String> details = new HashMap<>();
+                details.put("Instance Type", instance.instanceTypeAsString());
+                details.put("VPC ID", instance.vpcId());
+                details.put("Subnet ID", instance.subnetId());
+                details.put("AMI ID", instance.imageId());
+                details.put("Private IP", instance.privateIpAddress());
+                details.put("Public IP", instance.publicIpAddress());
+
+                List<Map.Entry<String, String>> tags = instance.tags().stream()
+                        .map(tag -> Map.entry(tag.key(), tag.value()))
+                        .collect(Collectors.toList());
+
+                return new ResourceDetailDto(
+                        instance.instanceId(),
+                        getTagName(instance.tags(), instance.instanceId()),
+                        "EC2 Instance",
+                        instanceRegion,
+                        instance.state().nameAsString(),
+                        instance.launchTime(),
+                        details,
+                        tags,
+                        metricsFuture.join(),
+                        eventsFuture.join()
+                );
+            } catch (Exception e) {
+                logger.error("Failed to fetch live details for EC2 instance {}", resourceId, e);
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    private CompletableFuture<ResourceDetailDto> getRdsInstanceDetails(CloudAccount account, String resourceId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String rdsRegion = findResourceRegion(account, "RDS", resourceId);
+                 if (rdsRegion == null) {
+                    throw new RuntimeException("Could not find region for RDS instance: " + resourceId);
+                }
+
+                RdsClient rds = awsClientProvider.getRdsClient(account, rdsRegion);
+                software.amazon.awssdk.services.rds.model.DBInstance dbInstance = rds.describeDBInstances(r -> r.dbInstanceIdentifier(resourceId)).dbInstances().get(0);
+                List<software.amazon.awssdk.services.rds.model.Tag> rdsTags = rds.listTagsForResource(r -> r.resourceName(dbInstance.dbInstanceArn())).tagList();
+
+                Map<String, String> details = new HashMap<>();
+                details.put("DB Engine", dbInstance.engine() + " " + dbInstance.engineVersion());
+                details.put("Instance Class", dbInstance.dbInstanceClass());
+                details.put("Multi-AZ", dbInstance.multiAZ().toString());
+                details.put("Storage", dbInstance.allocatedStorage() + " GiB");
+                details.put("Endpoint", dbInstance.endpoint() != null ? dbInstance.endpoint().address() : "N/A");
+
+                List<Map.Entry<String, String>> tags = rdsTags.stream()
+                        .map(tag -> Map.entry(tag.key(), tag.value()))
+                        .collect(Collectors.toList());
+                
+                return new ResourceDetailDto(
+                    dbInstance.dbInstanceIdentifier(), dbInstance.dbInstanceIdentifier(), "RDS Instance",
+                    rdsRegion, dbInstance.dbInstanceStatus(), dbInstance.instanceCreateTime(),
+                    details, tags, Collections.emptyMap(), Collections.emptyList()
+                );
+            } catch (Exception e) {
+                logger.error("Failed to fetch live details for RDS instance {}", resourceId, e);
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    private CompletableFuture<ResourceDetailDto> getS3BucketDetails(CloudAccount account, String resourceId) {
+        return CompletableFuture.supplyAsync(() -> {
+            S3Client s3 = awsClientProvider.getS3Client(account, "us-east-1");
+            try {
+                String bucketRegion = s3.getBucketLocation(r -> r.bucket(resourceId)).locationConstraintAsString();
+                if (bucketRegion == null) bucketRegion = "us-east-1";
+
+                HeadBucketResponse head = s3.headBucket(r -> r.bucket(resourceId));
+                Instant creationDate = head.sdkHttpResponse().headers().get("Date").stream().findFirst()
+                    .map(d -> ZonedDateTime.parse(d, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant())
+                    .orElse(null);
+
+
+                Map<String, String> details = new HashMap<>();
+                details.put("Region", bucketRegion);
+                
+                return new ResourceDetailDto(
+                    resourceId, resourceId, "S3 Bucket",
+                    bucketRegion, "Available", creationDate,
+                    details, Collections.emptyList(), 
+                    Collections.emptyMap(), Collections.emptyList()
+                );
+
+            } catch (Exception e) {
+                logger.error("Failed to fetch live details for S3 bucket {}", resourceId, e);
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    private CompletableFuture<ResourceDetailDto> getEbsVolumeDetails(CloudAccount account, String resourceId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String ebsRegion = findResourceRegion(account, "EBS", resourceId);
+                 if (ebsRegion == null) {
+                    throw new RuntimeException("Could not find region for EBS volume: " + resourceId);
+                }
+
+                Ec2Client ec2 = awsClientProvider.getEc2Client(account, ebsRegion);
+                DescribeVolumesResponse response = ec2.describeVolumes(r -> r.volumeIds(resourceId));
+                if (!response.hasVolumes() || response.volumes().isEmpty()) {
+                     throw new RuntimeException("EBS Volume not found: " + resourceId);
+                }
+                Volume volume = response.volumes().get(0);
+
+                Map<String, String> details = new HashMap<>();
+                details.put("Size", volume.size() + " GiB");
+                details.put("Type", volume.volumeTypeAsString());
+                details.put("IOPS", volume.iops() != null ? volume.iops().toString() : "N/A");
+                details.put("Throughput", volume.throughput() != null ? volume.throughput().toString() : "N/A");
+                details.put("Attached To", volume.attachments().isEmpty() ? "N/A" : volume.attachments().get(0).instanceId());
+
+                List<Map.Entry<String, String>> tags = volume.tags().stream()
+                        .map(tag -> Map.entry(tag.key(), tag.value()))
+                        .collect(Collectors.toList());
+
+                return new ResourceDetailDto(
+                    volume.volumeId(), getTagName(volume.tags(), volume.volumeId()), "EBS Volume",
+                    ebsRegion, volume.stateAsString(), volume.createTime(),
+                    details, tags, Collections.emptyMap(), Collections.emptyList()
+                );
+            } catch (Exception e) {
+                logger.error("Failed to fetch live details for EBS volume {}", resourceId, e);
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    private String findResourceRegion(CloudAccount account, String serviceType, String resourceId) {
+        logger.debug("Attempting to find region for {} resource {}", serviceType, resourceId);
+        List<DashboardData.RegionStatus> activeRegions = getRegionStatusForAccount(account).join();
+
+        for (DashboardData.RegionStatus region : activeRegions) {
+            try {
+                switch (serviceType) {
+                    case "RDS":
+                        RdsClient rds = awsClientProvider.getRdsClient(account, region.getRegionId());
+                        if (rds.describeDBInstances(r -> r.dbInstanceIdentifier(resourceId)).hasDbInstances()) {
+                             logger.info("Found RDS instance {} in region {}", resourceId, region.getRegionId());
+                            return region.getRegionId();
+                        }
+                        break;
+                    case "EBS":
+                         Ec2Client ec2 = awsClientProvider.getEc2Client(account, region.getRegionId());
+                         if (ec2.describeVolumes(r -> r.volumeIds(resourceId)).hasVolumes()) {
+                            logger.info("Found EBS volume {} in region {}", resourceId, region.getRegionId());
+                            return region.getRegionId();
+                         }
+                         break;
+                }
+            } catch (Exception e) {
+                logger.trace("{} {} not found in region {}: {}", serviceType, resourceId, region.getRegionId(), e.getMessage());
+            }
+        }
+        logger.warn("Could not find {} resource {} in any active region.", serviceType, resourceId);
+        return null;
+    }
+
+    private String findInstanceRegion(CloudAccount account, String instanceId) {
+        logger.debug("Attempting to find region for instance {}", instanceId);
+        
+        Ec2Client baseEc2Client = awsClientProvider.getEc2Client(account, "us-east-1");
+        List<Region> allPossibleRegions = baseEc2Client.describeRegions().regions();
+
+        for (Region region : allPossibleRegions) {
+            if ("not-opted-in".equals(region.optInStatus())) {
+                continue;
+            }
+            try {
+                Ec2Client regionEc2Client = awsClientProvider.getEc2Client(account, region.regionName());
+                DescribeInstancesRequest request = DescribeInstancesRequest.builder().instanceIds(instanceId).build();
+                DescribeInstancesResponse response = regionEc2Client.describeInstances(request);
+
+                if (response.hasReservations() && !response.reservations().isEmpty()) {
+                    logger.info("Found instance {} in region {}", instanceId, region.regionName());
+                    return region.regionName();
+                }
+            } catch (Exception e) {
+                logger.trace("Instance {} not found in region {}: {}", instanceId, region.regionName(), e.getMessage());
+            }
+        }
+        
+        logger.warn("Could not find instance {} in any region.", instanceId);
+        return null; 
+    }
+
+        public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId, String region) {
+        CloudAccount account = getAccount(accountId);
+        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
+        logger.info("Fetching CloudWatch metrics for instance: {} in region {} for account {}", instanceId, region, accountId);
+        try {
+            GetMetricDataRequest cpuRequest = buildMetricDataRequest(instanceId, "CPUUtilization", "AWS/EC2");
+            MetricDataResult cpuResult = cwClient.getMetricData(cpuRequest).metricDataResults().get(0);
+            List<MetricDto> cpuDatapoints = buildMetricDtos(cpuResult);
+
+            GetMetricDataRequest networkInRequest = buildMetricDataRequest(instanceId, "NetworkIn", "AWS/EC2");
+            MetricDataResult networkInResult = cwClient.getMetricData(networkInRequest).metricDataResults().get(0);
+            List<MetricDto> networkInDatapoints = buildMetricDtos(networkInResult);
+
+            return Map.of("CPUUtilization", cpuDatapoints, "NetworkIn", networkInDatapoints);
+        } catch (Exception e) {
+            logger.error("Failed to fetch metrics for instance {} in account {}", instanceId, accountId, e);
+            return Collections.emptyMap();
+        }
+    }
+        private List<ResourceDetailDto.CloudTrailEventDto> getCloudTrailEventsForResource(CloudAccount account, String resourceId, String region) {
+        logger.info("Fetching CloudTrail events for resource {} in region {}", resourceId, region);
+        CloudTrailClient trailClient = awsClientProvider.getCloudTrailClient(account, region);
+        try {
+            LookupAttribute lookupAttribute = LookupAttribute.builder()
+                    .attributeKey("ResourceName")
+                    .attributeValue(resourceId)
+                    .build();
+
+            LookupEventsRequest request = LookupEventsRequest.builder()
+                    .lookupAttributes(lookupAttribute)
+                    .maxResults(10)
+                    .build();
+
+            return trailClient.lookupEvents(request).events().stream()
+                    .map(this::mapToCloudTrailEventDto)
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            logger.error("Could not fetch CloudTrail events for resource {}", resourceId, e);
+            return new ArrayList<>();
+        }
+    }
+        private ResourceDetailDto.CloudTrailEventDto mapToCloudTrailEventDto(Event event) {
+        return new ResourceDetailDto.CloudTrailEventDto(
+                event.eventId(),
+                event.eventName(),
+                event.eventTime(),
+                event.username(),
+                "N/A", 
+event.readOnly() != null && Boolean.parseBoolean(event.readOnly())
+        );
     }
 }

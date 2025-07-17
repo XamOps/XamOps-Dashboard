@@ -7,10 +7,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         [x-cloak] { display: none !important; }
+        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
+        @keyframes pulse { 50% { opacity: .5; } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -21,26 +25,190 @@
     </aside>
 
     <div class="ml-64 flex-1">
-        <main class="flex-1 flex flex-col min-h-screen">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="performanceDashboard()">
             <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
                 <div>
-                    <h1 class="text-xl font-semibold text-gray-800">Performance</h1>
-                    <p class="text-xs text-gray-500">Performance metrics and analysis</p>
+                    <h1 class="text-xl font-semibold text-gray-800">Performance Monitoring</h1>
+                    <p class="text-xs text-gray-500">Analyze real-time metrics for your cloud resources</p>
                 </div>
             </header>
 
-            <div class="flex-1 p-6">
-                 <div class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
-                    <i class="fas fa-chart-line fa-3x text-gray-400"></i>
-                    <h3 class="mt-4 text-lg font-medium text-gray-900">Performance Metrics</h3>
-                    <p class="mt-1 text-sm text-gray-500">
-                        This section is under development. Performance charts and data will be available here soon.
-                    </p>
+            <div class="flex-1 p-6 space-y-6">
+                <!-- Resource Selector -->
+                <div class="bg-white rounded-lg p-4 shadow-sm border">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="service-type" class="block text-sm font-medium text-gray-700">Service Type</label>
+                            <select id="service-type" x-model="selectedService" class="mt-1 block w-full form-select rounded-md border-gray-300 shadow-sm">
+                                <option value="">-- Select Service --</option>
+                                <template x-for="service in availableServices" :key="service">
+                                    <option :value="service" x-text="service"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="resource-id" class="block text-sm font-medium text-gray-700">Resource</label>
+                            <select id="resource-id" x-model="selectedResource" @change="fetchMetrics()" class="mt-1 block w-full form-select rounded-md border-gray-300 shadow-sm" :disabled="!selectedService">
+                                <option value="">-- Select Resource --</option>
+                                <template x-for="resource in resourcesForSelectedService" :key="resource.id">
+                                    <option :value="resource.id" x-text="resource.name + ' (' + resource.id + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Initial or Empty State -->
+                <div x-show="!selectedResource && !isLoading" class="text-center py-16 px-4 border-2 border-dashed rounded-lg">
+                    <i class="fas fa-chart-bar fa-3x text-gray-400"></i>
+                    <h3 class="mt-4 text-lg font-medium text-gray-900">Select a resource to view its performance</h3>
+                    <p class="mt-1 text-sm text-gray-500">Choose a service and a resource from the dropdowns above.</p>
+                </div>
+
+                <!-- Loading State -->
+                <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
+                    <div class="bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
+                </div>
+
+                <!-- Metrics Display -->
+                <div x-show="selectedResource && !isLoading" x-cloak class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- CPU Utilization -->
+                        <div class="bg-white rounded-lg p-6 shadow-sm border">
+                            <h3 class="font-semibold text-gray-700 mb-4">CPU Utilization (%)</h3>
+                            <div class="h-64"><canvas id="cpuChart"></canvas></div>
+                        </div>
+                        <!-- Network In -->
+                        <div class="bg-white rounded-lg p-6 shadow-sm border">
+                            <h3 class="font-semibold text-gray-700 mb-4">Network In (Bytes)</h3>
+                            <div class="h-64"><canvas id="networkInChart"></canvas></div>
+                        </div>
+                    </div>
+                    <!-- Add more charts here as needed -->
                 </div>
             </div>
         </main>
     </div>
 </div>
+
+<script>
+function performanceDashboard() {
+    return {
+        isLoading: false,
+        allResources: [],
+        selectedService: '',
+        selectedResource: '',
+        charts: {},
+
+        init() {
+            this.fetchAllResources();
+        },
+
+        fetchAllResources() {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                console.error("No account selected");
+                return;
+            }
+            fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
+                .then(res => res.json())
+                .then(data => {
+                    this.allResources = data.flatMap(group => 
+                        group.resources.map(res => ({...res, serviceType: group.serviceType}))
+                    );
+                });
+        },
+
+        get availableServices() {
+            const services = this.allResources.map(r => r.serviceType);
+            return [...new Set(services)].sort();
+        },
+
+        get resourcesForSelectedService() {
+            if (!this.selectedService) return [];
+            return this.allResources.filter(r => r.serviceType === this.selectedService);
+        },
+
+        fetchMetrics() {
+            if (!this.selectedResource) {
+                this.destroyCharts();
+                return;
+            }
+            
+            const resource = this.allResources.find(r => r.id === this.selectedResource);
+            if (!resource) return;
+
+            // For now, we only support EC2. Add other services here.
+            if (resource.serviceType !== 'EC2 Instance') {
+                alert('Performance metrics are currently only available for EC2 Instances.');
+                this.destroyCharts();
+                return;
+            }
+
+            this.isLoading = true;
+            this.destroyCharts();
+            
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            fetch(`/api/metrics/ec2/${this.selectedResource}?accountId=${selectedAccountId}`)
+                .then(res => res.json())
+                .then(data => {
+                    this.renderChart('cpuChart', 'CPU Utilization (%)', data.CPUUtilization, 'rgb(79, 70, 229)');
+                    this.renderChart('networkInChart', 'Network In (Bytes)', data.NetworkIn, 'rgb(22, 163, 74)');
+                })
+                .catch(err => console.error('Failed to fetch metrics:', err))
+                .finally(() => this.isLoading = false);
+        },
+
+        renderChart(canvasId, label, data, color) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx || !data) return;
+
+            const chartData = data.map(dp => ({
+                x: new Date(dp.timestamp),
+                y: dp.average
+            }));
+
+            this.charts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: label,
+                        data: chartData,
+                        borderColor: color,
+                        backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'day' }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        },
+
+        destroyCharts() {
+            Object.values(this.charts).forEach(chart => {
+                if (chart) chart.destroy();
+            });
+            this.charts = {};
+        }
+    }
+}
+</script>
 
 </body>
 </html>
