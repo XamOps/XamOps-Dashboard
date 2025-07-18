@@ -11,10 +11,210 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            --performance-gradient: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
         [x-cloak] { display: none !important; }
-        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
-        @keyframes pulse { 50% { opacity: .5; } }
+        
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .metric-card {
+            position: relative;
+            overflow: hidden;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--performance-gradient);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 12px;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        .form-select {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .form-select:focus {
+            background: rgba(255, 255, 255, 1);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .chart-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--performance-gradient);
+        }
+        
+        .empty-state {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 2px dashed rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .empty-state:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(255, 255, 255, 0.98);
+        }
+        
+        .selector-section {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .gradient-text {
+            background: var(--performance-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .metric-icon {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .metric-icon:hover {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        .real-time-indicator {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.2) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        
+        .chart-hover-effect {
+            transition: all 0.3s ease;
+        }
+        
+        .chart-hover-effect:hover {
+            transform: scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .service-badge {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(102, 126, 234, 0.2) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            color: #667eea;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -26,66 +226,203 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="performanceDashboard()">
-            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-800">Performance Monitoring</h1>
-                    <p class="text-xs text-gray-500">Analyze real-time metrics for your cloud resources</p>
+            <!-- Enhanced Header -->
+            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-chart-line text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">Performance Monitoring</h1>
+                        <p class="text-sm text-gray-600">Real-time metrics and analytics for your cloud resources</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="real-time-indicator flex items-center space-x-2 px-4 py-2 rounded-xl">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                        <span class="text-sm font-semibold text-green-700">Live Metrics</span>
+                    </div>
                 </div>
             </header>
 
-            <div class="flex-1 p-6 space-y-6">
-                <!-- Resource Selector -->
-                <div class="bg-white rounded-lg p-4 shadow-sm border">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="flex-1 p-8 space-y-8">
+                <!-- Enhanced Resource Selector -->
+                <div class="selector-section rounded-2xl p-6 fade-in">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-filter text-white text-sm"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-800">Resource Selection</h3>
+                        </div>
+                        <div class="text-sm text-gray-600" x-show="selectedResource">
+                            <span class="service-badge" x-text="selectedService"></span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
-                            <label for="service-type" class="block text-sm font-medium text-gray-700">Service Type</label>
-                            <select id="service-type" x-model="selectedService" class="mt-1 block w-full form-select rounded-md border-gray-300 shadow-sm">
-                                <option value="">-- Select Service --</option>
-                                <template x-for="service in availableServices" :key="service">
-                                    <option :value="service" x-text="service"></option>
-                                </template>
-                            </select>
+                            <label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type</label>
+                            <div class="relative">
+                                <select id="service-type" x-model="selectedService" class="form-select block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none">
+                                    <option value="">-- Select Service --</option>
+                                    <template x-for="service in availableServices" :key="service">
+                                        <option :value="service" x-text="service"></option>
+                                    </template>
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                            </div>
                         </div>
                         <div>
-                            <label for="resource-id" class="block text-sm font-medium text-gray-700">Resource</label>
-                            <select id="resource-id" x-model="selectedResource" @change="fetchMetrics()" class="mt-1 block w-full form-select rounded-md border-gray-300 shadow-sm" :disabled="!selectedService">
-                                <option value="">-- Select Resource --</option>
-                                <template x-for="resource in resourcesForSelectedService" :key="resource.id">
-                                    <option :value="resource.id" x-text="resource.name + ' (' + resource.id + ')'"></option>
-                                </template>
-                            </select>
+                            <label for="resource-id" class="block text-sm font-semibold text-gray-700 mb-2">Resource</label>
+                            <div class="relative">
+                                <select id="resource-id" x-model="selectedResource" @change="fetchMetrics()" class="form-select block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none" :disabled="!selectedService">
+                                    <option value="">-- Select Resource --</option>
+                                    <template x-for="resource in resourcesForSelectedService" :key="resource.id">
+                                        <option :value="resource.id" x-text="resource.name + ' (' + resource.id + ')'"></option>
+                                    </template>
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-end">
+                            <div class="w-full">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Available Resources</label>
+                                <div class="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-gray-200/50">
+                                    <span class="text-2xl font-bold gradient-text" x-text="resourcesForSelectedService.length"></span>
+                                    <span class="text-sm text-gray-600 ml-2">resources found</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Initial or Empty State -->
-                <div x-show="!selectedResource && !isLoading" class="text-center py-16 px-4 border-2 border-dashed rounded-lg">
-                    <i class="fas fa-chart-bar fa-3x text-gray-400"></i>
-                    <h3 class="mt-4 text-lg font-medium text-gray-900">Select a resource to view its performance</h3>
-                    <p class="mt-1 text-sm text-gray-500">Choose a service and a resource from the dropdowns above.</p>
-                </div>
-
-                <!-- Loading State -->
-                <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
-                    <div class="bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
-                </div>
-
-                <!-- Metrics Display -->
-                <div x-show="selectedResource && !isLoading" x-cloak class="space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- CPU Utilization -->
-                        <div class="bg-white rounded-lg p-6 shadow-sm border">
-                            <h3 class="font-semibold text-gray-700 mb-4">CPU Utilization (%)</h3>
-                            <div class="h-64"><canvas id="cpuChart"></canvas></div>
+                <!-- Enhanced Initial/Empty State -->
+                <div x-show="!selectedResource && !isLoading" class="empty-state text-center py-20 px-8 rounded-2xl fade-in">
+                    <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-chart-bar text-white text-3xl"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">Ready to Monitor Performance</h3>
+                    <p class="text-gray-600 mb-6">Select a service and resource from the dropdowns above to view real-time performance metrics and analytics.</p>
+                    <div class="flex justify-center space-x-4 text-sm text-gray-500">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-clock text-blue-500"></i>
+                            <span>Real-time data</span>
                         </div>
-                        <!-- Network In -->
-                        <div class="bg-white rounded-lg p-6 shadow-sm border">
-                            <h3 class="font-semibold text-gray-700 mb-4">Network In (Bytes)</h3>
-                            <div class="h-64"><canvas id="networkInChart"></canvas></div>
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-chart-line text-green-500"></i>
+                            <span>Interactive charts</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-download text-purple-500"></i>
+                            <span>Export data</span>
                         </div>
                     </div>
-                    <!-- Add more charts here as needed -->
+                </div>
+
+                <!-- Enhanced Loading State -->
+                <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-8 fade-in">
+                    <div class="glass-card rounded-2xl p-8">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="skeleton h-6 w-32 rounded"></div>
+                            <div class="skeleton h-8 w-8 rounded-lg"></div>
+                        </div>
+                        <div class="skeleton h-64 rounded-lg"></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-8">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="skeleton h-6 w-32 rounded"></div>
+                            <div class="skeleton h-8 w-8 rounded-lg"></div>
+                        </div>
+                        <div class="skeleton h-64 rounded-lg"></div>
+                    </div>
+                </div>
+
+                <!-- Enhanced Metrics Display -->
+                <div x-show="selectedResource && !isLoading" x-cloak class="space-y-8 fade-in">
+                    <!-- Resource Information Panel -->
+                    <div class="glass-card rounded-2xl p-6">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-server text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Resource Performance</h3>
+                                    <p class="text-sm text-gray-600" x-text="'Monitoring ' + selectedService + ' metrics'"></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-600">Resource ID</p>
+                                <p class="font-mono text-sm text-gray-800" x-text="selectedResource"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enhanced Metrics Charts -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- CPU Utilization Chart -->
+                        <div class="metric-card rounded-2xl chart-hover-effect">
+                            <div class="chart-container">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-bold text-gray-800">CPU Utilization</h3>
+                                    <div class="metric-icon w-10 h-10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-microchip text-blue-600 text-lg"></i>
+                                    </div>
+                                </div>
+                                <div class="h-64">
+                                    <canvas id="cpuChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Network In Chart -->
+                        <div class="metric-card rounded-2xl chart-hover-effect">
+                            <div class="chart-container">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-bold text-gray-800">Network In</h3>
+                                    <div class="metric-icon w-10 h-10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-download text-green-600 text-lg"></i>
+                                    </div>
+                                </div>
+                                <div class="h-64">
+                                    <canvas id="networkInChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Insights Panel -->
+                    <div class="glass-card rounded-2xl p-6">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-lightbulb text-white text-sm"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-800">Performance Insights</h3>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="bg-blue-50 rounded-xl p-4">
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <i class="fas fa-info-circle text-blue-600"></i>
+                                    <span class="text-sm font-semibold text-blue-800">Monitoring Status</span>
+                                </div>
+                                <p class="text-sm text-blue-700">Real-time CloudWatch metrics are being collected and displayed for this resource.</p>
+                            </div>
+                            <div class="bg-green-50 rounded-xl p-4">
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <i class="fas fa-clock text-green-600"></i>
+                                    <span class="text-sm font-semibold text-green-800">Data Freshness</span>
+                                </div>
+                                <p class="text-sm text-green-700">Metrics are updated every 5 minutes with the latest available data points.</p>
+                            </div>
+                            <div class="bg-purple-50 rounded-xl p-4">
+                                <div class="flex items-center space-x-2 mb-2">
+                                    <i class="fas fa-chart-line text-purple-600"></i>
+                                    <span class="text-sm font-semibold text-purple-800">Historical Data</span>
+                                </div>
+                                <p class="text-sm text-purple-700">Charts display performance trends over the last 24 hours for analysis.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -153,14 +490,22 @@ function performanceDashboard() {
             fetch(`/api/metrics/ec2/${this.selectedResource}?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    this.renderChart('cpuChart', 'CPU Utilization (%)', data.CPUUtilization, 'rgb(79, 70, 229)');
-                    this.renderChart('networkInChart', 'Network In (Bytes)', data.NetworkIn, 'rgb(22, 163, 74)');
+                    this.renderChart('cpuChart', 'CPU Utilization (%)', data.CPUUtilization, {
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        gradient: 'rgba(59, 130, 246, 0.3)'
+                    });
+                    this.renderChart('networkInChart', 'Network In (Bytes)', data.NetworkIn, {
+                        borderColor: 'rgb(16, 185, 129)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        gradient: 'rgba(16, 185, 129, 0.3)'
+                    });
                 })
                 .catch(err => console.error('Failed to fetch metrics:', err))
                 .finally(() => this.isLoading = false);
         },
 
-        renderChart(canvasId, label, data, color) {
+        renderChart(canvasId, label, data, colors) {
             const ctx = document.getElementById(canvasId);
             if (!ctx || !data) return;
 
@@ -169,32 +514,75 @@ function performanceDashboard() {
                 y: dp.average
             }));
 
+            // Create gradient
+            const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, colors.gradient);
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
             this.charts[canvasId] = new Chart(ctx, {
                 type: 'line',
                 data: {
                     datasets: [{
                         label: label,
                         data: chartData,
-                        borderColor: color,
-                        backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
+                        borderColor: colors.borderColor,
+                        backgroundColor: gradient,
                         fill: true,
-                        tension: 0.3
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: colors.borderColor,
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
                     scales: {
                         x: {
                             type: 'time',
-                            time: { unit: 'day' }
+                            time: { 
+                                unit: 'hour',
+                                displayFormats: {
+                                    hour: 'HH:mm'
+                                }
+                            },
+                            ticks: {
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
                         },
                         y: {
-                            beginAtZero: true
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
                         }
                     },
                     plugins: {
-                        legend: { display: false }
+                        legend: { 
+                            display: false 
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: colors.borderColor,
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: false
+                        }
                     }
                 }
             });

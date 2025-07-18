@@ -1,16 +1,16 @@
 package com.xammer.cloud.controller;
 
 import com.xammer.cloud.domain.CloudAccount;
+import com.xammer.cloud.domain.DashboardLayout;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.repository.CloudAccountRepository;
+import com.xammer.cloud.repository.DashboardLayoutRepository;
 import com.xammer.cloud.service.AwsDataService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
@@ -22,10 +22,12 @@ public class DashboardController {
 
     private final AwsDataService awsDataService;
     private final CloudAccountRepository cloudAccountRepository;
+    private final DashboardLayoutRepository dashboardLayoutRepository;
 
-    public DashboardController(AwsDataService awsDataService, CloudAccountRepository cloudAccountRepository) {
+    public DashboardController(AwsDataService awsDataService, CloudAccountRepository cloudAccountRepository, DashboardLayoutRepository dashboardLayoutRepository) {
         this.awsDataService = awsDataService;
         this.cloudAccountRepository = cloudAccountRepository;
+        this.dashboardLayoutRepository = dashboardLayoutRepository;
     }
 
     @GetMapping("/dashboard")
@@ -46,11 +48,28 @@ public class DashboardController {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
         
-        // **FIXED**: Fetch active regions first, then pass them to the service method.
         List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
         List<DashboardData.WastedResource> wastedResources = awsDataService.getWastedResources(account, activeRegions).get();
         
         return ResponseEntity.ok(wastedResources);
+    }
+
+    @GetMapping("/dashboard/layout")
+    public ResponseEntity<DashboardLayout> getDashboardLayout() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        return dashboardLayoutRepository.findById(username)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.ok(new DashboardLayout(username, "[]"))); // Default to empty layout
+    }
+
+    @PostMapping("/dashboard/layout")
+    public ResponseEntity<Void> saveDashboardLayout(@RequestBody String layoutConfig) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        DashboardLayout layout = new DashboardLayout(username, layoutConfig);
+        dashboardLayoutRepository.save(layout);
+        return ResponseEntity.ok().build();
     }
 
     @ExceptionHandler({ExecutionException.class, InterruptedException.class})

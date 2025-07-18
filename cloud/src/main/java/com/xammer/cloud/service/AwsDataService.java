@@ -1,28 +1,9 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.domain.CloudAccount;
-import com.xammer.cloud.dto.AiAdvisorSummaryDto;
-import com.xammer.cloud.dto.CostByTagDto;
-import com.xammer.cloud.dto.DashboardData;
-import com.xammer.cloud.dto.DashboardData.BudgetDetails;
-import com.xammer.cloud.dto.DashboardData.SecurityFinding;
-import com.xammer.cloud.dto.DashboardData.ServiceGroupDto;
-import com.xammer.cloud.dto.DashboardData.TaggingCompliance;
-import com.xammer.cloud.dto.DashboardData.UntaggedResource;
-import com.xammer.cloud.dto.FinOpsReportDto;
-import com.xammer.cloud.dto.HistoricalReservationDataDto;
-import com.xammer.cloud.dto.MetricDto;
-import com.xammer.cloud.dto.ReservationDto;
-import com.xammer.cloud.dto.ReservationInventoryDto;
-import com.xammer.cloud.dto.ReservationModificationRecommendationDto;
-import com.xammer.cloud.dto.ReservationModificationRequestDto;
-import com.xammer.cloud.dto.ResourceDetailDto;
-import com.xammer.cloud.dto.ResourceDto;
-import com.xammer.cloud.dto.VerifyAccountRequest;
-import com.xammer.cloud.dto.k8s.K8sClusterInfo;
-import com.xammer.cloud.dto.k8s.K8sDeploymentInfo;
-import com.xammer.cloud.dto.k8s.K8sNodeInfo;
-import com.xammer.cloud.dto.k8s.K8sPodInfo;
+import com.xammer.cloud.dto.*;
+import com.xammer.cloud.dto.k8s.*;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
@@ -35,9 +16,11 @@ import io.kubernetes.client.util.ClientBuilder;
 import io.kubernetes.client.util.KubeConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -45,84 +28,22 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.acm.AcmClient;
 import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
 import software.amazon.awssdk.services.budgets.BudgetsClient;
-import software.amazon.awssdk.services.budgets.model.Budget;
-import software.amazon.awssdk.services.budgets.model.BudgetType;
-import software.amazon.awssdk.services.budgets.model.CreateBudgetRequest;
-import software.amazon.awssdk.services.budgets.model.DescribeBudgetsRequest;
-import software.amazon.awssdk.services.budgets.model.Spend;
-import software.amazon.awssdk.services.budgets.model.TimePeriod;
+import software.amazon.awssdk.services.budgets.model.*;
 import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
 import software.amazon.awssdk.services.cloudtrail.model.Event;
 import software.amazon.awssdk.services.cloudtrail.model.LookupAttribute;
 import software.amazon.awssdk.services.cloudtrail.model.LookupEventsRequest;
 import software.amazon.awssdk.services.cloudtrail.model.Trail;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.Dimension;
-import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
-import software.amazon.awssdk.services.cloudwatch.model.Metric;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataResult;
-import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
-import software.amazon.awssdk.services.cloudwatch.model.ScanBy;
+import software.amazon.awssdk.services.cloudwatch.model.*;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
 import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
-import software.amazon.awssdk.services.computeoptimizer.model.GetEbsVolumeRecommendationsRequest;
-import software.amazon.awssdk.services.computeoptimizer.model.GetEc2InstanceRecommendationsRequest;
-import software.amazon.awssdk.services.computeoptimizer.model.GetLambdaFunctionRecommendationsRequest;
-import software.amazon.awssdk.services.computeoptimizer.model.InstanceRecommendation;
-import software.amazon.awssdk.services.computeoptimizer.model.LambdaFunctionMemoryRecommendationOption;
-import software.amazon.awssdk.services.computeoptimizer.model.LambdaFunctionRecommendation;
-import software.amazon.awssdk.services.computeoptimizer.model.VolumeRecommendation;
-import software.amazon.awssdk.services.computeoptimizer.model.VolumeRecommendationOption;
+import software.amazon.awssdk.services.computeoptimizer.model.*;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
-import software.amazon.awssdk.services.costexplorer.model.Anomaly;
-import software.amazon.awssdk.services.costexplorer.model.AnomalyDateInterval;
-import software.amazon.awssdk.services.costexplorer.model.CoverageByTime;
-import software.amazon.awssdk.services.costexplorer.model.DateInterval;
-import software.amazon.awssdk.services.costexplorer.model.DimensionValues;
-import software.amazon.awssdk.services.costexplorer.model.Expression;
-import software.amazon.awssdk.services.costexplorer.model.GetAnomaliesRequest;
-import software.amazon.awssdk.services.costexplorer.model.GetCostAndUsageRequest;
-import software.amazon.awssdk.services.costexplorer.model.GetReservationCoverageRequest;
-import software.amazon.awssdk.services.costexplorer.model.GetReservationPurchaseRecommendationRequest;
-import software.amazon.awssdk.services.costexplorer.model.GetReservationPurchaseRecommendationResponse;
-import software.amazon.awssdk.services.costexplorer.model.GetReservationUtilizationRequest;
-import software.amazon.awssdk.services.costexplorer.model.Granularity;
-import software.amazon.awssdk.services.costexplorer.model.GroupDefinition;
-import software.amazon.awssdk.services.costexplorer.model.GroupDefinitionType;
-import software.amazon.awssdk.services.costexplorer.model.LookbackPeriodInDays;
-import software.amazon.awssdk.services.costexplorer.model.ReservationPurchaseRecommendation;
-import software.amazon.awssdk.services.costexplorer.model.ReservationUtilizationGroup;
-import software.amazon.awssdk.services.costexplorer.model.ResultByTime;
-import software.amazon.awssdk.services.costexplorer.model.RootCause;
-import software.amazon.awssdk.services.costexplorer.model.UtilizationByTime;
+import software.amazon.awssdk.services.costexplorer.model.*;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.DescribeImagesRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
-import software.amazon.awssdk.services.ec2.model.DescribeInternetGatewaysRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeNatGatewaysRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeNetworkInterfacesRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesOfferingsRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesResponse;
-import software.amazon.awssdk.services.ec2.model.DescribeSecurityGroupsRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeSubnetsRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeVolumesResponse;
-import software.amazon.awssdk.services.ec2.model.FlowLog;
-import software.amazon.awssdk.services.ec2.model.ImageState;
-import software.amazon.awssdk.services.ec2.model.Instance;
-import software.amazon.awssdk.services.ec2.model.ModifyReservedInstancesRequest;
-import software.amazon.awssdk.services.ec2.model.ModifyReservedInstancesResponse;
-import software.amazon.awssdk.services.ec2.model.Region;
-import software.amazon.awssdk.services.ec2.model.ReservedInstances;
-import software.amazon.awssdk.services.ec2.model.ReservedInstancesConfiguration;
-import software.amazon.awssdk.services.ec2.model.ReservedInstancesOffering;
-import software.amazon.awssdk.services.ec2.model.Snapshot;
-import software.amazon.awssdk.services.ec2.model.Tag;
-import software.amazon.awssdk.services.ec2.model.Volume;
-import software.amazon.awssdk.services.ec2.model.Vpc;
+import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.ecr.EcrClient;
 import software.amazon.awssdk.services.ecs.EcsClient;
 import software.amazon.awssdk.services.eks.EksClient;
@@ -151,6 +72,9 @@ import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.ec2.model.Tag;
+import software.amazon.awssdk.services.cloudwatch.model.Dimension;
+import software.amazon.awssdk.services.cloudwatch.model.Metric;
 
 import java.io.FileReader;
 import java.io.IOException;
@@ -165,19 +89,7 @@ import java.time.YearMonth;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -185,7 +97,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-
 
 @Service
 public class AwsDataService {
@@ -198,6 +109,9 @@ public class AwsDataService {
     private final String configuredRegion;
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
+    private final DashboardUpdateService dashboardUpdateService;
+    private final AiAdvisorService aiAdvisorService;
+
 
     @Value("${cloudformation.template.s3.url}")
     private String cloudFormationTemplateUrl;
@@ -221,15 +135,19 @@ public class AwsDataService {
             Map.entry("ap-south-1", new double[]{19.0760, 72.8777}),
             Map.entry("sa-east-1", new double[]{-23.5505, -46.6333}));
 
-
+    @Autowired
     public AwsDataService(PricingService pricingService,
                           CloudAccountRepository cloudAccountRepository,
                           AwsClientProvider awsClientProvider,
-                          StsClient stsClient) {
+                          StsClient stsClient,
+                          DashboardUpdateService dashboardUpdateService,
+                          @Lazy AiAdvisorService aiAdvisorService) {
         this.pricingService = pricingService;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
+        this.dashboardUpdateService = dashboardUpdateService;
+        this.aiAdvisorService = aiAdvisorService;
 
         String tmpAccountId;
         try {
@@ -262,7 +180,7 @@ public class AwsDataService {
             CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = getEbsVolumeRecommendations(account, activeRegions);
             CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture = getLambdaFunctionRecommendations(account, activeRegions);
             CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = getWastedResources(account, activeRegions);
-            CompletableFuture<List<SecurityFinding>> securityFindingsFuture = getComprehensiveSecurityFindings(account, activeRegions);
+            CompletableFuture<List<DashboardData.SecurityFinding>> securityFindingsFuture = getComprehensiveSecurityFindings(account, activeRegions);
             CompletableFuture<List<DashboardData.ServiceQuotaInfo>> serviceQuotasFuture = getServiceQuotaInfo(account, activeRegions);
             CompletableFuture<List<ReservationInventoryDto>> reservationInventoryFuture = getReservationInventory(account, activeRegions);
 
@@ -282,12 +200,11 @@ public class AwsDataService {
             ).thenApply(v -> {
                 logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {}, assembling DTO ---", accountId);
 
-                // *** FIXED: Gracefully handle failed futures to prevent NullPointerException ***
                 List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ec2RecsFuture.join();
                 List<DashboardData.OptimizationRecommendation> ebsRecs = ebsRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ebsRecsFuture.join();
                 List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : lambdaRecsFuture.join();
                 List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.isCompletedExceptionally() ? Collections.emptyList() : anomaliesFuture.join();
-                List<SecurityFinding> securityFindings = securityFindingsFuture.isCompletedExceptionally() ? Collections.emptyList() : securityFindingsFuture.join();
+                List<DashboardData.SecurityFinding> securityFindings = securityFindingsFuture.isCompletedExceptionally() ? Collections.emptyList() : securityFindingsFuture.join();
                 
                 List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
                     .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory))
@@ -302,6 +219,8 @@ public class AwsDataService {
                 DashboardData.OptimizationSummary optimizationSummary = getOptimizationSummary(
                     ec2Recs, ebsRecs, lambdaRecs, anomalies
                 );
+                
+                int securityScore = calculateSecurityScore(securityFindings);
 
                 DashboardData data = new DashboardData();
                 DashboardData.Account mainAccount = new DashboardData.Account(
@@ -310,12 +229,13 @@ public class AwsDataService {
                         costHistoryFuture.join(), billingFuture.join(), iamFuture.join(), savingsFuture.join(),
                         ec2Recs, anomalies, ebsRecs, lambdaRecs,
                         reservationFuture.join(), reservationPurchaseFuture.join(),
-                        optimizationSummary, wastedResourcesFuture.join(), serviceQuotasFuture.join());
+                        optimizationSummary, wastedResourcesFuture.join(), serviceQuotasFuture.join(),
+                        securityScore); // ADDED securityScore
 
                 data.setSelectedAccount(mainAccount);
 
                 List<DashboardData.Account> availableAccounts = cloudAccountRepository.findAll().stream()
-                    .map(acc -> new DashboardData.Account(acc.getAwsAccountId(), acc.getAccountName(), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))
+                    .map(acc -> new DashboardData.Account(acc.getAwsAccountId(), acc.getAccountName(), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 0))
                     .collect(Collectors.toList());
                 data.setAvailableAccounts(availableAccounts);
 
@@ -323,7 +243,6 @@ public class AwsDataService {
             });
         }).join();
     }
-
 
     private boolean isRegionActive(Ec2Client ec2Client, RdsClient rdsClient, LambdaClient lambdaClient, EcsClient ecsClient, software.amazon.awssdk.regions.Region region) {
         logger.debug("Performing activity check for region: {}", region.id());
@@ -340,7 +259,6 @@ public class AwsDataService {
         logger.debug("No activity found in region: {}", region.id());
         return false;
     }
-
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "regionStatus", key = "#account.awsAccountId")
@@ -385,8 +303,9 @@ public class AwsDataService {
 
     @Async("awsTaskExecutor")
     public CompletableFuture<DashboardData.ResourceInventory> getResourceInventory(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
-        logger.info("Fetching resource inventory for account {}...", account.getAwsAccountId());
-        
+        logger.info("Fetching comprehensive resource inventory for account {}...", account.getAwsAccountId());
+
+        // Regional futures
         List<CompletableFuture<Map<String, Integer>>> regionalFutures = activeRegions.stream()
             .map(region -> CompletableFuture.supplyAsync(() -> {
                 Map<String, Integer> regionalCounts = new HashMap<>();
@@ -416,29 +335,69 @@ public class AwsDataService {
                     regionalCounts.put("lambdas", lambda.listFunctions().functions().size());
                 } catch (Exception e) { logger.error("Inventory check failed for Lambda in region {} for account {}", regionId, account.getAwsAccountId(), e); }
 
+                try {
+                    RdsClient rds = awsClientProvider.getRdsClient(account, regionId);
+                    regionalCounts.put("rds", rds.describeDBInstances().dbInstances().size());
+                } catch (Exception e) { logger.error("Inventory check failed for RDS in region {} for account {}", regionId, account.getAwsAccountId(), e); }
+
+                try {
+                    ElasticLoadBalancingV2Client elbv2 = awsClientProvider.getElbv2Client(account, regionId);
+                    regionalCounts.put("elb", elbv2.describeLoadBalancers().loadBalancers().size());
+                } catch (Exception e) { logger.error("Inventory check failed for ELBv2 in region {} for account {}", regionId, account.getAwsAccountId(), e); }
+
                 return regionalCounts;
             }))
             .collect(Collectors.toList());
 
-        return CompletableFuture.allOf(regionalFutures.toArray(new CompletableFuture[0]))
-            .thenApply(v -> {
-                DashboardData.ResourceInventory totalInventory = new DashboardData.ResourceInventory();
-                regionalFutures.stream()
-                    .map(CompletableFuture::join)
-                    .forEach(regionalCounts -> {
-                        totalInventory.setVpc(totalInventory.getVpc() + regionalCounts.getOrDefault("vpc", 0));
-                        totalInventory.setEcs(totalInventory.getEcs() + regionalCounts.getOrDefault("ecs", 0));
-                        totalInventory.setEc2(totalInventory.getEc2() + regionalCounts.getOrDefault("ec2", 0));
-                        totalInventory.setKubernetes(totalInventory.getKubernetes() + regionalCounts.getOrDefault("k8s", 0));
-                        totalInventory.setLambdas(totalInventory.getLambdas() + regionalCounts.getOrDefault("lambdas", 0));
-                        totalInventory.setEbsVolumes(totalInventory.getEbsVolumes() + regionalCounts.getOrDefault("ebs", 0));
-                        totalInventory.setImages(totalInventory.getImages() + regionalCounts.getOrDefault("images", 0));
-                        totalInventory.setSnapshots(totalInventory.getSnapshots() + regionalCounts.getOrDefault("snapshots", 0));
-                    });
-                logger.debug("Aggregated total inventory for account {}: {}", account.getAwsAccountId(), totalInventory);
-                return totalInventory;
-            });
+        // Global futures
+        CompletableFuture<Integer> s3Future = CompletableFuture.supplyAsync(() -> {
+            try {
+                S3Client s3 = awsClientProvider.getS3Client(account, "us-east-1");
+                return s3.listBuckets().buckets().size();
+            } catch (Exception e) {
+                logger.error("Inventory check failed for S3 for account {}", account.getAwsAccountId(), e);
+                return 0;
+            }
+        });
+
+        CompletableFuture<Integer> r53Future = CompletableFuture.supplyAsync(() -> {
+            try {
+                Route53Client r53 = awsClientProvider.getRoute53Client(account);
+                return r53.listHostedZones().hostedZones().size();
+            } catch (Exception e) {
+                logger.error("Inventory check failed for Route53 for account {}", account.getAwsAccountId(), e);
+                return 0;
+            }
+        });
+        CompletableFuture<Void> allRegionalFutures = CompletableFuture.allOf(regionalFutures.toArray(new CompletableFuture[0]));
+        
+        return CompletableFuture.allOf(allRegionalFutures, s3Future, r53Future).thenApply(v -> {
+            DashboardData.ResourceInventory totalInventory = new DashboardData.ResourceInventory();
+            
+            regionalFutures.stream()
+                .map(CompletableFuture::join)
+                .forEach(regionalCounts -> {
+                    totalInventory.setVpc(totalInventory.getVpc() + regionalCounts.getOrDefault("vpc", 0));
+                    totalInventory.setEcs(totalInventory.getEcs() + regionalCounts.getOrDefault("ecs", 0));
+                    totalInventory.setEc2(totalInventory.getEc2() + regionalCounts.getOrDefault("ec2", 0));
+                    totalInventory.setKubernetes(totalInventory.getKubernetes() + regionalCounts.getOrDefault("k8s", 0));
+                    totalInventory.setLambdas(totalInventory.getLambdas() + regionalCounts.getOrDefault("lambdas", 0));
+                    totalInventory.setEbsVolumes(totalInventory.getEbsVolumes() + regionalCounts.getOrDefault("ebs", 0));
+                    totalInventory.setImages(totalInventory.getImages() + regionalCounts.getOrDefault("images", 0));
+                    totalInventory.setSnapshots(totalInventory.getSnapshots() + regionalCounts.getOrDefault("snapshots", 0));
+                    totalInventory.setRdsInstances(totalInventory.getRdsInstances() + regionalCounts.getOrDefault("rds", 0));
+                    totalInventory.setLoadBalancers(totalInventory.getLoadBalancers() + regionalCounts.getOrDefault("elb", 0));
+                });
+
+            totalInventory.setS3Buckets(s3Future.join());
+            totalInventory.setRoute53Zones(r53Future.join());
+
+            dashboardUpdateService.sendUpdate(account.getAwsAccountId(), "inventory", totalInventory);
+            logger.debug("Aggregated total inventory for account {}: {}", account.getAwsAccountId(), totalInventory);
+            return totalInventory;
+        });
     }
+    
 
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("eu-west-1", "eu-north-1", "ca-central-1", "us-west-2");
     private DashboardData.RegionStatus mapRegionToStatus(Region region) { double[] coords = REGION_GEO.get(region.regionName()); String status = "ACTIVE"; if (SUSTAINABLE_REGIONS.contains(region.regionName())) { status = "SUSTAINABLE"; } return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, coords[0], coords[1]); }
@@ -499,14 +458,14 @@ public class AwsDataService {
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "groupedCloudlistResources", key = "#accountId")
-    public CompletableFuture<List<ServiceGroupDto>> getAllResourcesGrouped(String accountId) {
+    public CompletableFuture<List<DashboardData.ServiceGroupDto>> getAllResourcesGrouped(String accountId) {
         CloudAccount account = getAccount(accountId);
         return getAllResources(account).thenApply(flatList -> {
-            List<ServiceGroupDto> groupedList = flatList.stream()
+            List<DashboardData.ServiceGroupDto> groupedList = flatList.stream()
                 .collect(Collectors.groupingBy(ResourceDto::getType))
                 .entrySet().stream()
-                .map(e -> new ServiceGroupDto(e.getKey(), e.getValue()))
-                .sorted(Comparator.comparing(ServiceGroupDto::getServiceType))
+                .map(e -> new DashboardData.ServiceGroupDto(e.getKey(), e.getValue()))
+                .sorted(Comparator.comparing(DashboardData.ServiceGroupDto::getServiceType))
                 .collect(Collectors.toList());
             logger.debug("Grouped Cloudlist resources into {} service groups for account {}", groupedList.size(), accountId);
             return groupedList;
@@ -739,6 +698,7 @@ public class AwsDataService {
                     .collect(Collectors.toList());
         }, "ACM Certificates");
     }
+
     private String getRegionFromArn(String arn) { if (arn == null || arn.isBlank()) return "Unknown"; try { String[] parts = arn.split(":"); if (parts.length > 3) { String region = parts[3]; return region.isEmpty() ? "Global" : region; } return "Global"; } catch (Exception e) { logger.warn("Could not parse region from ARN: {}", arn); return this.configuredRegion; } }
 
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId) {
@@ -940,7 +900,7 @@ public class AwsDataService {
         }, "Unattached ENIs");
     }
 
-   @Async("awsTaskExecutor")
+    @Async("awsTaskExecutor")
     @Cacheable(value = "cloudwatchStatus", key = "#account.awsAccountId")
     public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
@@ -951,7 +911,11 @@ public class AwsDataService {
             long ok = allAlarms.stream().filter(a -> a.stateValueAsString().equals("OK")).count();
             long alarm = allAlarms.stream().filter(a -> a.stateValueAsString().equals("ALARM")).count();
             long insufficient = allAlarms.stream().filter(a -> a.stateValueAsString().equals("INSUFFICIENT_DATA")).count();
-            return new DashboardData.CloudWatchStatus(ok, alarm, insufficient);
+            DashboardData.CloudWatchStatus status = new DashboardData.CloudWatchStatus(ok, alarm, insufficient);
+            
+            dashboardUpdateService.sendUpdate(account.getAwsAccountId(), "cloudwatch", status);
+
+            return status;
         });
     }
 
@@ -1040,7 +1004,7 @@ public class AwsDataService {
         }
     }
 
-   @Async("awsTaskExecutor")
+    @Async("awsTaskExecutor")
     @Cacheable(value = "reservationAnalysis", key = "#account.awsAccountId")
     public CompletableFuture<DashboardData.ReservationAnalysis> getReservationAnalysis(CloudAccount account) {
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
@@ -1135,6 +1099,7 @@ public class AwsDataService {
         logger.info("Fetching cost history for account {}...", account.getAwsAccountId());
         List<String> labels = new ArrayList<>();
         List<Double> costs = new ArrayList<>();
+        List<Boolean> anomalies = new ArrayList<>();
         try {
             for (int i = 5; i >= 0; i--) {
                 LocalDate month = LocalDate.now().minusMonths(i);
@@ -1142,12 +1107,26 @@ public class AwsDataService {
                 GetCostAndUsageRequest req = GetCostAndUsageRequest.builder()
                         .timePeriod(DateInterval.builder().start(month.withDayOfMonth(1).toString()).end(month.plusMonths(1).withDayOfMonth(1).toString()).build())
                         .granularity(Granularity.MONTHLY).metrics("UnblendedCost").build();
-                costs.add(Double.parseDouble(ce.getCostAndUsage(req).resultsByTime().get(0).total().get("UnblendedCost").amount()));
+                double currentCost = Double.parseDouble(ce.getCostAndUsage(req).resultsByTime().get(0).total().get("UnblendedCost").amount());
+                costs.add(currentCost);
+
+                boolean isAnomaly = false;
+                if (costs.size() > 1) {
+                    double previousCost = costs.get(costs.size() - 2);
+                    if (previousCost > 100) {
+                        double changePercent = ((currentCost - previousCost) / previousCost) * 100;
+                        if (changePercent > 20) {
+                            isAnomaly = true;
+                        }
+                    }
+                }
+                anomalies.add(isAnomaly);
             }
         } catch (Exception e) {
             logger.error("Could not fetch cost history for account {}", account.getAwsAccountId(), e);
         }
-        return CompletableFuture.completedFuture(new DashboardData.CostHistory(labels, costs));
+        
+        return CompletableFuture.completedFuture(new DashboardData.CostHistory(labels, costs, anomalies));
     }
 
     @Async("awsTaskExecutor")
@@ -1157,7 +1136,9 @@ public class AwsDataService {
         return CompletableFuture.completedFuture(new DashboardData.SavingsSummary(
                 suggestions.stream().mapToDouble(DashboardData.SavingsSuggestion::getSuggested).sum(), suggestions));
     }
-     private String getTagName(Volume volume) { return volume.hasTags() ? volume.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(volume.volumeId()) : volume.volumeId(); }
+    
+    // --- HELPER METHODS ---
+    private String getTagName(Volume volume) { return volume.hasTags() ? volume.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(volume.volumeId()) : volume.volumeId(); }
     private String getTagName(Snapshot snapshot) { return snapshot.hasTags() ? snapshot.tags().stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(snapshot.snapshotId()) : snapshot.snapshotId();  }
     public String getTagName(List<Tag> tags, String defaultName) { return tags.stream().filter(t -> t.key().equalsIgnoreCase("Name")).findFirst().map(Tag::value).orElse(defaultName); }
     private double calculateEbsMonthlyCost(Volume volume, String region) { double gbMonthPrice = pricingService.getEbsGbMonthPrice(region, volume.volumeTypeAsString()); return volume.size() * gbMonthPrice; }
@@ -1166,7 +1147,6 @@ public class AwsDataService {
     private String getServiceNameFromAnomaly(Anomaly anomaly) { if (anomaly.rootCauses() != null && !anomaly.rootCauses().isEmpty()) { RootCause rootCause = anomaly.rootCauses().get(0); if (rootCause.service() != null) return rootCause.service(); } return "Unknown Service"; }
     private String getFieldValue(Object details, String methodName) { try { Method method = details.getClass().getMethod(methodName); Object result = method.invoke(details); return result != null ? result.toString() : "0"; } catch (Exception e) { logger.debug("Could not access method {}: {}", methodName, e.getMessage()); return "N/A"; } }
     private String getTermValue(ReservationPurchaseRecommendation rec) { try { return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year"; } catch (Exception e) { logger.debug("Could not determine term value", e); return "1 Year"; } }
-
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "vpcListForCloudmap", key = "#accountId")
@@ -1182,7 +1162,6 @@ public class AwsDataService {
             }, "VPCs List for Cloudmap")
         );
     }
-
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "graphData", key = "#accountId + '-' + #vpcId")
@@ -1363,9 +1342,9 @@ public class AwsDataService {
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "securityFindings", key = "#account.awsAccountId")
-    public CompletableFuture<List<SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Starting comprehensive security scan for account {}...", account.getAwsAccountId());
-        List<CompletableFuture<List<SecurityFinding>>> futures = List.of(
+        List<CompletableFuture<List<DashboardData.SecurityFinding>>> futures = List.of(
             findUsersWithoutMfa(account), findPublicS3Buckets(account), findUnrestrictedSecurityGroups(account, activeRegions),
             findVpcsWithoutFlowLogs(account, activeRegions), checkCloudTrailStatus(account, activeRegions), findUnusedIamRoles(account)
         );
@@ -1373,18 +1352,49 @@ public class AwsDataService {
             .thenApply(v -> futures.stream().map(CompletableFuture::join).flatMap(List::stream).collect(Collectors.toList()));
     }
 
-    private CompletableFuture<List<SecurityFinding>> findUsersWithoutMfa(CloudAccount account) {
+    private int calculateSecurityScore(List<DashboardData.SecurityFinding> findings) {
+        if (findings == null || findings.isEmpty()) {
+            return 100;
+        }
+        Map<String, Long> counts = findings.stream()
+            .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getSeverity, Collectors.counting()));
+
+        long criticalWeight = 5;
+        long highWeight = 2;
+        long mediumWeight = 1;
+        long lowWeight = 0; // Low severity findings might not impact the score
+
+        long weightedScore = (counts.getOrDefault("Critical", 0L) * criticalWeight) +
+                             (counts.getOrDefault("High", 0L) * highWeight) +
+                             (counts.getOrDefault("Medium", 0L) * mediumWeight) +
+                             (counts.getOrDefault("Low", 0L) * lowWeight);
+
+        // Normalize the score. This is a simple heuristic and can be adjusted.
+        // Let's assume a "perfect" account has 0 weighted score.
+        // A "very bad" account might have a weighted score of 50+.
+        // We can use a simple inverse formula.
+        double score = 100.0 / (1 + 0.1 * weightedScore);
+        
+        return Math.max(0, (int) Math.round(score * 100 / 100.0));
+    }
+
+
+    private CompletableFuture<List<DashboardData.SecurityFinding>> findUsersWithoutMfa(CloudAccount account) {
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking for IAM users without MFA...", account.getAwsAccountId());
-            List<SecurityFinding> findings = new ArrayList<>();
+            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
             IamClient iam = awsClientProvider.getIamClient(account);
             try {
                 iam.listUsers().users().forEach(user -> {
-                    if (user.passwordLastUsed() != null || iam.getLoginProfile(r -> r.userName(user.userName())).sdkHttpResponse().isSuccessful()) {
-                        software.amazon.awssdk.services.iam.model.ListMfaDevicesResponse mfaDevicesResponse = iam.listMFADevices(r -> r.userName(user.userName()));
-                        if (!mfaDevicesResponse.hasMfaDevices() || mfaDevicesResponse.mfaDevices().isEmpty()) {
-                            findings.add(new SecurityFinding(user.userName(), "Global", "IAM", "High", "User has console access but MFA is not enabled.", "CIS AWS Foundations", "1.2"));
+                    try {
+                        if (user.passwordLastUsed() != null || iam.getLoginProfile(r -> r.userName(user.userName())).sdkHttpResponse().isSuccessful()) {
+                            software.amazon.awssdk.services.iam.model.ListMfaDevicesResponse mfaDevicesResponse = iam.listMFADevices(r -> r.userName(user.userName()));
+                            if (!mfaDevicesResponse.hasMfaDevices() || mfaDevicesResponse.mfaDevices().isEmpty()) {
+                                findings.add(new DashboardData.SecurityFinding(user.userName(), "Global", "IAM", "High", "User has console access but MFA is not enabled.", "CIS AWS Foundations", "1.2"));
+                            }
                         }
+                    } catch (NoSuchEntityException e) {
+                        // This is expected for users without a login profile, so we can ignore it.
                     }
                 });
             } catch (Exception e) {
@@ -1394,62 +1404,66 @@ public class AwsDataService {
         });
     }
 
-    private CompletableFuture<List<SecurityFinding>> findPublicS3Buckets(CloudAccount account) {
+    private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Buckets(CloudAccount account) {
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking for public S3 buckets...", account.getAwsAccountId());
-            List<SecurityFinding> findings = new ArrayList<>();
+            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
             S3Client s3Lister = awsClientProvider.getS3Client(account, "us-east-1");
             try {
                 List<Bucket> buckets = s3Lister.listBuckets().buckets();
                 buckets.parallelStream().forEach(bucket -> {
-                    String bucketName = bucket.name();
-                    String bucketRegion = "us-east-1";
                     try {
-                        bucketRegion = s3Lister.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
-                        if (bucketRegion == null || bucketRegion.isEmpty()) {
-                            bucketRegion = "us-east-1";
-                        }
-                    } catch (S3Exception e) {
-                        bucketRegion = e.awsErrorDetails().sdkHttpResponse()
-                                        .firstMatchingHeader("x-amz-bucket-region")
-                                        .orElse("us-east-1");
-                        logger.warn("Could not directly get location for bucket {}, falling back to region '{}' from exception.", bucketName, bucketRegion);
-                    }
-    
-                    S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
-                    boolean isPublic = false;
-                    String reason = "";
-    
-                    try {
-                        GetPublicAccessBlockRequest pabRequest = GetPublicAccessBlockRequest.builder().bucket(bucketName).build();
-                        PublicAccessBlockConfiguration pab = regionalS3Client.getPublicAccessBlock(pabRequest).publicAccessBlockConfiguration();
-                        if (!pab.blockPublicAcls() || !pab.ignorePublicAcls() || !pab.blockPublicPolicy() || !pab.restrictPublicBuckets()) {
-                            isPublic = true;
-                            reason = "Public Access Block is not fully enabled.";
-                        }
-                    } catch (Exception e) {
-                        logger.debug("Could not get Public Access Block for bucket {}. It might not be set. Error: {}", bucketName, e.getMessage());
-                    }
-    
-                    if (!isPublic) {
+                        String bucketName = bucket.name();
+                        String bucketRegion = "us-east-1";
                         try {
-                            boolean hasPublicAcl = regionalS3Client.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
-                                .anyMatch(grant -> {
-                                    String granteeUri = grant.grantee().uri();
-                                    return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
-                                        && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
-                                });
-                            if (hasPublicAcl) {
+                            bucketRegion = s3Lister.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
+                            if (bucketRegion == null || bucketRegion.isEmpty()) {
+                                bucketRegion = "us-east-1";
+                            }
+                        } catch (S3Exception e) {
+                            bucketRegion = e.awsErrorDetails().sdkHttpResponse()
+                                            .firstMatchingHeader("x-amz-bucket-region")
+                                            .orElse("us-east-1");
+                            logger.warn("Could not directly get location for bucket {}, falling back to region '{}' from exception.", bucketName, bucketRegion);
+                        }
+        
+                        S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
+                        boolean isPublic = false;
+                        String reason = "";
+        
+                        try {
+                            GetPublicAccessBlockRequest pabRequest = GetPublicAccessBlockRequest.builder().bucket(bucketName).build();
+                            PublicAccessBlockConfiguration pab = regionalS3Client.getPublicAccessBlock(pabRequest).publicAccessBlockConfiguration();
+                            if (!pab.blockPublicAcls() || !pab.ignorePublicAcls() || !pab.blockPublicPolicy() || !pab.restrictPublicBuckets()) {
                                 isPublic = true;
-                                reason = "Bucket ACL grants public access.";
+                                reason = "Public Access Block is not fully enabled.";
                             }
                         } catch (Exception e) {
-                             logger.warn("Could not check ACL for bucket {}: {}", bucketName, e.getMessage());
+                            logger.debug("Could not get Public Access Block for bucket {}. It might not be set. Checking ACLs. Error: {}", bucketName, e.getMessage());
                         }
-                    }
-    
-                    if (isPublic) {
-                        findings.add(new SecurityFinding(bucketName, bucketRegion, "S3", "Critical", reason, "CIS AWS Foundations", "2.1.2"));
+        
+                        if (!isPublic) {
+                            try {
+                                boolean hasPublicAcl = regionalS3Client.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
+                                    .anyMatch(grant -> {
+                                        String granteeUri = grant.grantee().uri();
+                                        return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
+                                            && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
+                                    });
+                                if (hasPublicAcl) {
+                                    isPublic = true;
+                                    reason = "Bucket ACL grants public access.";
+                                }
+                            } catch (Exception e) {
+                                 logger.warn("Could not check ACL for bucket {}: {}", bucketName, e.getMessage());
+                            }
+                        }
+        
+                        if (isPublic) {
+                            findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "Critical", reason, "CIS AWS Foundations", "2.1.2"));
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to process S3 bucket security check for bucket: {}", bucket.name(), e);
                     }
                 });
             } catch (Exception e) {
@@ -1459,58 +1473,72 @@ public class AwsDataService {
         });
     }
 
-    private CompletableFuture<List<SecurityFinding>> findUnrestrictedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    private CompletableFuture<List<DashboardData.SecurityFinding>> findUnrestrictedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             logger.info("Security Scan for account {}: Checking for unrestricted security groups in {}...", account.getAwsAccountId(), regionId);
-            List<SecurityFinding> findings = new ArrayList<>();
+            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-            ec2.describeSecurityGroups().securityGroups().forEach(sg -> {
-                sg.ipPermissions().forEach(perm -> {
-                    boolean openToWorld = perm.ipRanges().stream().anyMatch(ip -> "0.0.0.0/0".equals(ip.cidrIp()));
-                    if (openToWorld) {
-                        String description = String.format("Allows inbound traffic from anywhere (0.0.0.0/0) on port(s) %s",
-                            perm.fromPort() == null ? "ALL" : (Objects.equals(perm.fromPort(), perm.toPort()) ? perm.fromPort().toString() : perm.fromPort() + "-" + perm.toPort()));
-                        findings.add(new SecurityFinding(sg.groupId(), regionId, "VPC", "Critical", description, "CIS AWS Foundations", "4.1"));
-                    }
+            try {
+                ec2.describeSecurityGroups().securityGroups().forEach(sg -> {
+                    sg.ipPermissions().forEach(perm -> {
+                        boolean openToWorld = perm.ipRanges().stream().anyMatch(ip -> "0.0.0.0/0".equals(ip.cidrIp()));
+                        if (openToWorld) {
+                            String description = String.format("Allows inbound traffic from anywhere (0.0.0.0/0) on port(s) %s",
+                                perm.fromPort() == null ? "ALL" : (Objects.equals(perm.fromPort(), perm.toPort()) ? perm.fromPort().toString() : perm.fromPort() + "-" + perm.toPort()));
+                            findings.add(new DashboardData.SecurityFinding(sg.groupId(), regionId, "VPC", "Critical", description, "CIS AWS Foundations", "4.1"));
+                        }
+                    });
                 });
-            });
+            } catch (Exception e) {
+                logger.error("Failed to check security groups in region {} for account {}", regionId, account.getAwsAccountId(), e);
+            }
             return findings;
         }, "Unrestricted Security Groups");
     }
 
-    private CompletableFuture<List<SecurityFinding>> findVpcsWithoutFlowLogs(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    private CompletableFuture<List<DashboardData.SecurityFinding>> findVpcsWithoutFlowLogs(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             logger.info("Security Scan for account {}: Checking for VPCs without Flow Logs in {}...", account.getAwsAccountId(), regionId);
-            Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-            Set<String> vpcsWithFlowLogs = ec2.describeFlowLogs().flowLogs().stream().map(FlowLog::resourceId).collect(Collectors.toSet());
-            return ec2.describeVpcs().vpcs().stream()
-                    .filter(vpc -> !vpcsWithFlowLogs.contains(vpc.vpcId()))
-                    .map(vpc -> new SecurityFinding(vpc.vpcId(), regionId, "VPC", "Medium", "VPC does not have Flow Logs enabled.", "CIS AWS Foundations", "2.9"))
-                    .collect(Collectors.toList());
+            try {
+                Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+                Set<String> vpcsWithFlowLogs = ec2.describeFlowLogs().flowLogs().stream().map(FlowLog::resourceId).collect(Collectors.toSet());
+                return ec2.describeVpcs().vpcs().stream()
+                        .filter(vpc -> !vpcsWithFlowLogs.contains(vpc.vpcId()))
+                        .map(vpc -> new DashboardData.SecurityFinding(vpc.vpcId(), regionId, "VPC", "Medium", "VPC does not have Flow Logs enabled.", "CIS AWS Foundations", "2.9"))
+                        .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("Failed to check for VPC Flow Logs in region {} for account {}", regionId, account.getAwsAccountId(), e);
+                return Collections.emptyList();
+            }
         }, "VPCs without Flow Logs");
     }
 
-    private CompletableFuture<List<SecurityFinding>> checkCloudTrailStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    private CompletableFuture<List<DashboardData.SecurityFinding>> checkCloudTrailStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking CloudTrail status...", account.getAwsAccountId());
-            List<SecurityFinding> findings = new ArrayList<>();
+            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
             if (activeRegions.isEmpty()) {
                 logger.warn("No active regions found for account {}, skipping CloudTrail check.", account.getAwsAccountId());
                 return findings;
             }
-            CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, activeRegions.get(0).getRegionId());
             try {
+                CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, activeRegions.get(0).getRegionId());
                 List<Trail> trails = cloudTrail.describeTrails().trailList();
                 if (trails.isEmpty()) {
-                    findings.add(new SecurityFinding("Account", "Global", "CloudTrail", "Critical", "No CloudTrail trails are configured for the account.", "CIS AWS Foundations", "2.1"));
+                    findings.add(new DashboardData.SecurityFinding("Account", "Global", "CloudTrail", "Critical", "No CloudTrail trails are configured for the account.", "CIS AWS Foundations", "2.1"));
                     return findings;
                 }
                 boolean hasActiveMultiRegionTrail = trails.stream().anyMatch(t -> {
-                    boolean isLogging = cloudTrail.getTrailStatus(r -> r.name(t.name())).isLogging();
-                    return t.isMultiRegionTrail() && isLogging;
+                    try {
+                        boolean isLogging = cloudTrail.getTrailStatus(r -> r.name(t.name())).isLogging();
+                        return t.isMultiRegionTrail() && isLogging;
+                    } catch (Exception e) {
+                        logger.warn("Could not get status for trail {}, assuming not logging.", t.name());
+                        return false;
+                    }
                 });
                 if (!hasActiveMultiRegionTrail) {
-                    findings.add(new SecurityFinding("Account", "Global", "CloudTrail", "High", "No active, multi-region CloudTrail trail found.", "CIS AWS Foundations", "2.1"));
+                    findings.add(new DashboardData.SecurityFinding("Account", "Global", "CloudTrail", "High", "No active, multi-region CloudTrail trail found.", "CIS AWS Foundations", "2.1"));
                 }
             } catch (Exception e) {
                 logger.error("Security Scan failed for account {}: Could not check CloudTrail status.", account.getAwsAccountId(), e);
@@ -1519,10 +1547,10 @@ public class AwsDataService {
         });
     }
 
-    private CompletableFuture<List<SecurityFinding>> findUnusedIamRoles(CloudAccount account) {
+    private CompletableFuture<List<DashboardData.SecurityFinding>> findUnusedIamRoles(CloudAccount account) {
         return CompletableFuture.supplyAsync(() -> {
             logger.info("Security Scan for account {}: Checking for unused IAM roles...", account.getAwsAccountId());
-            List<SecurityFinding> findings = new ArrayList<>();
+            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
             IamClient iam = awsClientProvider.getIamClient(account);
             Instant ninetyDaysAgo = Instant.now().minus(90, ChronoUnit.DAYS);
             try {
@@ -1533,10 +1561,10 @@ public class AwsDataService {
                                 Role lastUsed = iam.getRole(r -> r.roleName(role.roleName())).role();
                                 if (lastUsed.roleLastUsed() == null || lastUsed.roleLastUsed().lastUsedDate() == null) {
                                     if (role.createDate().isBefore(ninetyDaysAgo)) {
-                                        findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Medium", "Role has never been used and was created over 90 days ago.", "Custom Best Practice", "IAM-001"));
+                                        findings.add(new DashboardData.SecurityFinding(role.roleName(), "Global", "IAM", "Medium", "Role has never been used and was created over 90 days ago.", "Custom Best Practice", "IAM-001"));
                                     }
                                 } else if (lastUsed.roleLastUsed().lastUsedDate().isBefore(ninetyDaysAgo)) {
-                                    findings.add(new SecurityFinding(role.roleName(), "Global", "IAM", "Low", "Role has not been used in over 90 days.", "Custom Best Practice", "IAM-002"));
+                                    findings.add(new DashboardData.SecurityFinding(role.roleName(), "Global", "IAM", "Low", "Role has not been used in over 90 days.", "Custom Best Practice", "IAM-002"));
                                 }
                             } catch (Exception e) {
                                 logger.warn("Could not get last used info for role {} in account {}: {}", role.roleName(), account.getAwsAccountId(), e.getMessage());
@@ -1561,8 +1589,8 @@ public class AwsDataService {
             CompletableFuture<List<DashboardData.OptimizationRecommendation>> rightsizingFuture = getAllOptimizationRecommendations(accountId);
             CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
             CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
-            CompletableFuture<TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account, activeRegions);
-            CompletableFuture<List<BudgetDetails>> budgetsFuture = getAccountBudgets(account);
+            CompletableFuture<DashboardData.TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account, activeRegions);
+            CompletableFuture<List<DashboardData.BudgetDetails>> budgetsFuture = getAccountBudgets(account);
 
             return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture)
                     .thenApply(v -> {
@@ -1573,8 +1601,8 @@ public class AwsDataService {
                         List<DashboardData.OptimizationRecommendation> rightsizingRecommendations = rightsizingFuture.join();
                          List<DashboardData.CostAnomaly> costAnomalies = anomaliesFuture.join();
                         DashboardData.CostHistory costHistory = costHistoryFuture.join();
-                        TaggingCompliance taggingCompliance = taggingComplianceFuture.join();
-                        List<BudgetDetails> budgets = budgetsFuture.join();
+                        DashboardData.TaggingCompliance taggingCompliance = taggingComplianceFuture.join();
+                        List<DashboardData.BudgetDetails> budgets = budgetsFuture.join();
 
                         double mtdSpend = billingSummary.stream().mapToDouble(DashboardData.BillingSummary::getMonthToDateCost).sum();
                         double lastMonthSpend = 0.0;
@@ -1604,7 +1632,7 @@ public class AwsDataService {
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "budgets", key = "#account.awsAccountId")
-    public CompletableFuture<List<BudgetDetails>> getAccountBudgets(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.BudgetDetails>> getAccountBudgets(CloudAccount account) {
         BudgetsClient budgetsClient = awsClientProvider.getBudgetsClient(account);
         logger.info("FinOps Scan: Fetching account budgets for account {}...", account.getAwsAccountId());
         try {
@@ -1612,7 +1640,7 @@ public class AwsDataService {
             List<Budget> budgets = budgetsClient.describeBudgets(request).budgets();
 
             return CompletableFuture.completedFuture(
-                budgets.stream().map(b -> new BudgetDetails(
+                budgets.stream().map(b -> new DashboardData.BudgetDetails(
                     b.budgetName(), b.budgetLimit().amount(), b.budgetLimit().unit(),
                     b.calculatedSpend() != null ? b.calculatedSpend().actualSpend().amount() : BigDecimal.ZERO,
                     b.calculatedSpend() != null && b.calculatedSpend().forecastedSpend() != null ? b.calculatedSpend().forecastedSpend().amount() : BigDecimal.ZERO
@@ -1624,7 +1652,7 @@ public class AwsDataService {
         }
     }
 
-    public void createBudget(String accountId, BudgetDetails budgetDetails) {
+    public void createBudget(String accountId, DashboardData.BudgetDetails budgetDetails) {
         CloudAccount account = getAccount(accountId);
         BudgetsClient budgetsClient = awsClientProvider.getBudgetsClient(account);
         logger.info("Creating new budget: {} for account {}", budgetDetails.getBudgetName(), account.getAwsAccountId());
@@ -1644,7 +1672,7 @@ public class AwsDataService {
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "taggingCompliance", key = "#account.awsAccountId")
-    public CompletableFuture<TaggingCompliance> getTaggingCompliance(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<DashboardData.TaggingCompliance> getTaggingCompliance(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("FinOps Scan: Checking tagging compliance for account {}...", account.getAwsAccountId());
 
         CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist(account, activeRegions);
@@ -1653,7 +1681,7 @@ public class AwsDataService {
 
         return CompletableFuture.allOf(ec2Future, rdsFuture, s3Future).thenApply(v -> {
             List<ResourceDto> allResources = Stream.of(ec2Future.join(), rdsFuture.join(), s3Future.join()).flatMap(List::stream).collect(Collectors.toList());
-            List<UntaggedResource> untaggedList = new ArrayList<>();
+            List<DashboardData.UntaggedResource> untaggedList = new ArrayList<>();
             int taggedCount = 0;
 
             for (ResourceDto resource : allResources) {
@@ -1661,12 +1689,12 @@ public class AwsDataService {
                 if (resource.getName() == null || resource.getName().equals("N/A") || resource.getName().equals(resource.getId())) missingTags.add("Name");
                 if (System.currentTimeMillis() % 4 == 0) missingTags.add("cost-center");
                 if (missingTags.isEmpty()) taggedCount++;
-                else untaggedList.add(new UntaggedResource(resource.getId(), resource.getType(), resource.getRegion(), missingTags));
+                else untaggedList.add(new DashboardData.UntaggedResource(resource.getId(), resource.getType(), resource.getRegion(), missingTags));
             }
 
             int totalScanned = allResources.size();
             double percentage = (totalScanned > 0) ? ((double) taggedCount / totalScanned) * 100.0 : 100.0;
-            return new TaggingCompliance(percentage, totalScanned, untaggedList.size(), untaggedList.stream().limit(20).collect(Collectors.toList()));
+            return new DashboardData.TaggingCompliance(percentage, totalScanned, untaggedList.size(), untaggedList.stream().limit(20).collect(Collectors.toList()));
         });
     }
 
@@ -2390,9 +2418,16 @@ public class AwsDataService {
                         .collect(Collectors.toList());
 
                 return new ResourceDetailDto(
-                    volume.volumeId(), getTagName(volume.tags(), volume.volumeId()), "EBS Volume",
-                    ebsRegion, volume.stateAsString(), volume.createTime(),
-                    details, tags, Collections.emptyMap(), Collections.emptyList()
+                    volume.volumeId(),
+                    getTagName(volume.tags(), volume.volumeId()),
+                    "EBS Volume",
+                    ebsRegion, 
+                    volume.stateAsString(), 
+                    volume.createTime(),
+                    details, 
+                    tags, 
+                    Collections.emptyMap(), 
+                    Collections.emptyList()
                 );
             } catch (Exception e) {
                 logger.error("Failed to fetch live details for EBS volume {}", resourceId, e);
@@ -2459,7 +2494,7 @@ public class AwsDataService {
         return null; 
     }
 
-        public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId, String region) {
+    public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId, String region) {
         CloudAccount account = getAccount(accountId);
         CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
         logger.info("Fetching CloudWatch metrics for instance: {} in region {} for account {}", instanceId, region, accountId);
@@ -2478,7 +2513,8 @@ public class AwsDataService {
             return Collections.emptyMap();
         }
     }
-        private List<ResourceDetailDto.CloudTrailEventDto> getCloudTrailEventsForResource(CloudAccount account, String resourceId, String region) {
+
+    private List<ResourceDetailDto.CloudTrailEventDto> getCloudTrailEventsForResource(CloudAccount account, String resourceId, String region) {
         logger.info("Fetching CloudTrail events for resource {} in region {}", resourceId, region);
         CloudTrailClient trailClient = awsClientProvider.getCloudTrailClient(account, region);
         try {
@@ -2501,14 +2537,15 @@ public class AwsDataService {
             return new ArrayList<>();
         }
     }
-        private ResourceDetailDto.CloudTrailEventDto mapToCloudTrailEventDto(Event event) {
+    
+    private ResourceDetailDto.CloudTrailEventDto mapToCloudTrailEventDto(Event event) {
         return new ResourceDetailDto.CloudTrailEventDto(
                 event.eventId(),
                 event.eventName(),
                 event.eventTime(),
                 event.username(),
                 "N/A", 
-event.readOnly() != null && Boolean.parseBoolean(event.readOnly())
-        );
+event.readOnly() != null && Boolean.parseBoolean(event.readOnly()) 
+       );
     }
 }

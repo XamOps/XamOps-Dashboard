@@ -5,13 +5,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import com.xammer.cloud.repository.UserRepository;
+import org.springframework.security.core.userdetails.User;
+
+import java.util.ArrayList;
 
 @Configuration
 @EnableWebSecurity
@@ -27,11 +29,13 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests((requests) -> requests
+                // Allow WebSocket connections
+                .antMatchers("/ws/**").permitAll()
                 .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
                 .anyRequest().permitAll()
             )
             .formLogin((form) -> form
-                .loginPage("/login") // Defines the custom login page URL
+                .loginPage("/login")
                 .successHandler(authenticationSuccessHandler)
                 .permitAll()
             )
@@ -48,14 +52,14 @@ public class SecurityConfig {
     }
 
     @Bean
-    public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
-        UserDetails user =
-             User.builder()
-                .username("user")
-                .password(passwordEncoder.encode("password"))
-                .roles("USER")
-                .build();
+    public UserDetailsService userDetailsService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        // Create a default user if it doesn't exist
+        if (userRepository.findByUsername("user").isEmpty()) {
+            userRepository.save(new com.xammer.cloud.domain.User("user", passwordEncoder.encode("password")));
+        }
 
-        return new InMemoryUserDetailsManager(user);
+        return username -> userRepository.findByUsername(username)
+                .map(user -> new User(user.getUsername(), user.getPassword(), new ArrayList<>()))
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
 }

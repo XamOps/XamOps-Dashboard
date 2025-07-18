@@ -10,13 +10,271 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
         [x-cloak] { display: none !important; }
-        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
-        .progress-bar { background-color: #e5e7eb; border-radius: 9999px; overflow: hidden; }
-        .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; border-radius: 9999px; }
-        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .kpi-card {
+            position: relative;
+            overflow: hidden;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary-gradient);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .kpi-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .kpi-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .progress-bar { 
+            background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 100%);
+            border-radius: 9999px; 
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .progress-bar-fill { 
+            height: 100%; 
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 9999px;
+            background: var(--success-gradient);
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+        }
+        
+        .progress-bar-warning {
+            background: var(--warning-gradient);
+            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+        }
+        
+        .progress-bar-danger {
+            background: var(--error-gradient);
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+        }
+        
+        .skeleton { 
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-content {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .chart-container {
+            position: relative;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--glass-border);
+        }
+        
+        .table-enhanced {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .table-enhanced thead {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+        
+        .table-enhanced tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .tag-input {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .tag-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .empty-state {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 2px dashed rgba(156, 163, 175, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .empty-state:hover {
+            border-color: rgba(102, 126, 234, 0.3);
+            background: rgba(255, 255, 255, 0.98);
+        }
+        
+        .trend-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+        }
+        
+        .trend-up {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        
+        .trend-down {
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        
+        .icon-gradient {
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -28,161 +286,248 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="finopsReport()">
-            <!-- Header -->
-            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-800">FinOps Report</h1>
-                    <p class="text-xs text-gray-500">Centralized dashboard for cloud financial operations</p>
+            <!-- Enhanced Header -->
+            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">FinOps Report</h1>
+                        <p class="text-sm text-gray-600">Cloud financial operations dashboard</p>
+                    </div>
                 </div>
-                <button @click="loadReport(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
-                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
-                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
-                </button>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                        <span class="text-sm text-gray-600">Live data</span>
+                    </div>
+                    <button @click="loadReport(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                        <span x-text="isLoading ? 'Refreshing...' : 'Refresh Data'"></span>
+                    </button>
+                </div>
             </header>
 
-            <div class="flex-1 p-6 space-y-6">
-                <!-- KPIs -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="flex-1 p-8 space-y-8">
+                <!-- Enhanced KPIs -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <template x-for="kpi in kpis" :key="kpi.label">
-                        <div class="bg-white rounded-xl p-5 card-shadow">
-                            <div x-show="isLoading" class="skeleton h-24 w-full rounded-lg"></div>
+                        <div class="kpi-card rounded-2xl p-6 fade-in">
+                            <div x-show="isLoading" class="skeleton h-28 w-full rounded-lg"></div>
                             <div x-show="!isLoading">
-                                <div class="flex justify-between items-start">
-                                    <h3 class="text-gray-500 text-sm font-medium" x-text="kpi.label"></h3>
-                                    <div class="p-3 rounded-lg" :class="kpi.color.bg"><i class="fas text-lg" :class="[kpi.icon, kpi.color.text]"></i></div>
+                                <div class="flex justify-between items-start mb-4">
+                                    <h3 class="text-gray-600 text-sm font-medium" x-text="kpi.label"></h3>
+                                    <div class="p-3 rounded-xl" :class="kpi.color.bg">
+                                        <i class="fas text-xl" :class="[kpi.icon, kpi.color.text]"></i>
+                                    </div>
                                 </div>
-                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="kpi.value"></p>
-                                <div class="flex items-center text-xs mt-1" :class="kpi.trendColor">
-                                    <i class="fas" :class="kpi.trendIcon"></i>
-                                    <span class="ml-1" x-text="kpi.trendText"></span>
+                                <p class="text-3xl font-bold text-gray-900 mb-2" x-text="kpi.value"></p>
+                                <div class="trend-indicator" :class="kpi.trendColor.includes('red') ? 'trend-up' : 'trend-down'" x-show="kpi.trendText">
+                                    <i class="fas mr-1" :class="kpi.trendIcon"></i>
+                                    <span x-text="kpi.trendText"></span>
                                 </div>
                             </div>
                         </div>
                     </template>
                 </div>
                 
-                <!-- Budgets & Alerts Section -->
-                <div class="bg-white rounded-xl p-6 card-shadow">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-semibold text-gray-800">Budgets & Alerts</h3>
-                        <button @click="isBudgetModalOpen = true" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                <!-- Enhanced Budgets & Alerts Section -->
+                <div class="glass-card rounded-2xl p-8 fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-wallet text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-800">Budgets & Alerts</h3>
+                                <p class="text-sm text-gray-600">Monitor and control your spending</p>
+                            </div>
+                        </div>
+                        <button @click="isBudgetModalOpen = true" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg shadow-md">
                             <i class="fas fa-plus mr-2"></i>Create Budget
                         </button>
                     </div>
-                    <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="skeleton h-24 w-full rounded-lg"></div>
-                        <div class="skeleton h-24 w-full rounded-lg"></div>
+                    
+                    <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="skeleton h-32 w-full rounded-xl"></div>
+                        <div class="skeleton h-32 w-full rounded-xl"></div>
                     </div>
-                    <div x-show="!isLoading && reportData.budgets.length === 0" class="text-center py-8 border-2 border-dashed rounded-lg">
-                        <i class="fas fa-wallet fa-2x text-gray-400"></i>
-                        <h4 class="mt-2 font-semibold">No Budgets Found</h4>
-                        <p class="text-sm text-gray-500">Click 'Create Budget' to start tracking your spend.</p>
+                    
+                    <div x-show="!isLoading && reportData.budgets.length === 0" class="empty-state text-center py-12 rounded-2xl">
+                        <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-wallet text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-lg font-bold text-gray-800 mb-2">No Budgets Found</h4>
+                        <p class="text-gray-600 mb-4">Set up budgets to track and control your cloud spending</p>
+                        <button @click="isBudgetModalOpen = true" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg">
+                            <i class="fas fa-plus mr-2"></i>Create Your First Budget
+                        </button>
                     </div>
-                    <div x-show="!isLoading && reportData.budgets.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <div x-show="!isLoading && reportData.budgets.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <template x-for="budget in reportData.budgets" :key="budget.budgetName">
-                            <div class="border rounded-lg p-4 space-y-2">
-                                <p class="font-bold text-gray-800" x-text="budget.budgetName"></p>
-                                <div class="w-full">
-                                    <div class="progress-bar h-4">
-                                        <div class="progress-bar-fill bg-green-500" :style="`width: ${(budget.actualSpend / budget.budgetLimit) * 100}%`"></div>
-                                    </div>
-                                    <div class="flex justify-between text-xs font-semibold mt-1">
-                                        <span class="text-green-700" x-text="`Spent: ${formatCurrency(budget.actualSpend)}`"></span>
-                                        <span class="text-gray-600" x-text="`Limit: ${formatCurrency(budget.budgetLimit)}`"></span>
+                            <div class="bg-white/70 backdrop-blur-sm border border-gray-200/50 rounded-xl p-6 hover:shadow-lg transition-all">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h4 class="font-bold text-gray-800" x-text="budget.budgetName"></h4>
+                                    <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-chart-line text-white text-sm"></i>
                                     </div>
                                 </div>
-                                <p class="text-sm text-gray-500">Forecasted Spend: <span class="font-semibold text-yellow-600" x-text="formatCurrency(budget.forecastedSpend)"></span></p>
+                                <div class="space-y-3">
+                                    <div class="progress-bar h-6">
+                                        <div class="progress-bar-fill" 
+                                             :class="(budget.actualSpend / budget.budgetLimit) > 0.8 ? 'progress-bar-danger' : (budget.actualSpend / budget.budgetLimit) > 0.6 ? 'progress-bar-warning' : ''"
+                                             :style="`width: ${Math.min((budget.actualSpend / budget.budgetLimit) * 100, 100)}%`"></div>
+                                    </div>
+                                    <div class="flex justify-between text-sm font-semibold">
+                                        <span class="text-gray-700" x-text="`Spent: ${formatCurrency(budget.actualSpend)}`"></span>
+                                        <span class="text-gray-600" x-text="`${Math.round((budget.actualSpend / budget.budgetLimit) * 100)}%`"></span>
+                                    </div>
+                                    <div class="flex justify-between text-xs text-gray-500">
+                                        <span x-text="`Limit: ${formatCurrency(budget.budgetLimit)}`"></span>
+                                        <span x-text="`Forecast: ${formatCurrency(budget.forecastedSpend)}`"></span>
+                                    </div>
+                                </div>
                             </div>
                         </template>
                     </div>
                 </div>
 
-                <!-- Governance Section -->
-                <div class="bg-white rounded-xl p-6 card-shadow">
-                    <h3 class="font-semibold text-gray-800 mb-4">Governance & Cost Allocation</h3>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <!-- Tagging Compliance -->
+                <!-- Enhanced Governance Section -->
+                <div class="glass-card rounded-2xl p-8 fade-in">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-shield-alt text-white"></i>
+                        </div>
                         <div>
-                            <h4 class="text-md font-semibold text-gray-700 mb-2">Tagging Compliance</h4>
-                            <div x-show="isLoading" class="skeleton h-48 w-full rounded"></div>
-                            <div x-show="!isLoading" class="space-y-3">
-                                <div class="flex items-center gap-4">
-                                    <p class="text-3xl font-bold text-indigo-600" x-text="reportData.taggingCompliance.compliancePercentage.toFixed(1) + '%'"></p>
-                                    <div class="w-full">
+                            <h3 class="text-xl font-bold text-gray-800">Governance & Cost Allocation</h3>
+                            <p class="text-sm text-gray-600">Manage compliance and cost attribution</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Enhanced Tagging Compliance -->
+                        <div class="bg-white/70 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50">
+                            <h4 class="text-lg font-bold text-gray-800 mb-4">Tagging Compliance</h4>
+                            <div x-show="isLoading" class="skeleton h-64 w-full rounded-lg"></div>
+                            <div x-show="!isLoading" class="space-y-4">
+                                <div class="flex items-center space-x-4">
+                                    <div class="text-center">
+                                        <p class="text-4xl font-bold text-indigo-600" x-text="reportData.taggingCompliance.compliancePercentage.toFixed(1) + '%'"></p>
                                         <p class="text-sm text-gray-600">Compliance Rate</p>
-                                        <div class="progress-bar h-2.5 mt-1">
-                                            <div class="progress-bar-fill bg-indigo-600" :style="`width: ${reportData.taggingCompliance.compliancePercentage}%`"></div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="progress-bar h-4 mb-2">
+                                            <div class="progress-bar-fill" :style="`width: ${reportData.taggingCompliance.compliancePercentage}%`"></div>
+                                        </div>
+                                        <div class="flex justify-between text-sm text-gray-600">
+                                            <span>Tagged Resources</span>
+                                            <span x-text="`${reportData.taggingCompliance.totalResourcesScanned - reportData.taggingCompliance.untaggedResourcesCount}/${reportData.taggingCompliance.totalResourcesScanned}`"></span>
                                         </div>
                                     </div>
                                 </div>
-                                <p class="text-xs text-gray-500">
-                                    <span x-text="reportData.taggingCompliance.untaggedResourcesCount"></span> untagged resources found out of 
-                                    <span x-text="reportData.taggingCompliance.totalResourcesScanned"></span> scanned.
-                                </p>
-                                <div class="border-t pt-3 mt-3">
-                                    <h5 class="text-sm font-semibold text-gray-600 mb-2">Example Untagged Resources:</h5>
-                                    <ul class="text-xs space-y-1 max-h-40 overflow-y-auto">
+                                
+                                <div class="bg-gray-50 rounded-lg p-4">
+                                    <h5 class="text-sm font-semibold text-gray-700 mb-3">Untagged Resources</h5>
+                                    <div class="max-h-48 overflow-y-auto space-y-2">
                                         <template x-for="res in reportData.taggingCompliance.untaggedResources" :key="res.resourceId">
-                                            <li class="font-mono p-1 rounded hover:bg-gray-100">
-                                                <i class="fas fa-tag text-red-500 mr-2"></i>
-                                                <span x-text="res.resourceId"></span> 
-                                                <span class="text-gray-500" x-text="`(${res.resourceType})`"></span>
-                                            </li>
+                                            <div class="flex items-center space-x-2 text-sm bg-white rounded-lg p-3">
+                                                <i class="fas fa-tag text-red-500"></i>
+                                                <span class="font-mono text-gray-800 flex-1" x-text="res.resourceId"></span>
+                                                <span class="text-gray-500 text-xs" x-text="res.resourceType"></span>
+                                            </div>
                                         </template>
-                                    </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <!-- Cost Allocation (Showback) -->
-                        <div>
-                            <h4 class="text-md font-semibold text-gray-700 mb-2">Cost Allocation by Tag</h4>
-                            <div class="flex items-center gap-2 mb-4">
-                                <input type="text" x-model="tagKey" placeholder="Enter tag key (e.g. cost-center)" class="form-input w-full text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring-indigo-200">
-                                <button @click="getCostByTag()" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700" :disabled="isTagLoading">
+                        
+                        <!-- Enhanced Cost Allocation -->
+                        <div class="bg-white/70 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50">
+                            <h4 class="text-lg font-bold text-gray-800 mb-4">Cost Allocation by Tag</h4>
+                            <div class="flex items-center space-x-3 mb-6">
+                                <input type="text" x-model="tagKey" placeholder="Enter tag key (e.g. cost-center)" class="tag-input flex-1 px-4 py-3 text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                <button @click="getCostByTag()" class="btn-primary px-4 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isTagLoading">
                                     <i class="fas fa-search" :class="{ 'fa-spin': isTagLoading }"></i>
                                 </button>
                             </div>
-                            <div x-show="isTagLoading" class="skeleton h-48 w-full rounded"></div>
-                            <div x-show="!isTagLoading"><canvas id="costByTagChart"></canvas></div>
+                            <div x-show="isTagLoading" class="skeleton h-64 w-full rounded-lg"></div>
+                            <div x-show="!isTagLoading" class="chart-container">
+                                <canvas id="costByTagChart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Cost Breakdown Charts -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                   <div class="bg-white rounded-xl p-6 card-shadow">
-                        <h3 class="font-semibold text-gray-800 mb-4">Cost Breakdown by Service (Top 10)</h3>
-                        <div x-show="isLoading" class="skeleton h-64 w-full rounded"></div>
-                        <div x-show="!isLoading" class="h-64"><canvas id="costByServiceChart"></canvas></div>
+                <!-- Enhanced Cost Breakdown Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center space-x-3 mb-6">
+                            <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-chart-pie text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Cost by Service</h3>
+                                <p class="text-sm text-gray-600">Top 10 services</p>
+                            </div>
+                        </div>
+                        <div x-show="isLoading" class="skeleton h-80 w-full rounded-lg"></div>
+                        <div x-show="!isLoading" class="chart-container h-80">
+                            <canvas id="costByServiceChart"></canvas>
+                        </div>
                     </div>
-                    <div class="bg-white rounded-xl p-6 card-shadow">
-                        <h3 class="font-semibold text-gray-800 mb-4">Cost Breakdown by Region</h3>
-                         <div x-show="isLoading" class="skeleton h-64 w-full rounded"></div>
-                        <div x-show="!isLoading" class="h-64"><canvas id="costByRegionChart"></canvas></div>
+                    
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center space-x-3 mb-6">
+                            <div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-globe text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Cost by Region</h3>
+                                <p class="text-sm text-gray-600">Geographic distribution</p>
+                            </div>
+                        </div>
+                        <div x-show="isLoading" class="skeleton h-80 w-full rounded-lg"></div>
+                        <div x-show="!isLoading" class="chart-container h-80">
+                            <canvas id="costByRegionChart"></canvas>
+                        </div>
                     </div>
                 </div>
                 
-                <!-- Optimization & Anomaly Tables -->
-                <div class="bg-white rounded-xl p-6 card-shadow" x-show="!isLoading && (reportData.rightsizingRecommendations.length > 0 || reportData.wastedResources.length > 0 || reportData.costAnomalies.length > 0)">
-                    <h3 class="font-semibold text-gray-800 mb-4">Insights & Opportunities</h3>
+                <!-- Enhanced Insights & Opportunities -->
+                <div class="glass-card rounded-2xl p-8 fade-in" x-show="!isLoading && (reportData.rightsizingRecommendations.length > 0 || reportData.wastedResources.length > 0 || reportData.costAnomalies.length > 0)">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-lightbulb text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800">Insights & Opportunities</h3>
+                            <p class="text-sm text-gray-600">Optimize your cloud spending</p>
+                        </div>
+                    </div>
                     
-                    <!-- Cost Anomalies -->
-                    <div x-show="reportData.costAnomalies.length > 0">
-                        <h4 class="text-md font-semibold text-gray-700 mb-2">Cost Anomaly Detection</h4>
-                        <div class="overflow-x-auto max-h-96">
+                    <!-- Enhanced Cost Anomalies -->
+                    <div x-show="reportData.costAnomalies.length > 0" class="mb-8">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
+                            Cost Anomaly Detection
+                        </h4>
+                        <div class="table-enhanced overflow-x-auto">
                             <table class="w-full text-sm text-left text-gray-600">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                <thead class="text-xs text-gray-700 uppercase sticky top-0">
                                     <tr>
-                                        <th class="px-6 py-3">Service</th><th class="px-6 py-3">Date Range</th>
-                                        <th class="px-6 py-3">Unexpected Spend</th>
+                                        <th class="px-6 py-4">Service</th>
+                                        <th class="px-6 py-4">Date Range</th>
+                                        <th class="px-6 py-4">Unexpected Spend</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y">
+                                <tbody class="divide-y divide-gray-200">
                                     <template x-for="anomaly in reportData.costAnomalies" :key="anomaly.anomalyId">
-                                        <tr>
-                                            <td class="px-6 py-3 font-semibold" x-text="anomaly.service"></td>
-                                            <td class="px-6 py-3" x-text="`${anomaly.startDate} to ${anomaly.endDate}`"></td>
-                                            <td class="px-6 py-3 text-red-600 font-semibold" x-text="formatCurrency(anomaly.unexpectedSpend)"></td>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 font-semibold" x-text="anomaly.service"></td>
+                                            <td class="px-6 py-4" x-text="`${anomaly.startDate} to ${anomaly.endDate}`"></td>
+                                            <td class="px-6 py-4 text-red-600 font-bold" x-text="formatCurrency(anomaly.unexpectedSpend)"></td>
                                         </tr>
                                     </template>
                                 </tbody>
@@ -190,52 +535,63 @@
                         </div>
                     </div>
 
-                    <!-- Rightsizing -->
-                    <div x-show="reportData.rightsizingRecommendations.length > 0" class="mt-6">
-                        <h4 class="text-md font-semibold text-gray-700 mb-2">Rightsizing Recommendations</h4>
-                         <div class="overflow-x-auto max-h-96">
+                    <!-- Enhanced Rightsizing -->
+                    <div x-show="reportData.rightsizingRecommendations.length > 0" class="mb-8">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-cogs text-green-500 mr-2"></i>
+                            Rightsizing Recommendations
+                        </h4>
+                        <div class="table-enhanced overflow-x-auto">
                             <table class="w-full text-sm text-left text-gray-600">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                <thead class="text-xs text-gray-700 uppercase sticky top-0">
                                     <tr>
-                                        <th class="px-6 py-3">Resource ID</th><th class="px-6 py-3">Service</th>
-                                        <th class="px-6 py-3">Current</th><th class="px-6 py-3">Recommended</th>
-                                        <th class="px-6 py-3">Savings</th>
+                                        <th class="px-6 py-4">Resource ID</th>
+                                        <th class="px-6 py-4">Service</th>
+                                        <th class="px-6 py-4">Current</th>
+                                        <th class="px-6 py-4">Recommended</th>
+                                        <th class="px-6 py-4">Savings</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y">
+                                <tbody class="divide-y divide-gray-200">
                                     <template x-for="rec in reportData.rightsizingRecommendations" :key="rec.resourceId">
-                                        <tr>
-                                            <td class="px-6 py-3 font-mono text-xs" x-text="rec.resourceId"></td>
-                                            <td class="px-6 py-3" x-text="rec.service"></td>
-                                            <td class="px-6 py-3" x-text="rec.currentType"></td>
-                                            <td class="px-6 py-3 text-green-700 font-semibold" x-text="rec.recommendedType"></td>
-                                            <td class="px-6 py-3 text-green-700 font-semibold" x-text="formatCurrency(rec.estimatedMonthlySavings)"></td>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 font-mono text-xs" x-text="rec.resourceId"></td>
+                                            <td class="px-6 py-4" x-text="rec.service"></td>
+                                            <td class="px-6 py-4" x-text="rec.currentType"></td>
+                                            <td class="px-6 py-4 text-green-700 font-semibold" x-text="rec.recommendedType"></td>
+                                            <td class="px-6 py-4 text-green-700 font-bold" x-text="formatCurrency(rec.estimatedMonthlySavings)"></td>
                                         </tr>
                                     </template>
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                     <!-- Waste -->
-                    <div x-show="reportData.wastedResources.length > 0" class="mt-6">
-                        <h4 class="text-md font-semibold text-gray-700 mb-2">Wasted Resources</h4>
-                         <div class="overflow-x-auto max-h-96">
+                    
+                    <!-- Enhanced Waste -->
+                    <div x-show="reportData.wastedResources.length > 0">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-trash-alt text-red-500 mr-2"></i>
+                            Wasted Resources
+                        </h4>
+                        <div class="table-enhanced overflow-x-auto">
                             <table class="w-full text-sm text-left text-gray-600">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                <thead class="text-xs text-gray-700 uppercase sticky top-0">
                                     <tr>
-                                        <th class="px-6 py-3">Resource ID</th><th class="px-6 py-3">Type</th>
-                                        <th class="px-6 py-3">Region</th><th class="px-6 py-3">Reason</th>
-                                        <th class="px-6 py-3">Savings</th>
+                                        <th class="px-6 py-4">Resource ID</th>
+                                        <th class="px-6 py-4">Type</th>
+                                        <th class="px-6 py-4">Region</th>
+                                        <th class="px-6 py-4">Reason</th>
+                                        <th class="px-6 py-4">Savings</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y">
+                                <tbody class="divide-y divide-gray-200">
                                     <template x-for="res in reportData.wastedResources" :key="res.resourceId">
-                                        <tr>
-                                            <td class="px-6 py-3 font-mono text-xs" x-text="res.resourceId"></td>
-                                            <td class="px-6 py-3" x-text="res.resourceType"></td>
-                                            <td class="px-6 py-3" x-text="res.region"></td>
-                                            <td class="px-6 py-3" x-text="res.reason"></td>
-                                            <td class="px-6 py-3 text-red-600 font-semibold" x-text="formatCurrency(res.monthlySavings)"></td>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 font-mono text-xs" x-text="res.resourceId"></td>
+                                            <td class="px-6 py-4" x-text="res.resourceType"></td>
+                                            <td class="px-6 py-4" x-text="res.region"></td>
+                                            <td class="px-6 py-4" x-text="res.reason"></td>
+                                            <td class="px-6 py-4 text-red-600 font-bold" x-text="formatCurrency(res.monthlySavings)"></td>
                                         </tr>
                                     </template>
                                 </tbody>
@@ -245,26 +601,36 @@
                 </div>
             </div>
             
-            <!-- Budget Creation Modal -->
-            <div x-show="isBudgetModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isBudgetModalOpen = false">
-                <div class="bg-white rounded-lg p-8 w-full max-w-md" @click.stop>
-                    <h3 class="text-lg font-bold mb-4">Create New Budget</h3>
+            <!-- Enhanced Budget Creation Modal -->
+            <div x-show="isBudgetModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isBudgetModalOpen = false">
+                <div class="modal-content rounded-2xl p-8 w-full max-w-md mx-4" @click.stop>
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-wallet text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800">Create New Budget</h3>
+                    </div>
+                    
                     <form @submit.prevent="createBudget()">
-                        <div class="space-y-4">
+                        <div class="space-y-6">
                             <div>
-                                <label for="budgetName" class="block text-sm font-medium text-gray-700">Budget Name</label>
-                                <input type="text" id="budgetName" x-model="newBudget.budgetName" class="mt-1 form-input w-full rounded-md" required>
+                                <label for="budgetName" class="block text-sm font-semibold text-gray-700 mb-2">Budget Name</label>
+                                <input type="text" id="budgetName" x-model="newBudget.budgetName" class="tag-input w-full px-4 py-3 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" required>
                             </div>
                             <div>
-                                <label for="budgetLimit" class="block text-sm font-medium text-gray-700">Budget Limit (USD)</label>
-                                <input type="number" id="budgetLimit" x-model="newBudget.budgetLimit" class="mt-1 form-input w-full rounded-md" required min="1">
+                                <label for="budgetLimit" class="block text-sm font-semibold text-gray-700 mb-2">Budget Limit (USD)</label>
+                                <input type="number" id="budgetLimit" x-model="newBudget.budgetLimit" class="tag-input w-full px-4 py-3 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" required min="1">
                             </div>
                         </div>
-                        <div class="mt-6 flex justify-end gap-3">
-                            <button type="button" @click="isBudgetModalOpen = false" class="px-4 py-2 text-sm bg-gray-200 rounded-md">Cancel</button>
-                            <button type="submit" class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-md" :disabled="isBudgetCreating">
-                                <span x-show="!isBudgetCreating">Create</span>
-                                <span x-show="isBudgetCreating"><i class="fas fa-spinner fa-spin"></i> Creating...</span>
+                        
+                        <div class="flex justify-end space-x-3 mt-8">
+                            <button type="button" @click="isBudgetModalOpen = false" class="btn-secondary px-6 py-3 text-sm font-semibold rounded-lg">Cancel</button>
+                            <button type="submit" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isBudgetCreating">
+                                <span x-show="!isBudgetCreating">Create Budget</span>
+                                <span x-show="isBudgetCreating" class="flex items-center">
+                                    <div class="loading-spinner mr-2"></div>
+                                    Creating...
+                                </span>
                             </button>
                         </div>
                     </form>
@@ -290,6 +656,7 @@ function finopsReport() {
         init() {
             this.loadReport();
         },
+        
         loadReport(forceRefresh = false) {
             this.isLoading = true;
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
@@ -309,9 +676,11 @@ function finopsReport() {
                 .catch(err => console.error("Failed to load FinOps report:", err))
                 .finally(() => this.isLoading = false);
         },
+        
         formatCurrency(value) {
             return (value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
         },
+        
         get kpis() {
             const k = this.reportData.kpis;
             const mtdSpend = k.monthToDateSpend || 0;
@@ -356,20 +725,21 @@ function finopsReport() {
                 },
             ];
         },
+        
         renderCharts() {
             this.renderServiceChart();
             this.renderRegionChart();
         },
+        
         handleChartClick(event, chart, type) {
             const points = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
             if (points.length) {
                 const firstPoint = points[0];
                 const label = chart.data.labels[firstPoint.index];
-                // In a real app, you would redirect or filter based on the label
-                // For example: window.location.href = `/cost?groupBy=${type}&filter=${label}`;
                 alert(`Chart clicked! You selected ${type}: ${label}. You would now be redirected to a filtered view.`);
             }
         },
+        
         renderServiceChart() {
             const ctx = document.getElementById('costByServiceChart').getContext('2d');
             if (this.charts.byService) this.charts.byService.destroy();
@@ -378,15 +748,30 @@ function finopsReport() {
                 type: 'doughnut',
                 data: {
                     labels: data.map(d => d.service),
-                    datasets: [{ data: data.map(d => d.cost), backgroundColor: ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#60a5fa', '#38bdf8', '#22d3ee', '#67e8f9'] }]
+                    datasets: [{ 
+                        data: data.map(d => d.cost), 
+                        backgroundColor: [
+                            '#667eea', '#764ba2', '#f093fb', '#f5576c', 
+                            '#4facfe', '#00f2fe', '#43e97b', '#38f9d7',
+                            '#ffecd2', '#fcb69f', '#a8edea', '#fed6e3'
+                        ],
+                        borderWidth: 0
+                    }]
                 },
                 options: { 
-                    responsive: true, maintainAspectRatio: false, 
-                    plugins: { legend: { position: 'right' } },
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            position: 'right',
+                            labels: { usePointStyle: true }
+                        }
+                    },
                     onClick: (e) => this.handleChartClick(e, this.charts.byService, 'SERVICE')
                 }
             });
         },
+        
         renderRegionChart() {
             const ctx = document.getElementById('costByRegionChart').getContext('2d');
             if (this.charts.byRegion) this.charts.byRegion.destroy();
@@ -395,15 +780,38 @@ function finopsReport() {
                 type: 'bar',
                 data: {
                     labels: data.map(d => d.region),
-                    datasets: [{ label: 'Cost by Region', data: data.map(d => d.cost), backgroundColor: '#fb923c' }]
+                    datasets: [{ 
+                        label: 'Cost by Region', 
+                        data: data.map(d => d.cost), 
+                        backgroundColor: 'rgba(251, 146, 60, 0.8)',
+                        borderColor: 'rgba(251, 146, 60, 1)',
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
                 },
                 options: { 
-                    responsive: true, maintainAspectRatio: false, indexAxis: 'y', 
-                    plugins: { legend: { display: false } },
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    indexAxis: 'y',
+                    plugins: { 
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: { color: '#6b7280' }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#6b7280' }
+                        }
+                    },
                     onClick: (e) => this.handleChartClick(e, this.charts.byRegion, 'REGION')
                 }
             });
         },
+        
         getCostByTag() {
             if (!this.tagKey) return;
             this.isTagLoading = true;
@@ -421,6 +829,7 @@ function finopsReport() {
                 .catch(err => console.error("Failed to load cost by tag:", err))
                 .finally(() => this.isTagLoading = false);
         },
+        
         renderTagChart(data) {
             const ctx = document.getElementById('costByTagChart').getContext('2d');
             if (this.charts.byTag) this.charts.byTag.destroy();
@@ -428,15 +837,30 @@ function finopsReport() {
                 type: 'pie',
                 data: {
                     labels: data.map(d => d.tagValue),
-                    datasets: [{ data: data.map(d => d.cost), backgroundColor: ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c', '#facc15'] }]
+                    datasets: [{ 
+                        data: data.map(d => d.cost), 
+                        backgroundColor: [
+                            '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', 
+                            '#f87171', '#fb923c', '#facc15', '#a855f7',
+                            '#ec4899', '#06b6d4', '#8b5cf6', '#84cc16'
+                        ],
+                        borderWidth: 0
+                    }]
                 },
                 options: { 
-                    responsive: true, maintainAspectRatio: false, 
-                    plugins: { legend: { position: 'right' } },
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            position: 'right',
+                            labels: { usePointStyle: true }
+                        }
+                    },
                     onClick: (e) => this.handleChartClick(e, this.charts.byTag, this.tagKey)
                 }
             });
         },
+        
         createBudget() {
             if (!this.newBudget.budgetName || !this.newBudget.budgetLimit) {
                 alert('Please fill out all fields.');

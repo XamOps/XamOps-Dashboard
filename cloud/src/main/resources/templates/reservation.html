@@ -11,15 +11,301 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        [x-cloak] { display: none !important; }
-        .progress-bar { background-color: #e5e7eb; border-radius: 0.25rem; overflow: hidden; width: 100%; height: 1rem; }
-        .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; }
-        .toast {
-            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.2);
         }
-        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e2e8f0; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
+        [x-cloak] { display: none !important; }
+        
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .metric-card {
+            position: relative;
+            overflow: hidden;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary-gradient);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .progress-bar { 
+            background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 100%);
+            border-radius: 12px; 
+            overflow: hidden; 
+            width: 100%; 
+            height: 12px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .progress-bar-fill { 
+            height: 100%; 
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 12px;
+            position: relative;
+        }
+        
+        .progress-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: skeleton-shimmer 1.5s infinite;
+            border-radius: 12px;
+        }
+        
+        @keyframes skeleton-shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+        }
+        
+        .form-input {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .form-input:focus {
+            background: rgba(255, 255, 255, 1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .table-enhanced {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+        }
+        
+        .table-enhanced thead {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+        
+        .table-enhanced tr {
+            transition: all 0.2s ease;
+        }
+        
+        .table-enhanced tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+            transform: translateX(2px);
+        }
+        
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-content {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .toast {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .chart-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--glass-border);
+        }
+        
+        .empty-state {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 2px dashed rgba(156, 163, 175, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .empty-state:hover {
+            border-color: rgba(102, 126, 234, 0.3);
+            background: rgba(255, 255, 255, 0.98);
+        }
+        
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .gradient-text {
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .reservation-row {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .reservation-row::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--success-gradient);
+            transform: scaleY(0);
+            transition: transform 0.2s ease;
+        }
+        
+        .reservation-row:hover::before {
+            transform: scaleY(1);
+        }
+        
+        .utilization-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(102, 126, 234, 0.1) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        .coverage-card {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.1) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -31,59 +317,85 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="reservationManagement()">
-            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-800">Reservation Management</h1>
-                    <p class="text-xs text-gray-500">Analyze and manage your Reserved Instances and Savings Plans</p>
+            <!-- Enhanced Header -->
+            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-calendar-check text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">Reservation Management</h1>
+                        <p class="text-sm text-gray-600">Optimize your Reserved Instances and Savings Plans</p>
+                    </div>
                 </div>
-                <button @click="loadReservationData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
-                    <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isLoading }"></i>
-                    <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
-                </button>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                        <span class="text-sm text-gray-600">Active monitoring</span>
+                    </div>
+                    <button @click="loadReservationData(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                        <span x-text="isLoading ? 'Analyzing...' : 'Refresh Analysis'"></span>
+                    </button>
+                </div>
             </header>
 
-            <div class="flex-1 p-6 space-y-6">
-                <!-- Skeleton Loader for the entire page -->
-                <div x-show="isLoading" x-cloak class="space-y-6">
-                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div class="flex-1 p-8 space-y-8">
+                <!-- Enhanced Skeleton Loader -->
+                <div x-show="isLoading" x-cloak class="space-y-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
                         <div class="lg:col-span-2 space-y-6">
-                            <div class="bg-white rounded-lg p-6 shadow-sm border skeleton h-48"></div>
+                            <div class="skeleton h-64"></div>
                         </div>
-                        <div class="lg:col-span-3 bg-white rounded-lg p-6 shadow-sm border skeleton h-48"></div>
+                        <div class="lg:col-span-3 skeleton h-64"></div>
                     </div>
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border skeleton h-96"></div>
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border skeleton h-64"></div>
+                    <div class="skeleton h-96"></div>
+                    <div class="skeleton h-80"></div>
+                    <div class="skeleton h-80"></div>
                 </div>
 
                 <div x-show="!isLoading" x-cloak>
-                    <!-- Reservation Analysis & Charts -->
-                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <!-- Enhanced Reservation Analysis & Charts -->
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
                         <div class="lg:col-span-2 space-y-6">
-                             <!-- Reservation Analysis -->
-                            <div class="bg-white rounded-lg p-6 shadow-sm border">
-                                <h3 class="font-semibold text-gray-700 mb-4">Reservation Analysis (Last 30 Days)</h3>
-                                <div class="space-y-4">
-                                    <div class="bg-gray-50 p-4 rounded-lg">
-                                        <h5 class="text-sm font-semibold text-gray-800">Reservation Utilization</h5>
-                                        <p class="text-xs text-gray-500 mb-2">How much of your purchased RIs you actually used.</p>
-                                        <div class="flex items-center gap-4">
-                                            <p class="text-3xl font-bold text-indigo-600" x-text="data.analysis ? data.analysis.utilizationPercentage.toFixed(1) + '%' : '0.0%'"></p>
-                                            <div class="w-full">
+                            <!-- Enhanced Reservation Analysis -->
+                            <div class="glass-card rounded-2xl p-8 fade-in">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-xl font-bold text-gray-800">Reservation Analysis</h3>
+                                    <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-chart-line text-white text-sm"></i>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-6">Last 30 days performance metrics</p>
+                                
+                                <div class="space-y-6">
+                                    <div class="utilization-card p-6 rounded-xl">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h5 class="text-sm font-bold text-gray-800">Reservation Utilization</h5>
+                                            <i class="fas fa-tachometer-alt text-indigo-600"></i>
+                                        </div>
+                                        <p class="text-xs text-gray-600 mb-4">How much of your purchased RIs you actually used</p>
+                                        <div class="flex items-center space-x-4">
+                                            <p class="text-4xl font-bold gradient-text" x-text="data.analysis ? data.analysis.utilizationPercentage.toFixed(1) + '%' : '0.0%'"></p>
+                                            <div class="flex-1">
                                                 <div class="progress-bar">
-                                                    <div class="progress-bar-fill bg-indigo-500" :style="`width: ${data.analysis ? data.analysis.utilizationPercentage : 0}%`"></div>
+                                                    <div class="progress-bar-fill bg-gradient-to-r from-indigo-500 to-purple-600" :style="`width: ${data.analysis ? data.analysis.utilizationPercentage : 0}%`"></div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="bg-gray-50 p-4 rounded-lg">
-                                        <h5 class="text-sm font-semibold text-gray-800">Reservation Coverage</h5>
-                                        <p class="text-xs text-gray-500 mb-2">How much of your instance usage was covered by RIs.</p>
-                                        <div class="flex items-center gap-4">
-                                            <p class="text-3xl font-bold text-green-600" x-text="data.analysis ? data.analysis.coveragePercentage.toFixed(1) + '%' : '0.0%'"></p>
-                                            <div class="w-full">
+                                    
+                                    <div class="coverage-card p-6 rounded-xl">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h5 class="text-sm font-bold text-gray-800">Reservation Coverage</h5>
+                                            <i class="fas fa-shield-alt text-green-600"></i>
+                                        </div>
+                                        <p class="text-xs text-gray-600 mb-4">How much of your instance usage was covered by RIs</p>
+                                        <div class="flex items-center space-x-4">
+                                            <p class="text-4xl font-bold text-green-600" x-text="data.analysis ? data.analysis.coveragePercentage.toFixed(1) + '%' : '0.0%'"></p>
+                                            <div class="flex-1">
                                                 <div class="progress-bar">
-                                                    <div class="progress-bar-fill bg-green-500" :style="`width: ${data.analysis ? data.analysis.coveragePercentage : 0}%`"></div>
+                                                    <div class="progress-bar-fill bg-gradient-to-r from-green-500 to-emerald-600" :style="`width: ${data.analysis ? data.analysis.coveragePercentage : 0}%`"></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -91,94 +403,163 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="lg:col-span-3 bg-white rounded-lg p-6 shadow-sm border">
-                             <h3 class="font-semibold text-gray-700 mb-4">Historical Utilization & Coverage (6 Months)</h3>
-                             <div class="relative h-72">
+                        
+                        <div class="lg:col-span-3 glass-card rounded-2xl p-8 fade-in">
+                            <div class="flex items-center justify-between mb-6">
+                                <h3 class="text-xl font-bold text-gray-800">Historical Performance</h3>
+                                <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-history text-white text-sm"></i>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-6">6-month utilization and coverage trends</p>
+                            <div class="chart-container h-80">
                                 <canvas id="historicalReservationChart"></canvas>
-                             </div>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- Expiry Timeline -->
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
-                        <h3 class="font-semibold text-gray-700 mb-4">Reservation Expiry Timeline</h3>
-                        <div class="relative h-96">
+                    <!-- Enhanced Expiry Timeline -->
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-clock text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-800">Reservation Expiry Timeline</h3>
+                                    <p class="text-sm text-gray-600">Track upcoming reservation expirations</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-container h-96">
                             <canvas id="expiryTimelineChart"></canvas>
                         </div>
                     </div>
 
-                    <!-- Cost Allocation -->
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
-                        <h3 class="font-semibold text-gray-700 mb-4">Reservation Cost Allocation (Showback)</h3>
-                        <div class="flex items-center gap-2 mb-4">
-                            <input type="text" x-model="tagKey" placeholder="Enter tag key (e.g. cost-center)" class="form-input w-full max-w-xs text-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring-indigo-200">
-                            <button @click="getCostByTag()" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700" :disabled="isTagLoading">
-                                <span x-show="!isTagLoading">Show Breakdown</span>
-                                <span x-show="isTagLoading"><i class="fas fa-spinner fa-spin"></i> Loading...</span>
+                    <!-- Enhanced Cost Allocation -->
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-tags text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-800">Cost Allocation (Showback)</h3>
+                                    <p class="text-sm text-gray-600">Allocate reservation costs by tags</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center space-x-4 mb-8 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
+                            <div class="relative flex-1">
+                                <i class="fas fa-tag absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <input type="text" x-model="tagKey" placeholder="Enter tag key (e.g. cost-center)" class="form-input w-full pl-10 pr-4 py-3 text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                            </div>
+                            <button @click="getCostByTag()" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isTagLoading">
+                                <span x-show="!isTagLoading">Analyze Tags</span>
+                                <span x-show="isTagLoading" class="flex items-center">
+                                    <div class="loading-spinner mr-2"></div>
+                                    Analyzing...
+                                </span>
                             </button>
                         </div>
-                        <div x-show="isTagLoading" class="text-center p-8"><i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i></div>
-                        <div x-show="!isTagLoading && costByTagData.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                            <div class="relative h-64"><canvas id="costByTagChart"></canvas></div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-sm text-left text-gray-600">
-                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        
+                        <div x-show="isTagLoading" class="text-center py-12">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-600">Analyzing cost allocation...</p>
+                        </div>
+                        
+                        <div x-show="!isTagLoading && costByTagData.length > 0" class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                            <div class="chart-container h-80">
+                                <canvas id="costByTagChart"></canvas>
+                            </div>
+                            <div class="table-enhanced">
+                                <table class="w-full text-sm">
+                                    <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
                                         <tr>
-                                            <th class="px-6 py-3" x-text="`Tag: ` + activeTagKey"></th>
-                                            <th class="px-6 py-3 text-right">Amortized Cost</th>
+                                            <th class="px-6 py-4 text-left font-bold" x-text="`Tag: ` + activeTagKey"></th>
+                                            <th class="px-6 py-4 text-right font-bold">Amortized Cost</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y">
+                                    <tbody class="divide-y divide-gray-200">
                                         <template x-for="item in costByTagData" :key="item.tagValue">
-                                            <tr>
-                                                <td class="px-6 py-4 font-medium" x-text="item.tagValue"></td>
-                                                <td class="px-6 py-4 text-right font-mono" x-text="`$` + item.cost.toFixed(2)"></td>
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-6 py-4 font-semibold text-gray-800" x-text="item.tagValue"></td>
+                                                <td class="px-6 py-4 text-right font-bold text-green-600" x-text="`$` + item.cost.toFixed(2)"></td>
                                             </tr>
                                         </template>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
-                        <div x-show="!isTagLoading && costByTagData.length === 0 && activeTagKey" class="text-center py-8 border-2 border-dashed rounded-lg">
-                            <i class="fas fa-tag fa-2x text-gray-400"></i>
-                            <p class="mt-2 text-sm text-gray-500">No reservation cost data found for tag key: <strong x-text="activeTagKey"></strong>.</p>
+                        
+                        <div x-show="!isTagLoading && costByTagData.length === 0 && activeTagKey" class="empty-state text-center py-16 px-8 rounded-2xl">
+                            <div class="w-16 h-16 bg-gradient-to-br from-gray-400 to-gray-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-tag text-white text-xl"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">No Data Found</h3>
+                            <p class="text-gray-600">No reservation cost data found for tag key: <strong x-text="activeTagKey"></strong></p>
                         </div>
                     </div>
 
-                    <!-- Reservation Inventory -->
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
-                        <h3 class="font-semibold text-gray-700 mb-4">Active Reservation Inventory</h3>
-                        <div x-show="!data.inventory || data.inventory.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
-                            <i class="fas fa-inbox fa-3x text-gray-400"></i>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No active reservations found.</h3>
-                            <p class="mt-1 text-sm text-gray-500">You do not currently have any active Reserved Instances.</p>
+                    <!-- Enhanced Reservation Inventory -->
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-server text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-800">Active Reservation Inventory</h3>
+                                    <p class="text-sm text-gray-600">Current reservation portfolio</p>
+                                </div>
+                            </div>
                         </div>
-                        <div x-show="data.inventory && data.inventory.length > 0" class="overflow-x-auto">
-                            <table class="w-full text-sm text-left text-gray-600">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        
+                        <div x-show="!data.inventory || data.inventory.length === 0" class="empty-state text-center py-20 px-8 rounded-2xl">
+                            <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i class="fas fa-inbox text-white text-3xl"></i>
+                            </div>
+                            <h3 class="text-2xl font-bold text-gray-800 mb-2">No Active Reservations</h3>
+                            <p class="text-gray-600 mb-6">You do not currently have any active Reserved Instances</p>
+                            <button class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg">
+                                <i class="fas fa-plus mr-2"></i>Purchase Reservations
+                            </button>
+                        </div>
+                        
+                        <div x-show="data.inventory && data.inventory.length > 0" class="table-enhanced">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
                                     <tr>
-                                        <th class="px-6 py-3">Type</th>
-                                        <th class="px-6 py-3">Scope</th>
-                                        <th class="px-6 py-3">Count</th>
-                                        <th class="px-6 py-3">Term</th>
-                                        <th class="px-6 py-3">Expires In</th>
-                                        <th class="px-6 py-3">State</th>
+                                        <th class="px-6 py-4 text-left font-bold">Instance Type</th>
+                                        <th class="px-6 py-4 text-left font-bold">Scope</th>
+                                        <th class="px-6 py-4 text-center font-bold">Count</th>
+                                        <th class="px-6 py-4 text-left font-bold">Term</th>
+                                        <th class="px-6 py-4 text-left font-bold">Expires In</th>
+                                        <th class="px-6 py-4 text-center font-bold">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200">
                                     <template x-for="ri in data.inventory" :key="ri.reservationId">
-                                        <tr class="hover:bg-gray-50">
+                                        <tr class="reservation-row hover:bg-gray-50 transition-all">
                                             <td class="px-6 py-4">
-                                                <p class="font-semibold text-gray-800" x-text="ri.instanceType"></p>
-                                                <p class="text-xs text-gray-500" x-text="ri.offeringType"></p>
+                                                <div class="flex items-center space-x-3">
+                                                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                                        <i class="fas fa-server text-white text-xs"></i>
+                                                    </div>
+                                                    <div>
+                                                        <p class="font-bold text-gray-800" x-text="ri.instanceType"></p>
+                                                        <p class="text-xs text-gray-500" x-text="ri.offeringType"></p>
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td class="px-6 py-4" x-text="ri.scope === 'Region' ? configuredRegion : ri.availabilityZone"></td>
-                                            <td class="px-6 py-4 text-center" x-text="ri.instanceCount"></td>
-                                            <td class="px-6 py-4" x-text="formatDuration(ri.duration)"></td>
+                                            <td class="px-6 py-4 font-medium text-gray-700" x-text="ri.scope === 'Region' ? configuredRegion : ri.availabilityZone"></td>
+                                            <td class="px-6 py-4 text-center font-bold text-gray-800" x-text="ri.instanceCount"></td>
+                                            <td class="px-6 py-4 text-gray-700" x-text="formatDuration(ri.duration)"></td>
                                             <td class="px-6 py-4" x-text="formatExpiry(ri.end).text" :class="formatExpiry(ri.end).color"></td>
-                                            <td class="px-6 py-4">
-                                                <span class="px-2.5 py-1 inline-flex text-xs leading-5 font-bold rounded-full capitalize"
-                                                      :class="ri.state === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                            <td class="px-6 py-4 text-center">
+                                                <span class="status-badge"
+                                                      :class="ri.state === 'active' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'"
                                                       x-text="ri.state">
                                                 </span>
                                             </td>
@@ -189,36 +570,50 @@
                         </div>
                     </div>
 
-                    <!-- Modification Recommendations -->
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
-                        <h3 class="font-semibold text-gray-700 mb-4">RI Modification Recommendations</h3>
-                        <div x-show="!data.modificationRecommendations || data.modificationRecommendations.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
-                            <i class="fas fa-thumbs-up fa-3x text-green-500"></i>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No modification recommendations found.</h3>
-                            <p class="mt-1 text-sm text-gray-500">Your active reservations appear to be well-utilized.</p>
+                    <!-- Enhanced Modification Recommendations -->
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-wrench text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-800">Modification Recommendations</h3>
+                                    <p class="text-sm text-gray-600">Optimize existing reservations</p>
+                                </div>
+                            </div>
                         </div>
-                        <div x-show="data.modificationRecommendations && data.modificationRecommendations.length > 0" class="overflow-x-auto">
-                            <table class="w-full text-sm text-left text-gray-600">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        
+                        <div x-show="!data.modificationRecommendations || data.modificationRecommendations.length === 0" class="empty-state text-center py-20 px-8 rounded-2xl">
+                            <div class="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i class="fas fa-thumbs-up text-white text-3xl"></i>
+                            </div>
+                            <h3 class="text-2xl font-bold text-gray-800 mb-2">All Optimized!</h3>
+                            <p class="text-gray-600">Your active reservations appear to be well-utilized</p>
+                        </div>
+                        
+                        <div x-show="data.modificationRecommendations && data.modificationRecommendations.length > 0" class="table-enhanced">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
                                     <tr>
-                                        <th class="px-6 py-3">Reservation ID</th>
-                                        <th class="px-6 py-3">Current Type</th>
-                                        <th class="px-6 py-3">Recommended Type</th>
-                                        <th class="px-6 py-3">Reason</th>
-                                        <th class="px-6 py-3 text-right">Est. Monthly Savings</th>
-                                        <th class="px-6 py-3 text-center">Action</th>
+                                        <th class="px-6 py-4 text-left font-bold">Reservation ID</th>
+                                        <th class="px-6 py-4 text-left font-bold">Current Type</th>
+                                        <th class="px-6 py-4 text-left font-bold">Recommended Type</th>
+                                        <th class="px-6 py-4 text-left font-bold">Reason</th>
+                                        <th class="px-6 py-4 text-right font-bold">Monthly Savings</th>
+                                        <th class="px-6 py-4 text-center font-bold">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200">
                                     <template x-for="rec in data.modificationRecommendations" :key="rec.reservationId">
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-6 py-4 font-mono text-xs" x-text="rec.reservationId"></td>
-                                            <td class="px-6 py-4 font-semibold text-orange-600" x-text="rec.currentInstanceType"></td>
-                                            <td class="px-6 py-4 font-semibold text-green-600" x-text="rec.recommendedInstanceType"></td>
-                                            <td class="px-6 py-4" x-text="rec.reason"></td>
-                                            <td class="px-6 py-4 text-right font-mono text-green-600" x-text="`$` + rec.estimatedMonthlySavings.toFixed(2)"></td>
+                                        <tr class="hover:bg-gray-50 transition-all">
+                                            <td class="px-6 py-4 font-mono text-xs text-gray-600" x-text="rec.reservationId"></td>
+                                            <td class="px-6 py-4 font-bold text-orange-600" x-text="rec.currentInstanceType"></td>
+                                            <td class="px-6 py-4 font-bold text-green-600" x-text="rec.recommendedInstanceType"></td>
+                                            <td class="px-6 py-4 text-gray-700" x-text="rec.reason"></td>
+                                            <td class="px-6 py-4 text-right font-bold text-green-600" x-text="`$` + rec.estimatedMonthlySavings.toFixed(2)"></td>
                                             <td class="px-6 py-4 text-center">
-                                                <button @click="openModificationModal(rec)" class="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition flex items-center">
+                                                <button @click="openModificationModal(rec)" class="btn-primary px-4 py-2 text-xs font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
                                                     <i class="fas fa-wrench mr-2"></i>Apply
                                                 </button>
                                             </td>
@@ -229,34 +624,48 @@
                         </div>
                     </div>
 
-                    <!-- Purchase Recommendations -->
-                    <div class="mt-6 bg-white rounded-lg p-6 shadow-sm border">
-                        <h3 class="font-semibold text-gray-700 mb-4">RI Purchase Recommendations</h3>
-                        <div x-show="!data.purchaseRecommendations || data.purchaseRecommendations.length === 0" class="text-center py-12 px-4 border-2 border-dashed rounded-lg">
-                            <i class="fas fa-check-circle fa-3x text-green-500"></i>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No purchase recommendations found.</h3>
-                            <p class="mt-1 text-sm text-gray-500">Your instance usage appears to be well-covered by existing reservations.</p>
+                    <!-- Enhanced Purchase Recommendations -->
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-shopping-cart text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-800">Purchase Recommendations</h3>
+                                    <p class="text-sm text-gray-600">Optimize your reservation coverage</p>
+                                </div>
+                            </div>
                         </div>
-                        <div x-show="data.purchaseRecommendations && data.purchaseRecommendations.length > 0" class="overflow-x-auto">
-                            <table class="w-full text-sm text-left text-gray-600">
-                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        
+                        <div x-show="!data.purchaseRecommendations || data.purchaseRecommendations.length === 0" class="empty-state text-center py-20 px-8 rounded-2xl">
+                            <div class="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i class="fas fa-check-circle text-white text-3xl"></i>
+                            </div>
+                            <h3 class="text-2xl font-bold text-gray-800 mb-2">Fully Covered!</h3>
+                            <p class="text-gray-600">Your instance usage appears to be well-covered by existing reservations</p>
+                        </div>
+                        
+                        <div x-show="data.purchaseRecommendations && data.purchaseRecommendations.length > 0" class="table-enhanced">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
                                     <tr>
-                                        <th class="px-6 py-3">Instance Family</th>
-                                        <th class="px-6 py-3">Term</th>
-                                        <th class="px-6 py-3 text-right">Recommended #</th>
-                                        <th class="px-6 py-3 text-right">Est. Monthly Savings</th>
-                                        <th class="px-6 py-3 text-center">Action</th>
+                                        <th class="px-6 py-4 text-left font-bold">Instance Family</th>
+                                        <th class="px-6 py-4 text-left font-bold">Term</th>
+                                        <th class="px-6 py-4 text-right font-bold">Recommended #</th>
+                                        <th class="px-6 py-4 text-right font-bold">Monthly Savings</th>
+                                        <th class="px-6 py-4 text-center font-bold">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200">
                                     <template x-for="rec in data.purchaseRecommendations" :key="rec.instanceFamily + rec.term">
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-6 py-4 font-medium text-gray-800" x-text="rec.instanceFamily"></td>
-                                            <td class="px-6 py-4" x-text="rec.term"></td>
-                                            <td class="px-6 py-4 text-right" x-text="rec.recommendedInstances"></td>
-                                            <td class="px-6 py-4 text-right font-mono text-green-600" x-text="'$' + rec.monthlySavings"></td>
+                                        <tr class="hover:bg-gray-50 transition-all">
+                                            <td class="px-6 py-4 font-bold text-gray-800" x-text="rec.instanceFamily"></td>
+                                            <td class="px-6 py-4 text-gray-700" x-text="rec.term"></td>
+                                            <td class="px-6 py-4 text-right font-bold text-indigo-600" x-text="rec.recommendedInstances"></td>
+                                            <td class="px-6 py-4 text-right font-bold text-green-600" x-text="'$' + rec.monthlySavings"></td>
                                             <td class="px-6 py-4 text-center">
-                                                <button @click="openAnalysisModal(rec)" class="px-4 py-2 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200 transition flex items-center">
+                                                <button @click="openAnalysisModal(rec)" class="px-4 py-2 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded-lg hover:bg-indigo-200 transition-all">
                                                     <i class="fas fa-chart-pie mr-2"></i>Analyze
                                                 </button>
                                             </td>
@@ -269,71 +678,121 @@
                 </div>
             </div>
 
-            <!-- "What-If" Analysis Modal -->
-            <div x-show="isAnalysisModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isAnalysisModalOpen = false">
-                <div class="bg-white rounded-lg p-8 w-full max-w-2xl shadow-xl transform transition-all" @click.stop>
-                    <div class="flex justify-between items-center pb-3 border-b">
-                        <h3 class="text-lg font-bold">"What-If" Analysis</h3>
-                        <button @click="isAnalysisModalOpen = false" class="text-gray-400 hover:text-gray-600">&times;</button>
-                    </div>
-                    <div x-if="analysisData" class="mt-4 space-y-4">
-                        <p class="text-sm">Analysis for purchasing <strong x-text="analysisData.recommendedInstances"></strong> x <strong x-text="analysisData.instanceFamily"></strong> for <strong x-text="analysisData.term"></strong>.</p>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-gray-50 p-4 rounded-lg">
-                                <p class="text-sm text-gray-600">Current Reservation Coverage</p>
-                                <p class="text-2xl font-bold text-gray-800" x-text="(data.analysis.coveragePercentage).toFixed(1) + '%'"></p>
+            <!-- Enhanced "What-If" Analysis Modal -->
+            <div x-show="isAnalysisModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isAnalysisModalOpen = false">
+                <div class="modal-content rounded-2xl p-8 w-full max-w-3xl mx-4 transform transition-all" @click.stop>
+                    <div class="flex items-center justify-between pb-6 border-b border-gray-200">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-chart-pie text-white text-sm"></i>
                             </div>
-                            <div class="bg-green-50 p-4 rounded-lg">
-                                <p class="text-sm text-green-700">Projected Coverage with Purchase</p>
-                                <p class="text-2xl font-bold text-green-800" x-text="projectedCoverage.toFixed(1) + '%'"></p>
+                            <h3 class="text-xl font-bold text-gray-800">"What-If" Analysis</h3>
+                        </div>
+                        <button @click="isAnalysisModalOpen = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <div x-if="analysisData" class="mt-6 space-y-6">
+                        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
+                            <p class="text-sm text-blue-800">
+                                Analysis for purchasing <strong x-text="analysisData.recommendedInstances"></strong> × <strong x-text="analysisData.instanceFamily"></strong> for <strong x-text="analysisData.term"></strong>
+                            </p>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="metric-card p-6 rounded-xl">
+                                <p class="text-sm text-gray-600 mb-2">Current Coverage</p>
+                                <p class="text-3xl font-bold text-gray-800" x-text="(data.analysis.coveragePercentage).toFixed(1) + '%'"></p>
+                            </div>
+                            <div class="metric-card p-6 rounded-xl">
+                                <p class="text-sm text-green-700 mb-2">Projected Coverage</p>
+                                <p class="text-3xl font-bold text-green-800" x-text="projectedCoverage.toFixed(1) + '%'"></p>
                             </div>
                         </div>
 
-                        <div>
-                            <p class="text-sm font-semibold">Cost Impact:</p>
-                            <ul class="list-disc list-inside text-sm space-y-1 mt-2">
-                                <li>Estimated Monthly On-Demand Cost: <span class="font-mono" x-text="`$` + analysisData.estimatedMonthlyOnDemandCost"></span></li>
-                                <li>Estimated Monthly Cost with RI: <span class="font-mono" x-text="`$` + analysisData.estimatedMonthlyCost"></span></li>
-                                <li class="font-bold text-green-600">Estimated Monthly Savings: <span class="font-mono" x-text="`$` + analysisData.monthlySavings"></span></li>
-                            </ul>
+                        <div class="bg-gray-50 p-6 rounded-xl">
+                            <h4 class="text-sm font-bold text-gray-800 mb-4">Cost Impact Analysis</h4>
+                            <div class="space-y-3 text-sm">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-600">Estimated Monthly On-Demand Cost:</span>
+                                    <span class="font-bold text-gray-800" x-text="`$` + analysisData.estimatedMonthlyOnDemandCost"></span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-600">Estimated Monthly Cost with RI:</span>
+                                    <span class="font-bold text-gray-800" x-text="`$` + analysisData.estimatedMonthlyCost"></span>
+                                </div>
+                                <div class="flex justify-between items-center pt-2 border-t border-gray-200">
+                                    <span class="font-bold text-green-600">Estimated Monthly Savings:</span>
+                                    <span class="font-bold text-green-600" x-text="`$` + analysisData.monthlySavings"></span>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="flex justify-end pt-4">
-                            <button @click="isAnalysisModalOpen = false" class="px-4 py-2 text-sm bg-gray-200 rounded-md">Close</button>
+                            <button @click="isAnalysisModalOpen = false" class="px-6 py-3 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">Close Analysis</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Modification Confirmation Modal -->
-            <div x-show="isModificationModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" @click.away="isModificationModalOpen = false">
-                <div class="bg-white rounded-lg p-8 w-full max-w-lg shadow-xl" @click.stop>
-                     <h3 class="text-lg font-bold">Confirm Modification</h3>
-                     <div x-if="modificationDetails" class="mt-4 text-sm space-y-2">
-                        <p>Are you sure you want to modify this reservation?</p>
-                        <p><strong>ID:</strong> <span class="font-mono" x-text="modificationDetails.reservationId"></span></p>
-                        <p><strong>From:</strong> <span class="font-semibold text-orange-600" x-text="modificationDetails.currentInstanceType"></span></p>
-                        <p><strong>To:</strong> <span class="font-semibold text-green-600" x-text="modificationDetails.recommendedInstanceType"></span></p>
-                        <p class="text-xs text-gray-500 pt-2">This action is irreversible and will be performed on your AWS account immediately.</p>
-                     </div>
-                     <div class="mt-6 flex justify-end gap-3">
-                        <button @click="isModificationModalOpen = false" class="px-4 py-2 text-sm bg-gray-200 rounded-md" :disabled="isModifying">Cancel</button>
-                        <button @click="applyModification()" class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-md" :disabled="isModifying">
+            <!-- Enhanced Modification Confirmation Modal -->
+            <div x-show="isModificationModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isModificationModalOpen = false">
+                <div class="modal-content rounded-2xl p-8 w-full max-w-lg mx-4" @click.stop>
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-exclamation-triangle text-white text-lg"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800">Confirm Modification</h3>
+                    </div>
+                    
+                    <div x-if="modificationDetails" class="space-y-4 mb-8">
+                        <p class="text-gray-700">Are you sure you want to modify this reservation?</p>
+                        
+                        <div class="bg-gray-50 p-4 rounded-xl space-y-3">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Reservation ID:</span>
+                                <span class="font-mono text-sm text-gray-800" x-text="modificationDetails.reservationId"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">From:</span>
+                                <span class="font-bold text-orange-600" x-text="modificationDetails.currentInstanceType"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">To:</span>
+                                <span class="font-bold text-green-600" x-text="modificationDetails.recommendedInstanceType"></span>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-xl">
+                            <p class="text-xs text-yellow-800">⚠️ This action is irreversible and will be performed on your AWS account immediately.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3">
+                        <button @click="isModificationModalOpen = false" class="px-6 py-3 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors" :disabled="isModifying">Cancel</button>
+                        <button @click="applyModification()" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isModifying">
                             <span x-show="!isModifying">Confirm & Apply</span>
-                            <span x-show="isModifying"><i class="fas fa-spinner fa-spin mr-2"></i>Applying...</span>
+                            <span x-show="isModifying" class="flex items-center">
+                                <div class="loading-spinner mr-2"></div>
+                                Applying...
+                            </span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Toast Notification -->
-            <div x-show="toast.show" x-transition:enter="transform ease-out duration-300" x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2" x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="toast fixed top-5 right-5 w-full max-w-xs p-4 rounded-lg shadow-lg text-white" :class="toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'">
-                <div class="flex items-start">
-                    <i class="fas mr-3 mt-1" :class="toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
-                    <p class="flex-1" x-text="toast.message"></p>
-                    <button @click="toast.show = false" class="ml-3 -mr-1 -mt-1 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-white">
-                        &times;
+            <!-- Enhanced Toast Notification -->
+            <div x-show="toast.show" x-transition:enter="transform ease-out duration-300" x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2" x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="toast fixed top-6 right-6 w-full max-w-sm p-6 rounded-xl shadow-2xl z-50" :class="toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'">
+                <div class="flex items-start text-white">
+                    <div class="flex-shrink-0">
+                        <i class="fas text-lg mr-3" :class="toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-semibold text-sm" x-text="toast.message"></p>
+                    </div>
+                    <button @click="toast.show = false" class="ml-3 -mr-1 -mt-1 p-1 rounded-md hover:bg-white hover:bg-opacity-20 transition-colors">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
             </div>
@@ -517,21 +976,37 @@ function reservationManagement() {
             if (this.costByTagChartInstance) {
                 this.costByTagChartInstance.destroy();
             }
-            const backgroundColors = ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#60a5fa', '#38bdf8', '#22d3ee', '#67e8f9'];
+            const backgroundColors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7', '#ffecd2', '#fcb69f'];
             this.costByTagChartInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: this.costByTagData.map(d => d.tagValue),
                     datasets: [{
                         data: this.costByTagData.map(d => d.cost),
-                        backgroundColor: backgroundColors
+                        backgroundColor: backgroundColors,
+                        borderWidth: 0,
+                        hoverOffset: 6
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { 
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(102, 126, 234, 0.8)',
+                            borderWidth: 1,
+                            cornerRadius: 8
+                        }
                     }
                 }
             });
@@ -553,18 +1028,30 @@ function reservationManagement() {
                         {
                             label: 'Utilization',
                             data: this.data.historicalData.utilizationPercentages,
-                            borderColor: 'rgb(79, 70, 229)',
-                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
                             fill: true,
-                            tension: 0.3
+                            tension: 0.4,
+                            borderWidth: 3,
+                            pointBackgroundColor: '#667eea',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8
                         },
                         {
                             label: 'Coverage',
                             data: this.data.historicalData.coveragePercentages,
-                            borderColor: 'rgb(22, 163, 74)',
-                            backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             fill: true,
-                            tension: 0.3
+                            tension: 0.4,
+                            borderWidth: 3,
+                            pointBackgroundColor: '#10b981',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8
                         }
                     ]
                 },
@@ -578,15 +1065,37 @@ function reservationManagement() {
                             ticks: {
                                 callback: function(value) {
                                     return value + '%'
-                                }
+                                },
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                display: false
                             }
                         }
                     },
                     plugins: {
                         legend: {
                             position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
                         },
                         tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(102, 126, 234, 0.8)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
                             callbacks: {
                                 label: function(context) {
                                     let label = context.dataset.label || '';
@@ -616,9 +1125,9 @@ function reservationManagement() {
                 const endDate = new Date(ri.end);
                 const now = new Date();
                 const diffDays = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
-                let color = 'rgba(34, 197, 94, 0.7)'; // Green
-                if (diffDays < 30) color = 'rgba(239, 68, 68, 0.7)'; // Red
-                else if (diffDays < 90) color = 'rgba(245, 158, 11, 0.7)'; // Amber
+                let color = 'rgba(34, 197, 94, 0.8)'; // Green
+                if (diffDays < 30) color = 'rgba(239, 68, 68, 0.8)'; // Red
+                else if (diffDays < 90) color = 'rgba(245, 158, 11, 0.8)'; // Amber
 
                 return {
                     x: [new Date(ri.start), endDate],
@@ -634,7 +1143,7 @@ function reservationManagement() {
                     datasets: [{
                         label: 'Reservation Term',
                         data: chartData,
-                        borderRadius: 4,
+                        borderRadius: 8,
                         borderSkipped: false,
                     }]
                 },
@@ -649,7 +1158,21 @@ function reservationManagement() {
                                 unit: 'month'
                             },
                             min: new Date(),
-                            max: new Date(new Date().setFullYear(new Date().getFullYear() + 1))
+                            max: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+                            ticks: {
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                display: false
+                            }
                         }
                     },
                     plugins: {
@@ -657,6 +1180,12 @@ function reservationManagement() {
                             display: false
                         },
                         tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(102, 126, 234, 0.8)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
                             callbacks: {
                                 title: function(context) {
                                     return context[0].label;
@@ -684,7 +1213,7 @@ function reservationManagement() {
             const diffTime = end - now;
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
-            let colorClass = 'text-green-600';
+            let colorClass = 'text-green-600 font-semibold';
             if (diffDays <= 0) {
                  colorClass = 'text-gray-500';
             } else if (diffDays < 30) {

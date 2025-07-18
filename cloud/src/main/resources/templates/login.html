@@ -3,141 +3,560 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XamOps - Login</title>
+    <title>XamOps - Cloud FinOps Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Base styles */
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --cloud-blue: #326ce5;
+            --cloud-azure: #0078d4;
+            --aws-orange: #ff9900;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             position: relative;
             overflow: hidden;
-            background-color: #000; /* Black background */
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
         }
 
-        /* Glassmorphism Form Container */
-        .glass-container {
-            position: relative;
-            z-index: 1; /* Ensure form is above background */
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
-            border-radius: 1.5rem;
-        }
-        
-        /* Pure CSS Aurora Background */
-        .aurora-background {
+        /* Enhanced Cloud Background Animation */
+        .cloud-background {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: 0;
+            overflow: hidden;
         }
 
-        .aurora {
+        .cloud-layer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .floating-cloud {
+            position: absolute;
+            opacity: 0.1;
+            animation: float-cloud 20s linear infinite;
+        }
+
+        .floating-cloud i {
+            font-size: 2rem;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes float-cloud {
+            0% { transform: translateX(-100px) translateY(0px); }
+            50% { transform: translateX(calc(100vw + 100px)) translateY(-20px); }
+            100% { transform: translateX(calc(100vw + 200px)) translateY(0px); }
+        }
+
+        /* DevOps Icons Animation */
+        .devops-icons {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .floating-icon {
+            position: absolute;
+            animation: float-icon 15s ease-in-out infinite;
+            opacity: 0.05;
+        }
+
+        .floating-icon i {
+            font-size: 1.5rem;
+            color: var(--cloud-blue);
+        }
+
+        @keyframes float-icon {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+
+        /* Enhanced Glassmorphism */
+        .glass-container {
+            position: relative;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+            border-radius: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .glass-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 35px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Logo Animation */
+        .logo-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .logo-glow {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 140vmax;
-            height: 140vmax;
             transform: translate(-50%, -50%);
-        }
-
-        .aurora__item {
-            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: var(--primary-gradient);
             border-radius: 50%;
-            mix-blend-mode: screen; /* You can also try 'overlay' or 'lighten' */
-            opacity: 0.5;
-            filter: blur(8vw);
-            will-change: transform;
-        }
-        
-        .aurora__item:nth-of-type(1) {
-            width: 60vmax;
-            height: 60vmax;
-            background-color: #3A29FF; /* Blue */
-            top: 10%;
-            left: 10%;
-            animation: aurora-1 15s linear infinite alternate;
-        }
-        
-        .aurora__item:nth-of-type(2) {
-            width: 50vmax;
-            height: 50vmax;
-            background-color: #FF94B4; /* Pink */
-            top: 25%;
-            right: 5%;
-            animation: aurora-2 18s linear infinite alternate;
-        }
-        
-        .aurora__item:nth-of-type(3) {
-            width: 45vmax;
-            height: 45vmax;
-            background-color: #FF3232; /* Red */
-            bottom: 15%;
-            left: 20%;
-            animation: aurora-3 20s linear infinite alternate;
-        }
-        
-        @keyframes aurora-1 {
-            to { transform: translateX(80vmax) translateY(20vmax); }
-        }
-        
-        @keyframes aurora-2 {
-            to { transform: translateX(-60vmax) translateY(30vmax); }
-        }
-        
-        @keyframes aurora-3 {
-            to { transform: translateX(40vmax) translateY(-40vmax); }
+            opacity: 0.3;
+            animation: pulse-glow 2s ease-in-out infinite;
         }
 
+        @keyframes pulse-glow {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.1; }
+        }
+
+        /* Enhanced Form Inputs */
+        .form-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: var(--cloud-blue);
+            box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.2);
+            transform: translateY(-2px);
+        }
+
+        /* Enhanced Button */
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Cloud Provider Icons */
+        .cloud-providers {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .provider-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .provider-icon:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .provider-icon.aws { color: var(--aws-orange); }
+        .provider-icon.azure { color: var(--cloud-azure); }
+        .provider-icon.gcp { color: #4285f4; }
+        .provider-icon.kubernetes { color: var(--cloud-blue); }
+
+        /* Error Alert Enhancement */
+        .error-alert {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            backdrop-filter: blur(10px);
+            color: #fca5a5;
+        }
+
+        /* Features List */
+        .features-list {
+            position: absolute;
+            left: 2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            z-index: 5;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .feature-item i {
+            margin-right: 0.5rem;
+            color: var(--cloud-blue);
+        }
+
+        /* Stats */
+        .stats-container {
+            position: absolute;
+            right: 2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            z-index: 5;
+        }
+
+        .stat-item {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .features-list, .stats-container {
+                display: none;
+            }
+        }
+
+        /* Loading Animation */
+        .loading-dots {
+            display: inline-block;
+            position: relative;
+            width: 20px;
+            height: 20px;
+        }
+
+        .loading-dots div {
+            position: absolute;
+            top: 8px;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: currentColor;
+            animation-timing-function: cubic-bezier(0, 1, 1, 0);
+        }
+
+        .loading-dots div:nth-child(1) {
+            left: 2px;
+            animation: loading1 0.6s infinite;
+        }
+
+        .loading-dots div:nth-child(2) {
+            left: 2px;
+            animation: loading2 0.6s infinite;
+        }
+
+        .loading-dots div:nth-child(3) {
+            left: 8px;
+            animation: loading2 0.6s infinite;
+        }
+
+        .loading-dots div:nth-child(4) {
+            left: 14px;
+            animation: loading3 0.6s infinite;
+        }
+
+        @keyframes loading1 {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes loading3 {
+            0% { transform: scale(1); }
+            100% { transform: scale(0); }
+        }
+
+        @keyframes loading2 {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(6px, 0); }
+        }
     </style>
 </head>
-<body class="flex items-center justify-center h-screen px-4">
+<body class="flex items-center justify-center min-h-screen px-4">
 
-    <div class="aurora-background">
-        <div class="aurora">
-            <div class="aurora__item"></div>
-            <div class="aurora__item"></div>
-            <div class="aurora__item"></div>
+    <!-- Enhanced Cloud Background -->
+    <div class="cloud-background">
+        <!-- Floating Clouds -->
+        <div class="cloud-layer">
+            <div class="floating-cloud" style="top: 10%; animation-delay: 0s;">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <div class="floating-cloud" style="top: 30%; animation-delay: 5s;">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <div class="floating-cloud" style="top: 60%; animation-delay: 10s;">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <div class="floating-cloud" style="top: 80%; animation-delay: 15s;">
+                <i class="fas fa-cloud"></i>
+            </div>
+        </div>
+
+        <!-- DevOps Icons -->
+        <div class="devops-icons">
+            <div class="floating-icon" style="top: 15%; left: 10%; animation-delay: 0s;">
+                <i class="fab fa-docker"></i>
+            </div>
+            <div class="floating-icon" style="top: 25%; left: 80%; animation-delay: 2s;">
+                <i class="fab fa-kubernetes"></i>
+            </div>
+            <div class="floating-icon" style="top: 45%; left: 15%; animation-delay: 4s;">
+                <i class="fab fa-aws"></i>
+            </div>
+            <div class="floating-icon" style="top: 65%; left: 85%; animation-delay: 6s;">
+                <i class="fab fa-jenkins"></i>
+            </div>
+            <div class="floating-icon" style="top: 75%; left: 20%; animation-delay: 8s;">
+                <i class="fab fa-git-alt"></i>
+            </div>
+            <div class="floating-icon" style="top: 35%; left: 70%; animation-delay: 10s;">
+                <i class="fas fa-server"></i>
+            </div>
         </div>
     </div>
 
+    <!-- Features List (Left Side) -->
+    <div class="features-list">
+        <div class="feature-item">
+            <i class="fas fa-chart-line"></i>
+            <span>Real-time Cost Analytics</span>
+        </div>
+        <div class="feature-item">
+            <i class="fas fa-shield-alt"></i>
+            <span>Multi-Cloud Security</span>
+        </div>
+        <div class="feature-item">
+            <i class="fas fa-cogs"></i>
+            <span>Automated Optimization</span>
+        </div>
+        <div class="feature-item">
+            <i class="fas fa-users"></i>
+            <span>Team Collaboration</span>
+        </div>
+        <div class="feature-item">
+            <i class="fas fa-bell"></i>
+            <span>Smart Alerts</span>
+        </div>
+    </div>
+
+    <!-- Stats (Right Side) -->
+    <div class="stats-container">
+        <div class="stat-item">
+            <div class="stat-number">99.9%</div>
+            <div class="stat-label">Uptime</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">500+</div>
+            <div class="stat-label">Enterprises</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">$50M+</div>
+            <div class="stat-label">Costs Saved</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">24/7</div>
+            <div class="stat-label">Support</div>
+        </div>
+    </div>
+
+    <!-- Main Login Container -->
     <div class="max-w-md w-full glass-container p-8">
         
-        <h2 class="text-3xl font-bold text-center text-gray-100 mb-2">
-           Welcome to <span class="text-[#818cf8]">XamOps</span>
-        </h2>
-        <p class="text-center text-gray-300 mb-8">Sign in to continue</p>
-        
-        <div th:if="${param.error}" class="bg-red-200 border-l-4 border-red-500 text-red-800 p-4 rounded-md mb-6" role="alert">
-            <p class="font-bold">Login Failed</p>
-            <p>Invalid username or password. Please try again.</p>
+        <!-- Logo and Title -->
+        <div class="text-center mb-8">
+            <div class="logo-container mb-4">
+                <div class="logo-glow"></div>
+                <div class="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-2xl text-white font-bold relative z-10">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+            </div>
+            <h1 class="text-3xl font-bold text-white mb-2">
+                Welcome to <span class="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">XamOps</span>
+            </h1>
+            <p class="text-gray-300 text-sm">Cloud FinOps & DevOps Platform</p>
         </div>
 
-        <form th:action="@{/login}" method="post" class="space-y-6">
+        <!-- Error Alert -->
+        <div th:if="${param.error}" class="error-alert p-4 rounded-xl mb-6" role="alert">
+            <div class="flex items-center">
+                <i class="fas fa-exclamation-triangle mr-3"></i>
+                <div>
+                    <p class="font-semibold">Authentication Failed</p>
+                    <p class="text-sm opacity-90">Invalid credentials. Please verify and try again.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Login Form -->
+        <form th:action="@{/login}" method="post" class="space-y-6" id="loginForm">
             <div>
-                <label for="username" class="block text-sm font-medium text-gray-300">Username</label>
-                <input type="text" id="username" name="username" class="mt-1 block w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg shadow-sm text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 sm:text-sm" placeholder="user" required autofocus>
+                <label for="username" class="block text-sm font-semibold text-gray-200 mb-2">
+                    <i class="fas fa-user mr-2"></i>Username
+                </label>
+                <input type="text" 
+                       id="username" 
+                       name="username" 
+                       class="form-input w-full px-4 py-3 rounded-xl text-white placeholder-gray-400 focus:outline-none" 
+                       placeholder="Enter your username" 
+                       required 
+                       autofocus>
             </div>
             
             <div>
-                <label for="password" class="block text-sm font-medium text-gray-300">Password</label>
-                <input type="password" id="password" name="password" class="mt-1 block w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg shadow-sm text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 sm:text-sm" placeholder="password" required>
+                <label for="password" class="block text-sm font-semibold text-gray-200 mb-2">
+                    <i class="fas fa-lock mr-2"></i>Password
+                </label>
+                <input type="password" 
+                       id="password" 
+                       name="password" 
+                       class="form-input w-full px-4 py-3 rounded-xl text-white placeholder-gray-400 focus:outline-none" 
+                       placeholder="Enter your password" 
+                       required>
             </div>
             
-            <div>
-                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
-                    Sign in
-                </button>
+            <div class="flex items-center justify-between">
+                <label class="flex items-center">
+                    <input type="checkbox" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+                    <span class="ml-2 text-sm text-gray-300">Remember me</span>
+                </label>
+                <a href="#" class="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                    Forgot password?
+                </a>
             </div>
+            
+            <button type="submit" 
+                    class="btn-primary w-full py-3 px-4 rounded-xl text-white font-semibold text-lg relative overflow-hidden group"
+                    id="loginButton">
+                <span class="flex items-center justify-center">
+                    <i class="fas fa-sign-in-alt mr-2"></i>
+                    <span id="buttonText">Sign In to Cloud</span>
+                    <div id="buttonLoading" class="loading-dots ml-2" style="display: none;">
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                </span>
+            </button>
         </form>
+
+        <!-- Cloud Providers -->
+        <div class="cloud-providers">
+            <div class="provider-icon aws" title="Amazon Web Services">
+                <i class="fab fa-aws"></i>
+            </div>
+            <div class="provider-icon azure" title="Microsoft Azure">
+                <i class="fab fa-microsoft"></i>
+            </div>
+            <div class="provider-icon gcp" title="Google Cloud Platform">
+                <i class="fab fa-google"></i>
+            </div>
+            <div class="provider-icon kubernetes" title="Kubernetes">
+                <i class="fab fa-kubernetes"></i>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 pt-6 border-t border-gray-600">
+            <p class="text-xs text-gray-400">
+                Secure • Compliant • Enterprise Ready
+            </p>
+            <p class="text-xs text-gray-500 mt-1">
+                © 2024 XamOps. All rights reserved.
+            </p>
+        </div>
     </div>
+
+    <script>
+        // Enhanced form submission with loading state
+        document.getElementById('loginForm').addEventListener('submit', function() {
+            const button = document.getElementById('loginButton');
+            const buttonText = document.getElementById('buttonText');
+            const buttonLoading = document.getElementById('buttonLoading');
+            
+            button.disabled = true;
+            buttonText.textContent = 'Authenticating';
+            buttonLoading.style.display = 'inline-block';
+            
+            // Add some visual feedback
+            button.style.transform = 'scale(0.98)';
+            
+            setTimeout(() => {
+                button.style.transform = 'scale(1)';
+            }, 150);
+        });
+
+        // Add some interactive effects
+        document.querySelectorAll('.form-input').forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.style.transform = 'translateY(-2px)';
+            });
+            
+            input.addEventListener('blur', function() {
+                this.parentElement.style.transform = 'translateY(0)';
+            });
+        });
+
+        // Cloud providers hover effects
+        document.querySelectorAll('.provider-icon').forEach(icon => {
+            icon.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px) scale(1.1)';
+            });
+            
+            icon.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    </script>
 
 </body>
 </html>

@@ -9,8 +9,242 @@
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --aws-orange: #ff9900;
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
         [x-cloak] { display: none !important; }
+        
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        .form-card {
+            position: relative;
+            overflow: hidden;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .form-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary-gradient);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .form-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .form-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .form-input {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        
+        .form-input:focus {
+            background: rgba(255, 255, 255, 1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: var(--success-gradient);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
+        }
+        
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-content {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .radio-option {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .radio-option:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: #667eea;
+        }
+        
+        .radio-option.selected {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .radio-option.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .step-indicator {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(102, 126, 234, 0.2) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+        
+        .progress-step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .step-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--primary-gradient);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 1rem;
+        }
+        
+        .step-number.completed {
+            background: var(--success-gradient);
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .cloudformation-logo {
+            background: linear-gradient(135deg, #ff9900 0%, #ff6600 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .security-badge {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.2) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #059669;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -22,93 +256,299 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="addAccount()">
-            <header class="h-16 flex items-center justify-between border-b px-6 bg-white sticky top-0 z-10">
-                <div>
-                    <h1 class="text-xl font-semibold text-gray-800">Add New Account</h1>
-                    <p class="text-xs text-gray-500">Connect your AWS account using a CloudFormation stack</p>
+            <!-- Enhanced Header -->
+            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+                        <i class="fab fa-aws text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">Add New Account</h1>
+                        <p class="text-sm text-gray-600">Connect your AWS account securely using CloudFormation</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="security-badge">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        Secure Connection
+                    </div>
+                    <a href="/account-manager" class="px-4 py-2 bg-white/70 backdrop-blur-sm text-gray-700 rounded-lg border border-gray-200/50 hover:bg-white transition-all">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Accounts
+                    </a>
                 </div>
             </header>
 
-            <div class="flex-1 p-6">
-                <div class="max-w-4xl mx-auto bg-white rounded-lg p-8 shadow-sm border">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-2">Cross-account role connection</h2>
-                    <p class="text-sm text-gray-500 mb-6">You can grant read-only or read/write access. You can switch between access modes and/or cancel the connection at any time.</p>
-
-                    <form @submit.prevent="launchStack">
-                        <div class="space-y-6">
-                            <div>
-                                <label for="accountName" class="block text-sm font-medium text-gray-700">Account name</label>
-                                <input type="text" id="accountName" x-model="accountName" placeholder="e.g. AWS Stage" class="mt-1 block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Access</label>
-                                <fieldset class="mt-2">
-                                    <div class="space-y-2">
-                                        <div class="flex items-center">
-                                            <input id="read-write" name="access-type" type="radio" value="read-write" x-model="accessType" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300" disabled>
-                                            <label for="read-write" class="ml-3 block text-sm font-medium text-gray-400">
-                                                Read/write
-                                                <p class="text-xs">You will be able to actively save money and fix all issues (Coming Soon)</p>
-                                            </label>
-                                        </div>
-                                        <div class="flex items-center">
-                                            <input id="read-only" name="access-type" type="radio" value="read-only" x-model="accessType" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300">
-                                            <label for="read-only" class="ml-3 block text-sm font-medium text-gray-700">
-                                                Read-only
-                                                <p class="text-xs text-gray-500">You will get full visibility of your cloud environment and optimization insights</p>
-                                            </label>
-                                        </div>
+            <div class="flex-1 p-8">
+                <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Steps Guide -->
+                    <div class="lg:col-span-1">
+                        <div class="glass-card rounded-2xl p-6 sticky top-28">
+                            <h3 class="text-lg font-bold text-gray-800 mb-6">Connection Process</h3>
+                            <div class="space-y-4">
+                                <div class="progress-step">
+                                    <div class="step-number">1</div>
+                                    <div>
+                                        <p class="font-semibold text-sm text-gray-800">Configure Access</p>
+                                        <p class="text-xs text-gray-600">Choose your account settings</p>
                                     </div>
-                                </fieldset>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Connection</label>
-                                <fieldset class="mt-2">
-                                    <div class="flex items-start">
-                                        <input id="cloudformation" name="connection-type" type="radio" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 mt-1">
-                                        <label for="cloudformation" class="ml-3 block text-sm font-medium text-gray-700">
-                                            CloudFormation stack
-                                            <p class="text-xs text-gray-500">ARN-role will be automatically created by CloudFormation stack.</p>
-                                        </label>
+                                </div>
+                                <div class="progress-step">
+                                    <div class="step-number">2</div>
+                                    <div>
+                                        <p class="font-semibold text-sm text-gray-800">Generate Stack</p>
+                                        <p class="text-xs text-gray-600">Create CloudFormation template</p>
                                     </div>
-                                </fieldset>
+                                </div>
+                                <div class="progress-step">
+                                    <div class="step-number">3</div>
+                                    <div>
+                                        <p class="font-semibold text-sm text-gray-800">Deploy in AWS</p>
+                                        <p class="text-xs text-gray-600">Launch stack in your account</p>
+                                    </div>
+                                </div>
+                                <div class="progress-step">
+                                    <div class="step-number">4</div>
+                                    <div>
+                                        <p class="font-semibold text-sm text-gray-800">Verify Connection</p>
+                                        <p class="text-xs text-gray-600">Complete the setup process</p>
+                                    </div>
+                                </div>
                             </div>
-
-                            <div class="flex justify-start pt-4">
-                                <button type="submit" class="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50" :disabled="isLoading">
-                                    <span x-show="!isLoading">Launch Now</span>
-                                    <span x-show="isLoading"><i class="fas fa-spinner fa-spin mr-2"></i>Generating...</span>
-                                </button>
+                            
+                            <div class="mt-8 pt-6 border-t border-gray-200">
+                                <div class="flex items-center space-x-2 mb-3">
+                                    <i class="fas fa-info-circle text-blue-500"></i>
+                                    <span class="text-sm font-semibold text-gray-700">Security Note</span>
+                                </div>
+                                <p class="text-xs text-gray-600 leading-relaxed">
+                                    We use AWS best practices for cross-account access. Your credentials never leave your AWS account.
+                                </p>
                             </div>
                         </div>
-                    </form>
+                    </div>
+
+                    <!-- Main Form -->
+                    <div class="lg:col-span-2">
+                        <div class="form-card rounded-2xl p-8 fade-in">
+                            <div class="flex items-center space-x-3 mb-8">
+                                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-cog text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Cross-Account Role Connection</h2>
+                                    <p class="text-sm text-gray-600">Configure secure access to your AWS account</p>
+                                </div>
+                            </div>
+
+                            <form @submit.prevent="launchStack" class="space-y-8">
+                                <!-- Account Name -->
+                                <div>
+                                    <label for="accountName" class="block text-sm font-semibold text-gray-700 mb-3">
+                                        <i class="fas fa-user-tag mr-2 text-indigo-600"></i>Account Name
+                                    </label>
+                                    <input type="text" 
+                                           id="accountName" 
+                                           x-model="accountName" 
+                                           placeholder="e.g. AWS Production, AWS Development" 
+                                           class="form-input block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" 
+                                           required>
+                                    <p class="text-xs text-gray-500 mt-2">Choose a descriptive name to identify this account</p>
+                                </div>
+
+                                <!-- Access Type -->
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-4">
+                                        <i class="fas fa-key mr-2 text-indigo-600"></i>Access Level
+                                    </label>
+                                    <div class="space-y-3">
+                                        <div class="radio-option p-4 rounded-xl disabled" :class="accessType === 'read-write' ? 'selected' : ''">
+                                            <div class="flex items-start">
+                                                <input id="read-write" 
+                                                       name="access-type" 
+                                                       type="radio" 
+                                                       value="read-write" 
+                                                       x-model="accessType" 
+                                                       class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 mt-1" 
+                                                       disabled>
+                                                <div class="ml-3 flex-1">
+                                                    <div class="flex items-center space-x-2">
+                                                        <label for="read-write" class="block text-sm font-semibold text-gray-400">
+                                                            Read/Write Access
+                                                        </label>
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                            Coming Soon
+                                                        </span>
+                                                    </div>
+                                                    <p class="text-xs text-gray-400 mt-1">
+                                                        Enable automated cost optimization and resource management
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="radio-option p-4 rounded-xl" :class="accessType === 'read-only' ? 'selected' : ''" @click="accessType = 'read-only'">
+                                            <div class="flex items-start">
+                                                <input id="read-only" 
+                                                       name="access-type" 
+                                                       type="radio" 
+                                                       value="read-only" 
+                                                       x-model="accessType" 
+                                                       class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 mt-1">
+                                                <div class="ml-3 flex-1">
+                                                    <div class="flex items-center space-x-2">
+                                                        <label for="read-only" class="block text-sm font-semibold text-gray-700">
+                                                            Read-Only Access
+                                                        </label>
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                            Recommended
+                                                        </span>
+                                                    </div>
+                                                    <p class="text-xs text-gray-600 mt-1">
+                                                        Full visibility with comprehensive cost analysis and optimization insights
+                                                    </p>
+                                                    <div class="flex items-center space-x-4 mt-2">
+                                                        <span class="inline-flex items-center text-xs text-green-600">
+                                                            <i class="fas fa-check mr-1"></i>Cost monitoring
+                                                        </span>
+                                                        <span class="inline-flex items-center text-xs text-green-600">
+                                                            <i class="fas fa-check mr-1"></i>Security scanning
+                                                        </span>
+                                                        <span class="inline-flex items-center text-xs text-green-600">
+                                                            <i class="fas fa-check mr-1"></i>Resource optimization
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Connection Type -->
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-4">
+                                        <i class="fab fa-aws mr-2 text-orange-500"></i>Connection Method
+                                    </label>
+                                    <div class="radio-option p-4 rounded-xl selected">
+                                        <div class="flex items-start">
+                                            <input id="cloudformation" 
+                                                   name="connection-type" 
+                                                   type="radio" 
+                                                   checked 
+                                                   class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 mt-1">
+                                            <div class="ml-3 flex-1">
+                                                <div class="flex items-center space-x-2">
+                                                    <label for="cloudformation" class="block text-sm font-semibold text-gray-700">
+                                                        CloudFormation Stack
+                                                    </label>
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                        Automated
+                                                    </span>
+                                                </div>
+                                                <p class="text-xs text-gray-600 mt-1">
+                                                    Secure IAM role creation through AWS CloudFormation template
+                                                </p>
+                                                <div class="flex items-center space-x-4 mt-2">
+                                                    <span class="inline-flex items-center text-xs text-blue-600">
+                                                        <i class="fas fa-shield-alt mr-1"></i>Secure
+                                                    </span>
+                                                    <span class="inline-flex items-center text-xs text-blue-600">
+                                                        <i class="fas fa-bolt mr-1"></i>Quick setup
+                                                    </span>
+                                                    <span class="inline-flex items-center text-xs text-blue-600">
+                                                        <i class="fas fa-undo mr-1"></i>Easy removal
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Button -->
+                                <div class="flex justify-between items-center pt-6 border-t border-gray-200">
+                                    <div class="text-sm text-gray-500">
+                                        <i class="fas fa-info-circle mr-1"></i>
+                                        This will generate a CloudFormation template for your AWS account
+                                    </div>
+                                    <button type="submit" 
+                                            class="btn-primary px-8 py-3 text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all" 
+                                            :disabled="isLoading || !accountName">
+                                        <span x-show="!isLoading" class="flex items-center">
+                                            <i class="fab fa-aws mr-2"></i>
+                                            Generate CloudFormation Stack
+                                        </span>
+                                        <span x-show="isLoading" class="flex items-center">
+                                            <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                            Generating Stack...
+                                        </span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- "Connecting" Modal -->
-            <div x-show="isConnecting" x-cloak class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50" @click.away="isConnecting = false">
-                <div class="bg-white rounded-lg p-8 w-full max-w-2xl shadow-xl transform transition-all" @click.stop>
-                    <div class="text-center">
-                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-                        <h3 class="text-2xl font-bold text-gray-800 mt-6">Account connecting right now</h3>
-                        <p class="text-gray-500 mt-2">Please complete the steps in the AWS Console to finalize the connection.</p>
+            <!-- Enhanced Connection Modal -->
+            <div x-show="isConnecting" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isConnecting = false">
+                <div class="modal-content rounded-2xl p-8 w-full max-w-3xl mx-4 shadow-2xl" @click.stop>
+                    <div class="text-center mb-8">
+                        <div class="loading-spinner mx-auto mb-6"></div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">Account Connection in Progress</h3>
+                        <p class="text-gray-600">Follow the steps below to complete your AWS account integration</p>
                     </div>
-                    <div class="mt-8 bg-gray-50 p-4 rounded-lg">
-                        <label for="stackUrl" class="block text-sm font-medium text-gray-700">Your CloudFormation Quick-Create Link:</label>
-                        <div class="mt-1 flex rounded-md shadow-sm">
-                            <input type="text" id="stackUrl" :value="stackUrl" readonly class="form-input flex-1 block w-full rounded-none rounded-l-md sm:text-sm border-gray-300 bg-gray-100">
-                            <button @click="copyToClipboard(stackUrl)" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-200 text-gray-600 hover:bg-gray-300">
+
+                    <div class="step-indicator rounded-xl p-6 mb-8">
+                        <h4 class="font-semibold text-gray-800 mb-4">Next Steps:</h4>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex items-center">
+                                <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold mr-3">1</div>
+                                <span>Copy the CloudFormation URL below</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold mr-3">2</div>
+                                <span>Open the link in your AWS Console</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold mr-3">3</div>
+                                <span>Deploy the CloudFormation stack</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold mr-3">4</div>
+                                <span>Return here to verify the connection</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 p-6 rounded-xl mb-8">
+                        <label for="stackUrl" class="block text-sm font-semibold text-gray-700 mb-3">
+                            <i class="fab fa-aws mr-2 text-orange-500"></i>CloudFormation Quick-Create Link
+                        </label>
+                        <div class="flex rounded-xl shadow-sm">
+                            <input type="text" 
+                                   id="stackUrl" 
+                                   :value="stackUrl" 
+                                   readonly 
+                                   class="form-input flex-1 block w-full rounded-l-xl border-gray-300 bg-white text-sm font-mono">
+                            <button @click="copyToClipboard(stackUrl)" 
+                                    class="inline-flex items-center px-4 rounded-r-xl border border-l-0 border-gray-300 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
                                 <i class="fas fa-copy"></i>
                             </button>
                         </div>
-                        <p class="text-xs text-gray-500 mt-2">Manually copy this link and open it in a new tab to create the stack in your AWS account.</p>
+                        <p class="text-xs text-gray-500 mt-2">
+                            <i class="fas fa-lightbulb mr-1"></i>
+                            Click the copy button, then open this link in a new tab to create the stack in your AWS account
+                        </p>
                     </div>
-                    <div class="mt-8 flex justify-between items-center">
-                        <button @click="isConnecting = false" class="text-sm font-semibold text-gray-600 hover:text-gray-800">Cancel</button>
-                        <a href="/account-manager" class="px-5 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">
-                            I've created the stack, go to verify
+
+                    <div class="flex justify-between items-center">
+                        <button @click="isConnecting = false" 
+                                class="px-6 py-3 text-sm font-semibold text-gray-600 bg-gray-200 rounded-xl hover:bg-gray-300 transition-colors">
+                            <i class="fas fa-times mr-2"></i>Cancel
+                        </button>
+                        <a href="/account-manager" 
+                           class="btn-success px-8 py-3 text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all">
+                            <i class="fas fa-check mr-2"></i>
+                            I've Created the Stack - Verify Connection
                             <i class="fas fa-arrow-right ml-2"></i>
                         </a>
                     </div>
@@ -127,6 +567,7 @@ function addAccount() {
         isLoading: false,
         isConnecting: false,
         stackUrl: '',
+        
         launchStack() {
             if (!this.accountName) {
                 alert('Please enter an account name.');
@@ -158,6 +599,7 @@ function addAccount() {
                 this.isLoading = false;
             });
         },
+        
         copyToClipboard(text) {
             const textArea = document.createElement("textarea");
             textArea.value = text;
@@ -166,7 +608,15 @@ function addAccount() {
             textArea.select();
             try {
                 document.execCommand('copy');
-                alert('Link copied to clipboard!');
+                // Show a better success message
+                const originalText = event.target.innerHTML;
+                event.target.innerHTML = '<i class="fas fa-check"></i>';
+                event.target.classList.add('bg-green-600');
+                setTimeout(() => {
+                    event.target.innerHTML = originalText;
+                    event.target.classList.remove('bg-green-600');
+                    event.target.classList.add('bg-indigo-600');
+                }, 2000);
             } catch (err) {
                 alert('Failed to copy link.');
             }

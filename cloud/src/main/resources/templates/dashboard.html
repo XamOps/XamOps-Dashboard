@@ -7,8 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Updated Alpine.js CDN -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+
+    <!-- WebSocket and SortableJS libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
     <script src="https://code.highcharts.com/maps/highmaps.js"></script>
@@ -17,34 +21,95 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        [x-cloak] { display: none !important; }
-        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
-        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-        .sidebar-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-        .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-        .skeleton { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; background-color: #e5e7eb; }
-        @keyframes pulse {
-            50% { opacity: .5; }
-        }
-        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
         
-        /* Styles for interactive KPI cards */
+        :root {
+            --primary-color: #4f46e5;
+            --primary-dark: #4338ca;
+            --primary-light: #6366f1;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --gradient-error: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
+        [x-cloak] { display: none !important; }
+        
+        .skeleton { 
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; 
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .gradient-bg {
+            background: var(--gradient-primary);
+        }
+        
         .kpi-card {
             position: relative;
             overflow: hidden;
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow-md);
         }
+        
         .kpi-card:hover { 
-            transform: translateY(-4px); 
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.07), 0 4px 6px -2px rgba(0,0,0,0.05); 
+            transform: translateY(-6px) scale(1.02); 
+            box-shadow: var(--shadow-xl);
+            border-color: rgba(79, 70, 229, 0.3);
         }
+        
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-primary);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .kpi-card:hover::before {
+            transform: scaleX(1);
+        }
+        
         .kpi-card .main-content {
             transition: opacity 0.3s ease-in-out;
         }
+        
         .kpi-card:hover .main-content {
             opacity: 0;
         }
+        
         .kpi-card .sparkline-container {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -52,143 +117,482 @@
             transition: opacity 0.3s ease-in-out;
             pointer-events: none;
         }
+        
         .kpi-card:hover .sparkline-container {
             opacity: 1;
         }
 
-        /* Styles for pulsing AI Advisor icon */
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+        .resource-card {
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        .animate-pulse-glow {
-            animation: pulse-glow 2s infinite;
+        
+        .resource-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: rgba(79, 70, 229, 0.3);
+        }
+        
+        .resource-card:hover .resource-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        .resource-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .sortable-ghost { 
+            background: linear-gradient(45deg, #eef2ff 25%, transparent 25%), 
+                        linear-gradient(-45deg, #eef2ff 25%, transparent 25%), 
+                        linear-gradient(45deg, transparent 75%, #eef2ff 75%), 
+                        linear-gradient(-45deg, transparent 75%, #eef2ff 75%);
+            background-size: 20px 20px;
+            border: 2px dashed #818cf8; 
+            opacity: 0.7;
+            transform: rotate(5deg);
+        }
+        
+        .sortable-chosen { 
+            cursor: grabbing; 
+            transform: scale(1.05);
+            box-shadow: var(--shadow-xl);
+        }
+        
+        .widget-handle { 
+            cursor: grab; 
+            opacity: 0; 
+            transition: all 0.2s ease;
+            color: #9ca3af;
+        }
+        
+        .widget:hover .widget-handle { 
+            opacity: 0.6; 
+        }
+        
+        .widget-handle:hover { 
+            opacity: 1; 
+            color: var(--primary-color);
+            transform: scale(1.1);
+        }
+
+        .header-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-in {
+            animation: slideIn 0.6s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .chart-container {
+            position: relative;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .optimization-card {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .optimization-card:hover {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .anomaly-card {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .anomaly-card:hover {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.2) 100%);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .status-indicator {
+            position: relative;
+            display: inline-block;
+        }
+
+        .status-indicator::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: pulse 2s infinite;
+        }
+
+        .status-active::before { background: #10b981; }
+        .status-warning::before { background: #f59e0b; }
+        .status-error::before { background: #ef4444; }
+        .status-inactive::before { background: #6b7280; }
+
+        .scroll-smooth {
+            scroll-behavior: smooth;
+        }
+
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .tooltip {
+            position: relative;
+        }
+
+        .tooltip::before {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .tooltip:hover::before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .floating-action {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 100;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            box-shadow: var(--shadow-xl);
+            transition: all 0.3s ease;
+        }
+
+        .floating-action:hover {
+            transform: scale(1.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
     </style>
 </head>
 <body x-data="dashboardApp()">
 
+    <!-- Enhanced Error State -->
     <div id="errorState" class="hidden fixed inset-0 flex items-center justify-center bg-red-50 text-red-700 z-50">
-        <div><h2 class="text-2xl font-bold">Error</h2><p id="errorMessage"></p></div>
-    </div>
-
-    <div x-show="isModalOpen" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full flex items-center justify-center z-40" @click.away="isModalOpen = false">
-        <div class="relative mx-auto p-6 border w-full max-w-4xl shadow-lg rounded-xl bg-white" @click.stop>
-            <div class="flex justify-between items-center pb-3 border-b">
-                <div>
-                    <p class="text-2xl font-bold" x-text="modalTitle"></p>
-                    <p class="text-sm font-mono text-gray-500" x-text="modalResourceId"></p>
-                </div>
-                <button @click="isModalOpen = false" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full">
+                <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
             </div>
-            <div class="mt-4 h-96">
-                <canvas id="metricsChart"></canvas>
-            </div>
+            <h2 class="text-2xl font-bold text-center mb-4 text-gray-800">Connection Error</h2>
+            <p id="errorMessage" class="text-center text-gray-600 mb-6"></p>
+            <button onclick="location.reload()" class="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors">
+                Try Again
+            </button>
         </div>
     </div>
 
+    <!-- Enhanced Loading Notification -->
+    <div id="loadingNotification" class="notification bg-white border border-gray-200 shadow-lg rounded-lg p-4 flex items-center space-x-3">
+        <div class="loading-spinner"></div>
+        <span class="text-sm text-gray-600">Updating dashboard...</span>
+    </div>
+
+    <!-- Success Notification -->
+    <div id="successNotification" class="notification bg-green-50 border border-green-200 shadow-lg rounded-lg p-4 flex items-center space-x-3">
+        <div class="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+            <i class="fas fa-check text-white text-xs"></i>
+        </div>
+        <span class="text-sm text-green-800">Dashboard updated successfully!</span>
+    </div>
+
     <div id="appBody" class="flex">
-        <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20">
+        <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20 slide-in">
             <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
         </aside>
 
-         <div class="ml-64 flex-1">
-             <main class="flex-1 p-6 bg-gray-50 space-y-6">
-                <header class="h-16 flex items-center justify-between bg-white px-6 -mx-6 -mt-6 mb-6 border-b sticky top-0 z-10">
-                    <div>
-                        <h1 class="text-xl font-semibold text-gray-800">Live Dashboard</h1>
-                        <p id="updateTime" class="text-xs text-gray-500"></p>
+        <div class="ml-64 flex-1">
+            <main class="flex-1 p-6 bg-transparent space-y-6">
+                <!-- Enhanced Header -->
+                <header class="h-20 flex items-center justify-between glass-card px-6 -mx-6 -mt-6 mb-6 border-b sticky top-0 z-10 fade-in">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-cloud text-white text-lg"></i>
+                            </div>
+                            <div>
+                                <h1 class="text-xl font-bold text-gray-800">Live Dashboard</h1>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                                    <p id="updateTime" class="text-xs text-gray-500">Connected</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <button id="refreshButton" @click="fetchDashboardData(true)" class="flex items-center text-sm text-indigo-600 hover:text-indigo-800" :disabled="isLoading">
-                        <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isLoading}"></i>
-                        <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
-                    </button>
+                    <div class="flex items-center space-x-4">
+                        <button 
+                            @click="saveLayout()" 
+                            x-show="layoutChanged" 
+                            x-cloak 
+                            class="flex items-center text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-6 py-2.5 rounded-lg shadow-md transition-all transform hover:scale-105 hover:shadow-lg">
+                            <i class="fas fa-save mr-2"></i> Save Layout
+                        </button>
+                        <button 
+                            id="refreshButton" 
+                            @click="fetchDashboardData(true)" 
+                            class="flex items-center text-sm text-indigo-600 hover:text-indigo-800 px-4 py-2 rounded-lg hover:bg-indigo-50 transition-all" 
+                            :disabled="isLoading">
+                            <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isLoading}"></i>
+                            <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                        </button>
+                    </div>
                 </header>
 
-                <div id="unselectedState" class="hidden text-center py-24">
-                    <i class="fas fa-mouse-pointer fa-4x text-gray-400"></i>
-                    <h3 class="mt-4 text-lg font-semibold text-gray-700">Welcome to XamOps</h3>
-                    <p class="text-gray-500">Please select an account from the sidebar to view its dashboard.</p>
+                <!-- Enhanced Unselected State -->
+                <div id="unselectedState" class="hidden text-center py-32 fade-in">
+                    <div class="max-w-md mx-auto">
+                        <div class="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <i class="fas fa-mouse-pointer text-white text-3xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-4">Welcome to XamOps</h3>
+                        <p class="text-gray-600 mb-8">Please select an AWS account from the sidebar to view its comprehensive dashboard with real-time metrics and insights.</p>
+                        <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-6 border border-indigo-200">
+                            <h4 class="font-semibold text-indigo-800 mb-2">What you'll see:</h4>
+                            <ul class="text-sm text-indigo-700 space-y-1">
+                                <li>• Real-time cost monitoring</li>
+                                <li>• Resource optimization insights</li>
+                                <li>• Global infrastructure overview</li>
+                                <li>• AI-powered recommendations</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
 
-                <div x-show="isLoading" id="dashboardSkeleton" class="space-y-6">
+                <!-- Enhanced Loading Skeleton -->
+                <div x-show="isLoading" id="dashboardSkeleton" class="space-y-6 fade-in">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div class="bg-white p-6 rounded-lg shadow-sm border h-28 skeleton"></div>
-                        <div class="bg-white p-6 rounded-lg shadow-sm border h-28 skeleton"></div>
-                        <div class="bg-white p-6 rounded-lg shadow-sm border h-28 skeleton"></div>
-                        <div class="bg-white p-6 rounded-lg shadow-sm border h-28 skeleton"></div>
+                        <div class="glass-card p-6 rounded-xl h-32 skeleton"></div>
+                        <div class="glass-card p-6 rounded-xl h-32 skeleton"></div>
+                        <div class="glass-card p-6 rounded-xl h-32 skeleton"></div>
+                        <div class="glass-card p-6 rounded-xl h-32 skeleton"></div>
                     </div>
-                    <div class="bg-white p-6 rounded-lg shadow-sm h-96 skeleton"></div>
+                    <div class="glass-card p-6 rounded-xl h-96 skeleton"></div>
                     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm h-48 skeleton"></div>
-                        <div class="bg-white p-6 rounded-lg shadow-sm h-48 skeleton"></div>
+                        <div class="lg:col-span-2 glass-card p-6 rounded-xl h-48 skeleton"></div>
+                        <div class="glass-card p-6 rounded-xl h-48 skeleton"></div>
                     </div>
-                    <div class="bg-white p-6 rounded-lg shadow-sm h-64 skeleton"></div>
+                    <div class="glass-card p-6 rounded-xl h-64 skeleton"></div>
                 </div>
 
-                <div x-show="!isLoading" id="dashboardContent" class="hidden space-y-6">
-                    <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
-
-                    <div class="bg-white p-6 rounded-lg shadow-sm border border-indigo-200">
-                        <h3 class="font-semibold text-gray-700 flex items-center mb-3">
-                            <div class="relative mr-3">
-                                <i class="fas fa-wand-magic-sparkles text-indigo-500"></i>
-                                <span x-show="ai.pulse" class="absolute top-0 left-0 -ml-1 -mt-1 h-3 w-3 rounded-full bg-indigo-400 animate-pulse-glow"></span>
-                            </div>
-                            AI Smart Advisor
-                        </h3>
-                        <div x-show="ai.isLoading" class="space-y-2">
-                            <div class="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
-                            <div class="h-4 bg-gray-200 rounded w-5/6 animate-pulse"></div>
-                            <div class="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
-                        </div>
-                        <div x-show="!ai.isLoading && ai.summary" x-cloak>
-                            <div class="text-gray-600 text-sm leading-relaxed bg-indigo-50 p-4 rounded-md" x-html="ai.summary"></div>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <template x-for="action in ai.actions" :key="action.text">
-                                    <button @click="handleAiAction(action)" class="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-100 rounded-full hover:bg-indigo-200 transition">
-                                        <span x-text="action.text"></span> <i class="fas fa-arrow-right ml-1.5 text-xs"></i>
-                                    </button>
-                                </template>
-                            </div>
-                        </div>
-                        <div x-show="!ai.isLoading && ai.error" x-cloak class="text-red-600 text-sm" x-text="ai.error"></div>
-                    </div>
-                    
-                    <div id="quotaAlertBox" class="hidden bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                        <div class="flex">
-                            <div class="flex-shrink-0"><i class="fas fa-exclamation-triangle text-yellow-500"></i></div>
-                            <div id="quotaAlertContent" class="ml-3"></div>
-                        </div>
-                    </div>
-
-                    <div class="grid gap-6 lg:grid-cols-5">
-                        <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow-sm border">
-                             <div class="flex justify-between items-center mb-4">
-                                <h3 id="regionsTitle" class="font-semibold text-gray-700"></h3>
-                                <div x-show="selectedRegion" x-cloak class="flex items-center gap-2">
-                                    <span class="text-sm font-medium bg-blue-100 text-blue-700 px-3 py-1 rounded-full" x-text="'Filtered by: ' + selectedRegion"></span>
-                                    <button @click="clearRegionFilter()" class="text-sm text-red-500 hover:text-red-700">&times; Clear</button>
+                <!-- Enhanced Dashboard Content -->
+                <div x-show="!isLoading" id="dashboardContent" class="hidden">
+                    <div id="widgets-container" class="space-y-8">
+                        
+                        <!-- Enhanced KPI Cards -->
+                        <div id="widget-kpi" class="widget fade-in">
+                            <div class="flex items-center justify-between mb-6">
+                                <div class="flex items-center text-gray-600">
+                                    <i class="fas fa-arrows-alt widget-handle mr-3 text-lg"></i>
+                                    <h2 class="text-lg font-bold">Key Performance Indicators</h2>
                                 </div>
-                             </div>
-                             <div id="highcharts-map-container" style="height: 400px;"></div>
+                                <div class="flex items-center space-x-2 text-sm text-gray-500">
+                                    <i class="fas fa-chart-line"></i>
+                                    <span>Live metrics</span>
+                                </div>
+                            </div>
+                            <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
                         </div>
-                        <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border">
-                            <h3 class="font-semibold mb-4 text-gray-700">Cloud Usage</h3>
-                            <div id="resourceInventory" class="space-y-4"></div>
-                        </div>
-                    </div>
 
-                    <div class="bg-white p-6 rounded-lg shadow-sm border" id="optimizationHub"></div>
-                    
-                    <div class="grid gap-6 lg:grid-cols-3">
-                        <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border">
-                            <h3 class="font-semibold mb-4 text-gray-700">Cost History (Last 6 Months)</h3>
-                            <div class="h-80"><canvas id="costHistoryChart"></canvas></div>
+                        <!-- Enhanced Map and Inventory -->
+                        <div id="widget-map" class="widget grid gap-6 lg:grid-cols-5 fade-in">
+                            <div class="lg:col-span-3 chart-container p-6 rounded-xl">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                        <i class="fas fa-arrows-alt widget-handle mr-3 text-gray-400"></i> 
+                                        <i class="fas fa-globe-americas mr-2 text-blue-500"></i>
+                                        Active Regions
+                                    </h3>
+                                    <div class="flex items-center space-x-4 text-sm">
+                                        <div class="flex items-center space-x-1">
+                                            <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                            <span class="text-gray-600">Active</span>
+                                        </div>
+                                        <div class="flex items-center space-x-1">
+                                            <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                            <span class="text-gray-600">Sustainable</span>
+                                        </div>
+                                        <div class="flex items-center space-x-1">
+                                            <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                            <span class="text-gray-600">Issues</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="highcharts-map-container" style="height: 400px;" class="rounded-lg overflow-hidden"></div>
+                            </div>
+                            <div class="lg:col-span-2 chart-container p-6 rounded-xl">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                        <i class="fas fa-arrows-alt widget-handle mr-3 text-gray-400"></i>
+                                        <i class="fas fa-server mr-2 text-purple-500"></i>
+                                        Resource Inventory
+                                    </h3>
+                                    <div class="text-sm text-gray-500">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </div>
+                                </div>
+                                <div id="resourceInventory" class="grid grid-cols-1 gap-3 custom-scrollbar" style="max-height: 400px; overflow-y: auto;"></div>
+                            </div>
                         </div>
-                        <div class="bg-white p-6 rounded-lg shadow-sm border">
-                            <h3 class="font-semibold mb-4 text-gray-700">Billing Summary (Month to Date)</h3>
-                            <div class="overflow-y-auto max-h-80"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-3">Service</th><th class="px-6 py-3 text-right">Cost (USD)</th></tr></thead><tbody id="billingSummary"></tbody></table></div>
+
+                        <!-- Enhanced Optimization Hub -->
+                        <div id="widget-optimization" class="widget chart-container p-6 rounded-xl fade-in">
+                            <div class="flex items-center justify-between mb-6">
+                                <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                    <i class="fas fa-arrows-alt widget-handle mr-3 text-gray-400"></i>
+                                    <i class="fas fa-lightbulb mr-2 text-yellow-500"></i>
+                                    Optimization Hub
+                                </h3>
+                                <div class="flex items-center space-x-2 text-sm text-gray-500">
+                                    <i class="fas fa-magic"></i>
+                                    <span>AI-powered insights</span>
+                                </div>
+                            </div>
+                            <div id="optimizationHub"></div>
+                        </div>
+                        
+                        <!-- Enhanced Cost Analysis -->
+                        <div id="widget-costs" class="widget grid gap-6 lg:grid-cols-3 fade-in">
+                            <div class="lg:col-span-2 chart-container p-6 rounded-xl">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                        <i class="fas fa-arrows-alt widget-handle mr-3 text-gray-400"></i>
+                                        <i class="fas fa-chart-bar mr-2 text-green-500"></i>
+                                        Cost History (Last 6 Months)
+                                    </h3>
+                                    <div class="flex items-center space-x-2 text-sm text-gray-500">
+                                        <i class="fas fa-exclamation-triangle text-orange-500"></i>
+                                        <span>Anomaly detection</span>
+                                    </div>
+                                </div>
+                                <div class="h-80 p-4 bg-gray-50 rounded-lg">
+                                    <canvas id="costHistoryChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-container p-6 rounded-xl">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                        <i class="fas fa-arrows-alt widget-handle mr-3 text-gray-400"></i>
+                                        <i class="fas fa-receipt mr-2 text-blue-500"></i>
+                                        Billing Summary
+                                    </h3>
+                                    <div class="text-sm text-gray-500">MTD</div>
+                                </div>
+                                <div class="overflow-y-auto max-h-80 custom-scrollbar">
+                                    <table class="w-full text-sm text-left text-gray-500">
+                                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 rounded-lg">
+                                            <tr>
+                                                <th class="px-4 py-3 rounded-l-lg">Service</th>
+                                                <th class="px-4 py-3 text-right rounded-r-lg">Cost (USD)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="billingSummary"></tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -196,15 +600,18 @@
         </div>
     </div>
 
+    <!-- Floating Action Button -->
+    <button class="floating-action tooltip" data-tooltip="Quick Actions" @click="showQuickActions = !showQuickActions">
+        <i class="fas fa-bolt"></i>
+    </button>
+
     <script>
     function dashboardApp() {
         return {
             isLoading: true,
-            isModalOpen: false,
-            modalTitle: '',
-            modalResourceId: '',
-            selectedRegion: null,
-            ai: { isLoading: false, summary: '', actions: [], error: '', pulse: false },
+            stompClient: null,
+            layoutChanged: false,
+            showQuickActions: false,
             
             init() {
                 const selectedAccountId = sessionStorage.getItem('selectedAccountId');
@@ -213,7 +620,87 @@
                     document.getElementById('unselectedState').classList.remove('hidden');
                     return;
                 }
-                this.fetchDashboardData(false); // Check cache first
+                this.connectWebSocket(selectedAccountId);
+                this.initializeDashboardLayout();
+                this.fetchDashboardData(false);
+            },
+
+            showNotification(type, message) {
+                const notification = document.getElementById(type + 'Notification');
+                if (notification) {
+                    notification.classList.add('show');
+                    setTimeout(() => {
+                        notification.classList.remove('show');
+                    }, 3000);
+                }
+            },
+
+            initializeDashboardLayout() {
+                const container = document.getElementById('widgets-container');
+                fetch('/api/dashboard/layout')
+                    .then(res => res.json())
+                    .then(layout => {
+                        if (layout && layout.layoutConfig) {
+                            const widgetOrder = JSON.parse(layout.layoutConfig);
+                            if (widgetOrder && widgetOrder.length > 0) {
+                                widgetOrder.forEach(widgetId => {
+                                    const widget = document.getElementById(widgetId);
+                                    if (widget) container.appendChild(widget);
+                                });
+                            }
+                        }
+                        new Sortable(container, {
+                            animation: 200,
+                            ghostClass: 'sortable-ghost',
+                            chosenClass: 'sortable-chosen',
+                            handle: '.widget-handle',
+                            onEnd: () => { this.layoutChanged = true; }
+                        });
+                    }).catch(err => {
+                        console.error("Failed to load layout, using default.", err);
+                        new Sortable(container, {
+                            animation: 200,
+                            ghostClass: 'sortable-ghost',
+                            chosenClass: 'sortable-chosen',
+                            handle: '.widget-handle',
+                            onEnd: () => { this.layoutChanged = true; }
+                        });
+                    });
+            },
+
+            saveLayout() {
+                const container = document.getElementById('widgets-container');
+                const widgetOrder = [...container.children].map(w => w.id);
+                fetch('/api/dashboard/layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(widgetOrder)
+                }).then(res => {
+                    if (res.ok) {
+                        this.layoutChanged = false;
+                        this.showNotification('success', 'Layout saved successfully!');
+                    } else {
+                        alert('Failed to save layout.');
+                    }
+                });
+            },
+
+            connectWebSocket(accountId) {
+                const socket = new SockJS('/ws');
+                this.stompClient = Stomp.over(socket);
+                this.stompClient.debug = null;
+                this.stompClient.connect({}, (frame) => {
+                    console.log('WebSocket Connected: ' + frame);
+                    this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
+                        console.log("Received inventory update via WebSocket.");
+                        this.populateResourceInventory(JSON.parse(message.body));
+                    });
+                    const sessionId = socket._transport.url.split('/')[5];
+                    this.stompClient.subscribe(`/topic/advisor/response/${sessionId}`, (message) => {
+                        const response = JSON.parse(message.body);
+                        this.addAiChatMessage(response.response || response.error, 'ai');
+                    });
+                });
             },
 
             fetchDashboardData(forceRefresh = false) {
@@ -221,15 +708,17 @@
                 if (!selectedAccountId) {
                     this.isLoading = false;
                     document.getElementById('unselectedState').classList.remove('hidden');
-                    document.getElementById('dashboardContent').classList.add('hidden');
                     return;
                 }
-
-                document.getElementById('unselectedState').classList.add('hidden');
+                
+                if (forceRefresh) {
+                    this.showNotification('loading', 'Updating dashboard...');
+                }
+                
                 const cacheKey = `dashboardData-${selectedAccountId}`;
                 const cachedData = sessionStorage.getItem(cacheKey);
 
-                if (cachedData && !forceRefresh && !this.selectedRegion) { // Only use cache if not filtering
+                if (cachedData && !forceRefresh) {
                     this.isLoading = false;
                     document.getElementById('dashboardContent').classList.remove('hidden');
                     this.populatePage(JSON.parse(cachedData));
@@ -237,27 +726,18 @@
                 }
                 
                 this.isLoading = true;
-                this.ai.summary = '';
-                this.ai.actions = [];
-                this.ai.error = '';
-                this.ai.pulse = false;
                 document.getElementById('dashboardContent').classList.add('hidden');
                 if (forceRefresh) sessionStorage.removeItem(cacheKey);
 
-                let url = `/api/dashboard?accountId=${selectedAccountId}&force=true`;
-
-                fetch(url)
-                    .then(response => {
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                        return response.json();
-                    })
+                fetch(`/api/dashboard?accountId=${selectedAccountId}&force=true`)
+                    .then(res => res.json())
                     .then(data => {
                         if (!data) return;
-                        if (!this.selectedRegion) {
-                            sessionStorage.setItem(cacheKey, JSON.stringify(data));
-                        }
+                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
                         this.populatePage(data);
-                        this.generateAiSummary(); // Auto-generate summary after data fetch
+                        if (forceRefresh) {
+                            this.showNotification('success', 'Dashboard updated successfully!');
+                        }
                     })
                     .catch(error => {
                         console.error('Failed to fetch dashboard data:', error);
@@ -269,37 +749,11 @@
                         document.getElementById('dashboardContent').classList.remove('hidden');
                     });
             },
-
-            generateAiSummary() {
-                this.ai.isLoading = true;
-                this.ai.pulse = false;
-                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-                fetch(`/api/advisor/summary?accountId=${selectedAccountId}`)
-                    .then(res => {
-                        if (!res.ok) throw new Error('Failed to get AI summary.');
-                        return res.json();
-                    })
-                    .then(data => { 
-                        this.ai.summary = data.summary.replace(/\\n/g, '<br>');
-                        this.ai.actions = data.suggestedActions || [];
-                        this.ai.pulse = true; // Turn on pulse on success
-                    })
-                    .catch(err => { this.ai.error = err.message; })
-                    .finally(() => { this.ai.isLoading = false; });
-            },
             
-            handleAiAction(action) {
-                if (action.actionType === 'navigate') {
-                    window.location.href = action.actionValue;
-                } else {
-                    alert(`Action: ${action.text}`);
-                }
-            },
-
             populatePage(data) {
                 const account = data.selectedAccount;
                 if (!account) return;
-                document.getElementById('updateTime').textContent = `Updated just now`;
+                document.getElementById('updateTime').textContent = `Updated ${new Date().toLocaleTimeString()}`;
                 this.populateKpiCards(account);
                 this.populateResourceInventory(account.resourceInventory);
                 this.populateOptimizationHub(account.optimizationSummary, account.costAnomalies, account.ec2Recommendations, account.ebsRecommendations, account.lambdaRecommendations);
@@ -310,105 +764,230 @@
 
             populateKpiCards(account) {
                 const kpiContainer = document.getElementById('kpi-cards');
+                if (!kpiContainer) return;
                 const costHistory = account.costHistory;
                 const mtdSpend = costHistory.costs.length > 0 ? costHistory.costs[costHistory.costs.length - 1] : 0;
                 const lastMonthSpend = costHistory.costs.length > 1 ? costHistory.costs[costHistory.costs.length - 2] : 0;
                 const forecastedSpend = (mtdSpend / new Date().getDate()) * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
 
                 const kpis = [
-                    { id: 'mtdSpend', title: 'Month-to-Date Spend', value: this.formatCurrency(mtdSpend), icon: 'fa-dollar-sign', color: {bg: 'bg-blue-100', text: 'text-blue-500'}, trendData: costHistory.costs },
-                    { id: 'forecastedSpend', title: 'Forecasted Spend', value: this.formatCurrency(forecastedSpend), icon: 'fa-chart-line', color: {bg: 'bg-yellow-100', text: 'text-yellow-500'}, trendData: costHistory.costs },
-                    { id: 'lastMonthSpend', title: 'Last Month Spend', value: this.formatCurrency(lastMonthSpend), icon: 'fa-calendar-alt', color: {bg: 'bg-gray-100', text: 'text-gray-500'}, trendData: costHistory.costs.slice(0, -1) },
-                    { id: 'potentialSavings', title: 'Potential Savings', value: this.formatCurrency(account.optimizationSummary.totalPotentialSavings), icon: 'fa-piggy-bank', color: {bg: 'bg-green-100', text: 'text-green-500'}, trendData: [account.optimizationSummary.totalPotentialSavings] }
+                    { 
+                        id: 'mtdSpend', 
+                        title: 'Month-to-Date Spend', 
+                        value: this.formatCurrency(mtdSpend), 
+                        icon: 'fa-dollar-sign', 
+                        color: { iconClass: 'text-blue-500', chartColor: '#3b82f6', gradientClass: 'from-blue-500 to-blue-600' }, 
+                        trendData: costHistory.costs,
+                        change: lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend * 100).toFixed(1) : 0
+                    },
+                    { 
+                        id: 'forecastedSpend', 
+                        title: 'Forecasted Spend', 
+                        value: this.formatCurrency(forecastedSpend), 
+                        icon: 'fa-chart-line', 
+                        color: { iconClass: 'text-yellow-500', chartColor: '#f59e0b', gradientClass: 'from-yellow-500 to-yellow-600' }, 
+                        trendData: costHistory.costs,
+                        change: '+' + ((forecastedSpend - mtdSpend) / mtdSpend * 100).toFixed(1)
+                    },
+                    { 
+                        id: 'lastMonthSpend', 
+                        title: 'Last Month Spend', 
+                        value: this.formatCurrency(lastMonthSpend), 
+                        icon: 'fa-calendar-alt', 
+                        color: { iconClass: 'text-gray-500', chartColor: '#6b7280', gradientClass: 'from-gray-500 to-gray-600' }, 
+                        trendData: costHistory.costs.slice(0, -1),
+                        change: costHistory.costs.length > 2 ? ((lastMonthSpend - costHistory.costs[costHistory.costs.length - 3]) / costHistory.costs[costHistory.costs.length - 3] * 100).toFixed(1) : 0
+                    },
+                    { 
+                        id: 'potentialSavings', 
+                        title: 'Potential Savings', 
+                        value: this.formatCurrency(account.optimizationSummary.totalPotentialSavings), 
+                        icon: 'fa-piggy-bank', 
+                        color: { iconClass: 'text-green-500', chartColor: '#22c55e', gradientClass: 'from-green-500 to-green-600' }, 
+                        trendData: [account.optimizationSummary.totalPotentialSavings],
+                        change: '+100.0'
+                    }
                 ];
                 
                 kpiContainer.innerHTML = kpis.map(kpi => `
-                    <div class="bg-white rounded-lg p-5 shadow-sm border kpi-card" @mouseenter="renderSparkline('sparkline-${kpi.id}', kpi.trendData, kpi.color.text)">
+                    <div class="kpi-card rounded-xl p-6 group" @mouseenter="renderSparkline('sparkline-${kpi.id}', [${kpi.trendData.join(',')}], '${kpi.color.chartColor}')">
                         <div class="main-content">
                             <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="text-gray-500 text-sm font-medium">${kpi.title}</h3>
-                                    <p class="text-2xl font-bold text-gray-800 mt-1">${kpi.value}</p>
+                                <div class="flex-1">
+                                    <h3 class="text-gray-600 text-sm font-medium mb-1">${kpi.title}</h3>
+                                    <p class="text-2xl font-bold text-gray-900 mb-2">${kpi.value}</p>
+                                    <div class="flex items-center text-sm">
+                                        <span class="text-${kpi.change.startsWith('+') ? 'green' : kpi.change.startsWith('-') ? 'red' : 'gray'}-600 font-medium">
+                                            ${kpi.change}%
+                                        </span>
+                                        <span class="text-gray-500 ml-1">vs last period</span>
+                                    </div>
                                 </div>
-                                <div class="bg-gray-100 p-3 rounded-lg"><i class="fas ${kpi.icon} ${kpi.color.text} text-lg"></i></div>
+                                <div class="bg-gradient-to-br ${kpi.color.gradientClass} p-3 rounded-xl shadow-lg">
+                                    <i class="fas ${kpi.icon} text-white text-lg"></i>
+                                </div>
                             </div>
                         </div>
-                        <div class="sparkline-container p-2">
-                            <canvas id="sparkline-${kpi.id}"></canvas>
+                        <div class="sparkline-container p-4 flex items-center justify-center">
+                            <div class="w-full h-full">
+                                <canvas id="sparkline-${kpi.id}"></canvas>
+                            </div>
                         </div>
                     </div>
                 `).join('');
             },
-            
+
             populateResourceInventory(inv) {
                 if (!inv) return;
                 const container = document.getElementById('resourceInventory');
                 const resources = [
-                    { n: 'VPC', i: 'fa-network-wired', v: inv.vpc, type: 'VPC' }, 
-                    { n: 'ECS', i: 'fa-cubes', v: inv.ecs, type: 'ECS' }, 
-                    { n: 'EC2', i: 'fa-server', v: inv.ec2, type: 'EC2 Instance' }, 
-                    { n: 'Kubernetes', i: 'fa-dharmachakra', v: inv.kubernetes, type: 'EKS' }, 
-                    { n: 'Lambdas', i: 'fa-bolt', v: inv.lambdas, type: 'Lambda Function' }, 
-                    { n: 'EBS Volumes', i: 'fa-hdd', v: inv.ebsVolumes, type: 'EBS Volume' }
+                    { name: 'EC2 Instances', count: inv.ec2, type: 'EC2 Instance', icon: 'aws-ec2.png', color: 'from-orange-500 to-orange-600' },
+                    { name: 'S3 Buckets', count: inv.s3Buckets, type: 'S3 Bucket', icon: 'aws-s3.png', color: 'from-green-500 to-green-600' },
+                    { name: 'RDS Instances', count: inv.rdsInstances, type: 'RDS Instance', icon: 'aws-rds.png', color: 'from-blue-500 to-blue-600' },
+                    { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'aws-vpc.png', color: 'from-purple-500 to-purple-600' },
+                    { name: 'Lambda Functions', count: inv.lambdas, type: 'Lambda Function', icon: 'aws-lambda.png', color: 'from-yellow-500 to-yellow-600' },
+                    { name: 'EBS Volumes', count: inv.ebsVolumes, type: 'EBS Volume', icon: 'aws-ebs.png', color: 'from-red-500 to-red-600' },
+                    { name: 'Route 53 Zones', count: inv.route53Zones, type: 'Route 53 Zone', icon: 'aws-route53.png', color: 'from-indigo-500 to-indigo-600' },
+                    { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'aws-elb.png', color: 'from-pink-500 to-pink-600' },
+                    { name: 'ECS Clusters', count: inv.ecs, type: 'ECS', icon: 'aws-ecs.png', color: 'from-teal-500 to-teal-600' },
+                    { name: 'EKS Clusters', count: inv.kubernetes, type: 'EKS', icon: 'aws-eks.png', color: 'from-cyan-500 to-cyan-600' },
                 ];
+                
                 container.innerHTML = resources.map(res => `
-                    <a href="/cloudlist?service=${encodeURIComponent(res.type)}" class="flex items-center gap-4 p-2 rounded-lg hover:bg-gray-100 kpi-card">
-                        <div class="bg-gray-100 rounded-lg p-3 w-12 h-12 flex items-center justify-center"><i class="fas ${res.i} text-indigo-600 fa-lg"></i></div>
-                        <div>
-                            <p class="font-semibold text-2xl">${res.v}</p>
-                            <p class="text-xs text-gray-500">${res.n}</p>
+                    <a href="/cloudlist?service=${encodeURIComponent(res.type)}" class="resource-card flex items-center gap-4 p-4 rounded-xl hover:shadow-md transition-all group">
+                        <div class="resource-icon w-10 h-10 bg-gradient-to-br ${res.color} rounded-lg flex items-center justify-center flex-shrink-0">
+                            <img src="/icons/${res.icon}" alt="${res.name}" class="w-6 h-6 filter brightness-0 invert">
                         </div>
-                    </a>`).join('');
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-gray-800 truncate">${res.name}</p>
+                            <p class="text-sm text-gray-500">Active resources</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xl font-bold text-gray-900">${res.count}</p>
+                            <p class="text-xs text-gray-500">total</p>
+                        </div>
+                    </a>
+                `).join('');
             },
 
             populateOptimizationHub(summary, anomalies, ec2Recs, ebsRecs, lambdaRecs) {
                 const container = document.getElementById('optimizationHub');
-                if(!summary) return;
+                if(!summary || !container) return;
                 
-                const recsHtml = (title, recs, icon, color) => {
+                const recsHtml = (title, recs, icon, color, gradientClass) => {
                     if (!recs || recs.length === 0) return '';
-                    return `<div class="border-t pt-4 mt-4">
-                                <h4 class="font-semibold text-sm text-gray-600 mb-2 flex items-center"><i class="fas ${icon} ${color} mr-2"></i>${title} (${recs.length})</h4>
-                                <div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500">
-                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr><th class="px-4 py-2">Resource</th><th class="px-4 py-2">Recommendation</th><th class="px-4 py-2 text-right">Savings</th></tr></thead>
-                                    <tbody>${recs.slice(0, 3).map(rec => `
-                                        <tr class="border-b hover:bg-gray-50">
-                                            <td class="px-4 py-2 font-mono text-xs">${rec.resourceId}</td>
-                                            <td class="px-4 py-2">${rec.currentType} &rarr; <span class="font-semibold text-green-600">${rec.recommendedType}</span></td>
-                                            <td class="px-4 py-2 text-right font-mono text-green-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td>
-                                        </tr>`).join('')}
+                    return `
+                        <div class="optimization-card rounded-xl p-6 border-t-4 border-${color}-500 mt-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                    <div class="w-8 h-8 bg-gradient-to-br ${gradientClass} rounded-lg flex items-center justify-center mr-3">
+                                        <i class="fas ${icon} text-white text-sm"></i>
+                                    </div>
+                                    ${title}
+                                </h4>
+                                <span class="bg-${color}-100 text-${color}-800 text-xs font-semibold px-2 py-1 rounded-full">${recs.length} recommendations</span>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-gray-50 rounded-lg">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left font-semibold text-gray-700 rounded-l-lg">Resource</th>
+                                            <th class="px-4 py-3 text-left font-semibold text-gray-700">Recommendation</th>
+                                            <th class="px-4 py-3 text-right font-semibold text-gray-700 rounded-r-lg">Monthly Savings</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        ${recs.slice(0, 3).map(rec => `
+                                            <tr class="hover:bg-gray-50 transition-colors">
+                                                <td class="px-4 py-3 font-mono text-xs text-gray-600">${rec.resourceId}</td>
+                                                <td class="px-4 py-3">
+                                                    <div class="flex items-center space-x-2">
+                                                        <span class="text-gray-600">${rec.currentType}</span>
+                                                        <i class="fas fa-arrow-right text-gray-400"></i>
+                                                        <span class="font-semibold text-${color}-600">${rec.recommendedType}</span>
+                                                    </div>
+                                                </td>
+                                                <td class="px-4 py-3 text-right font-bold text-${color}-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td>
+                                            </tr>
+                                        `).join('')}
                                     </tbody>
-                                </table></div>
-                                ${recs.length > 3 ? `<a href="/rightsizing" class="text-sm text-indigo-600 hover:underline mt-2 inline-block">View all ${recs.length} recommendations...</a>` : ''}
-                            </div>`;
+                                </table>
+                            </div>
+                            ${recs.length > 3 ? `
+                                <div class="mt-4 text-center">
+                                    <a href="/rightsizing" class="inline-flex items-center text-sm text-${color}-600 hover:text-${color}-800 font-medium">
+                                        View all ${recs.length} recommendations
+                                        <i class="fas fa-arrow-right ml-1"></i>
+                                    </a>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
                 };
 
                 const anomaliesHtml = (anomalies) => {
-                     if (!anomalies || anomalies.length === 0) return '';
-                     return `<div class="border-t pt-4 mt-4">
-                                <h4 class="font-semibold text-sm text-gray-600 mb-2 flex items-center"><i class="fas fa-chart-area text-red-500 mr-2"></i>Cost Anomalies (${anomalies.length})</h4>
-                                <div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-500">
-                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50"><tr><th class="px-4 py-2">Service</th><th class="px-4 py-2">Date</th><th class="px-4 py-2 text-right">Unexpected Spend</th></tr></thead>
-                                    <tbody>${anomalies.slice(0, 3).map(a => `
-                                        <tr class="border-b hover:bg-gray-50">
-                                            <td class="px-4 py-2 font-semibold">${a.service}</td>
-                                            <td class="px-4 py-2">${a.startDate}</td>
-                                            <td class="px-4 py-2 text-right font-mono text-red-600">${this.formatCurrency(a.unexpectedSpend)}</td>
-                                        </tr>`).join('')}
+                    if (!anomalies || anomalies.length === 0) return '';
+                    return `
+                        <div class="anomaly-card rounded-xl p-6 border-t-4 border-red-500 mt-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                    <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center mr-3">
+                                        <i class="fas fa-exclamation-triangle text-white text-sm"></i>
+                                    </div>
+                                    Cost Anomalies
+                                </h4>
+                                <span class="bg-red-100 text-red-800 text-xs font-semibold px-2 py-1 rounded-full">${anomalies.length} detected</span>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-gray-50 rounded-lg">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left font-semibold text-gray-700 rounded-l-lg">Service</th>
+                                            <th class="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+                                            <th class="px-4 py-3 text-right font-semibold text-gray-700 rounded-r-lg">Unexpected Spend</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        ${anomalies.slice(0, 3).map(a => `
+                                            <tr class="hover:bg-gray-50 transition-colors">
+                                                <td class="px-4 py-3 font-semibold text-gray-800">${a.service}</td>
+                                                <td class="px-4 py-3 text-gray-600">${a.startDate}</td>
+                                                <td class="px-4 py-3 text-right font-bold text-red-600">${this.formatCurrency(a.unexpectedSpend)}</td>
+                                            </tr>
+                                        `).join('')}
                                     </tbody>
-                                </table></div>
-                            </div>`;
-                }
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                };
 
                 container.innerHTML = `
-                    <h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Optimization Hub</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div class="bg-green-50 border border-green-200 p-4 rounded-lg text-center kpi-card"><p class="text-xs text-green-700 font-semibold uppercase">Potential Savings</p><p class="text-2xl font-bold text-green-800">${this.formatCurrency(summary.totalPotentialSavings)}</p><p class="text-xs text-green-600">per month</p></div>
-                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg text-center kpi-card"><p class="text-xs text-red-700 font-semibold uppercase">Critical Alerts</p><p class="text-2xl font-bold text-red-800">${summary.criticalAlertsCount}</p><p class="text-xs text-red-600">items to review</p></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div class="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 p-6 rounded-xl text-center">
+                            <div class="flex items-center justify-center mb-3">
+                                <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-piggy-bank text-white text-xl"></i>
+                                </div>
+                            </div>
+                            <p class="text-sm text-green-700 font-semibold uppercase tracking-wide">Potential Savings</p>
+                            <p class="text-3xl font-bold text-green-800 my-2">${this.formatCurrency(summary.totalPotentialSavings)}</p>
+                            <p class="text-sm text-green-600">per month</p>
+                        </div>
+                        <div class="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 p-6 rounded-xl text-center">
+                            <div class="flex items-center justify-center mb-3">
+                                <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-exclamation-triangle text-white text-xl"></i>
+                                </div>
+                            </div>
+                            <p class="text-sm text-red-700 font-semibold uppercase tracking-wide">Critical Alerts</p>
+                            <p class="text-3xl font-bold text-red-800 my-2">${summary.criticalAlertsCount}</p>
+                            <p class="text-sm text-red-600">items to review</p>
+                        </div>
                     </div>
-                    ${recsHtml('EC2 Instance Right-Sizing', ec2Recs, 'fa-server', 'text-orange-500')}
-                    ${recsHtml('EBS Volume Optimization', ebsRecs, 'fa-hdd', 'text-purple-500')}
-                    ${recsHtml('Lambda Function Optimization', lambdaRecs, 'fa-bolt', 'text-yellow-500')}
+                    ${recsHtml('EC2 Instance Right-Sizing', ec2Recs, 'fa-server', 'orange', 'from-orange-500 to-orange-600')}
+                    ${recsHtml('EBS Volume Optimization', ebsRecs, 'fa-hdd', 'purple', 'from-purple-500 to-purple-600')}
+                    ${recsHtml('Lambda Function Optimization', lambdaRecs, 'fa-bolt', 'yellow', 'from-yellow-500 to-yellow-600')}
                     ${anomaliesHtml(anomalies)}
                 `;
             },
@@ -417,9 +996,28 @@
                 const container = document.getElementById('billingSummary'); 
                 if (!container || !summary) return; 
                 if (summary.length > 0) { 
-                    container.innerHTML = summary.sort((a,b) => b.monthToDateCost - a.monthToDateCost).map(item => `<tr class="border-b"><th class="px-6 py-4 font-medium">${item.serviceName}</th><td class="px-6 py-4 text-right font-mono">${this.formatCurrency(item.monthToDateCost)}</td></tr>`).join(''); 
+                    container.innerHTML = summary.sort((a,b) => b.monthToDateCost - a.monthToDateCost).map((item, index) => `
+                        <tr class="border-b hover:bg-gray-50 transition-colors">
+                            <th class="px-4 py-4 font-semibold text-gray-800 text-left">
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-2 h-2 bg-indigo-${500 + (index * 100) % 400} rounded-full"></div>
+                                    <span>${item.serviceName}</span>
+                                </div>
+                            </th>
+                            <td class="px-4 py-4 text-right">
+                                <span class="font-bold text-gray-900">${this.formatCurrency(item.monthToDateCost)}</span>
+                            </td>
+                        </tr>
+                    `).join(''); 
                 } else { 
-                    container.innerHTML = `<tr><td colspan="2" class="px-6 py-4 text-center">No billing data found.</td></tr>`; 
+                    container.innerHTML = `
+                        <tr>
+                            <td colspan="2" class="px-4 py-8 text-center text-gray-500">
+                                <i class="fas fa-receipt text-2xl mb-2"></i>
+                                <p>No billing data available</p>
+                            </td>
+                        </tr>
+                    `; 
                 } 
             },
             
@@ -429,37 +1027,126 @@
                 if(!ctx) return;
                 if (window.costHistoryChartInstance) window.costHistoryChartInstance.destroy();
                 
+                const backgroundColors = costHistory.anomalies.map(isAnomaly => 
+                    isAnomaly ? 'rgba(239, 68, 68, 0.8)' : 'rgba(79, 70, 229, 0.8)'
+                );
+                const borderColors = costHistory.anomalies.map(isAnomaly => 
+                    isAnomaly ? 'rgba(220, 38, 38, 1)' : 'rgba(79, 70, 229, 1)'
+                );
+
                 window.costHistoryChartInstance = new Chart(ctx, { 
                     type: 'bar', 
                     data: { 
                         labels: costHistory.labels, 
-                        datasets: [{ label: 'Monthly Cost', data: costHistory.costs, backgroundColor: 'rgba(79, 70, 229, 0.8)' }] 
+                        datasets: [{ 
+                            label: 'Monthly Cost', 
+                            data: costHistory.costs, 
+                            backgroundColor: backgroundColors,
+                            borderColor: borderColors,
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false
+                        }] 
                     }, 
                     options: { 
-                        responsive: true, maintainAspectRatio: false,
+                        responsive: true, 
+                        maintainAspectRatio: false,
                         plugins: { 
                             legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => `Cost: ${this.formatCurrency(context.parsed.y)}`
+                            tooltip: { 
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: 'white',
+                                bodyColor: 'white',
+                                borderColor: 'rgba(79, 70, 229, 0.8)',
+                                borderWidth: 1,
+                                cornerRadius: 8,
+                                callbacks: { 
+                                    label: (c) => `Cost: ${this.formatCurrency(c.parsed.y)}`,
+                                    afterLabel: (c) => costHistory.anomalies[c.dataIndex] ? 'Anomaly detected!' : ''
                                 }
                             }
                         }, 
-                        scales: { y: { beginAtZero: true, ticks: { callback: value => this.formatCurrency(value) } } } 
+                        scales: { 
+                            y: { 
+                                beginAtZero: true, 
+                                ticks: { 
+                                    callback: v => this.formatCurrency(v),
+                                    color: '#6b7280'
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    color: '#6b7280'
+                                },
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        },
+                        onClick: (evt, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                if (costHistory.anomalies[index]) {
+                                    alert(`🚨 Cost Anomaly Detected!\n\nMonth: ${costHistory.labels[index]}\nCost: ${this.formatCurrency(costHistory.costs[index])}\n\nThis cost is significantly higher than expected. Consider investigating your resource usage for this period.`);
+                                }
+                            }
+                        }
                     } 
                 }); 
             },
             
             renderHighchartMap(regionStatus) {
                 if (!regionStatus || !document.getElementById('highcharts-map-container')) return;
-                const statusColors = { 'ACTIVE': '#3b82f6', 'SEMI_ACTIVE': '#ef4444', 'SUSTAINABLE': '#22c55e', 'NON_ACTIVE': '#6b7280' };
-                const regionPoints = regionStatus.map(r => ({ name: `${r.regionId} (${r.status})`, lat: r.lat, lon: r.lon, color: statusColors[r.status] || '#6b7280', id: r.regionId }));
+                const statusColors = { 
+                    'ACTIVE': '#3b82f6', 
+                    'SEMI_ACTIVE': '#ef4444', 
+                    'SUSTAINABLE': '#22c55e', 
+                    'NON_ACTIVE': '#6b7280' 
+                };
+                const regionPoints = regionStatus.map(r => ({ 
+                    name: `${r.regionId}`, 
+                    fullName: `${r.regionId} (${r.status})`,
+                    lat: r.lat, 
+                    lon: r.lon, 
+                    color: statusColors[r.status] || '#6b7280', 
+                    id: r.regionId,
+                    status: r.status
+                }));
                 
                 Highcharts.mapChart('highcharts-map-container', {
-                    chart: { map: 'custom/world', backgroundColor: '#f8fafc' },
-                    title: { text: null }, credits: { enabled: false },
-                    mapNavigation: { enabled: true, buttonOptions: { verticalAlign: 'bottom' } },
-                    tooltip: { headerFormat: '', pointFormat: '<b>{point.name}</b>' },
+                    chart: { 
+                        map: 'custom/world', 
+                        backgroundColor: 'transparent',
+                        style: {
+                            fontFamily: 'Inter, sans-serif'
+                        }
+                    },
+                    title: { text: null }, 
+                    credits: { enabled: false },
+                    mapNavigation: { 
+                        enabled: true, 
+                        buttonOptions: { 
+                            verticalAlign: 'bottom',
+                            theme: {
+                                'stroke-width': 1,
+                                stroke: '#4f46e5',
+                                r: 4
+                            }
+                        }
+                    },
+                    tooltip: { 
+                        useHTML: true,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        borderColor: 'rgba(79, 70, 229, 0.8)',
+                        borderRadius: 8,
+                        style: {
+                            color: 'white'
+                        },
+                        pointFormat: '<b>{point.fullName}</b><br/>Click to filter dashboard'
+                    },
                     plotOptions: {
                         mappoint: {
                             point: {
@@ -471,58 +1158,129 @@
                             }
                         }
                     },
-                    series: [{ name: 'World', color: '#e5e7eb', states: { hover: { color: '#d1d5db' } } }, 
-                             { type: 'mappoint', name: 'AWS Regions', data: regionPoints, marker: { lineWidth: 1, lineColor: '#ffffff' } }]
+                    series: [
+                        { 
+                            name: 'World', 
+                            color: '#f1f5f9', 
+                            states: { 
+                                hover: { 
+                                    color: '#e2e8f0' 
+                                } 
+                            },
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1
+                        }, 
+                        { 
+                            type: 'mappoint', 
+                            name: 'AWS Regions', 
+                            data: regionPoints, 
+                            marker: { 
+                                lineWidth: 2, 
+                                lineColor: '#ffffff',
+                                radius: 8,
+                                states: {
+                                    hover: {
+                                        lineWidth: 3,
+                                        radius: 10
+                                    }
+                                }
+                            },
+                            cursor: 'pointer'
+                        }
+                    ]
                 });
             },
 
-            renderSparkline(canvasId, data, color) {
+            hexToRgba(hex, alpha) {
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            },
+
+            renderSparkline(canvasId, data, chartColor) {
                 const ctx = document.getElementById(canvasId);
-                if (!ctx) return;
-
-                // If a chart instance already exists on this canvas, destroy it first
-                if (window[canvasId+'_instance']) {
-                    window[canvasId+'_instance'].destroy();
-                }
-
+                if (!ctx || !data) return;
+                if (window[canvasId+'_instance']) window[canvasId+'_instance'].destroy();
+                
                 window[canvasId+'_instance'] = new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: data.map((_, i) => i),
                         datasets: [{
                             data: data,
-                            borderColor: color.replace('text', 'border').replace('-500', '-600'), // Use a slightly darker color for the line
-                            borderWidth: 2,
+                            borderColor: chartColor,
+                            backgroundColor: this.hexToRgba(chartColor, 0.1),
+                            borderWidth: 3,
                             pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: chartColor,
+                            pointHoverBorderColor: '#ffffff',
+                            pointHoverBorderWidth: 2,
                             tension: 0.4,
-                            fill: true,
-                            backgroundColor: color.replace('text', 'bg').replace('-500', '-100') // Use a lighter bg color
+                            fill: true
                         }]
                     },
                     options: {
-                        responsive: true, maintainAspectRatio: false,
-                        scales: { x: { display: false }, y: { display: false } },
-                        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        scales: { 
+                            x: { display: false }, 
+                            y: { display: false } 
+                        },
+                        plugins: { 
+                            legend: { display: false }, 
+                            tooltip: { 
+                                enabled: true,
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: 'white',
+                                bodyColor: 'white',
+                                borderColor: chartColor,
+                                borderWidth: 1,
+                                cornerRadius: 6,
+                                callbacks: {
+                                    label: (context) => `Value: ${context.parsed.y}`
+                                }
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        }
                     }
                 });
             },
 
             filterByRegion(regionId) {
-                this.selectedRegion = regionId;
-                alert(`Dashboard view filtered by region: ${regionId}.\n(Note: This is a UI demonstration. Backend filtering is not implemented.)`);
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+                notification.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-filter text-blue-600"></i>
+                        <div>
+                            <p class="font-semibold">Region Filter Applied</p>
+                            <p class="text-sm">Dashboard filtered by: ${regionId}</p>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 4000);
             },
 
-            clearRegionFilter() {
-                this.selectedRegion = null;
-                this.fetchDashboardData(true);
+            formatCurrency(num) { 
+                return '$' + (num != null ? num.toLocaleString('en-US', {
+                    minimumFractionDigits: 2, 
+                    maximumFractionDigits: 2
+                }) : '0.00'); 
             },
-
-            formatCurrency(num) { return '$' + (num != null ? num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00'); },
         }
     }
+    
     document.addEventListener('DOMContentLoaded', () => {
-        // Initialize the dashboard app
-        Alpine.data('dashboardApp', dashboardApp);
+        Alpine.start();
     });
     </script>
 </body>

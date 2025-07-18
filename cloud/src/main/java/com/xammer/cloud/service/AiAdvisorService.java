@@ -1,12 +1,14 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.dto.AiAdvisorSummaryDto;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.FinOpsReportDto;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -32,22 +34,17 @@ public class AiAdvisorService {
     @Value("${gemini.api.key}")
     private String geminiApiKey;
 
-    public AiAdvisorService(AwsDataService awsDataService) {
+    // Use @Lazy to break the circular dependency between AwsDataService and AiAdvisorService
+    @Autowired
+    public AiAdvisorService(@Lazy AwsDataService awsDataService) {
         this.awsDataService = awsDataService;
     }
 
-    /**
-     * Gathers key dashboard data and uses an LLM to generate a structured summary with actions.
-     * @param accountId The AWS account ID.
-     * @return A CompletableFuture containing the structured AI summary.
-     */
     @Async("awsTaskExecutor")
     public CompletableFuture<AiAdvisorSummaryDto> getDashboardSummary(String accountId) {
         logger.info("Generating AI dashboard summary for account: {}", accountId);
 
-        CompletableFuture<FinOpsReportDto> finOpsReportFuture = awsDataService.getFinOpsReport(accountId);
-
-        return finOpsReportFuture.thenCompose(finOpsReport -> {
+        return awsDataService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
             try {
                 Map<String, Object> promptData = new HashMap<>();
                 
@@ -93,6 +90,32 @@ public class AiAdvisorService {
         });
     }
 
+    @Async("awsTaskExecutor")
+    public CompletableFuture<Map<String, String>> getInteractiveResponse(String question, String accountId) {
+        logger.info("Generating interactive AI response for account: {}, question: {}", accountId, question);
+
+        return awsDataService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
+            try {
+                String contextData = objectMapper.writeValueAsString(finOpsReport);
+                String prompt = buildInteractivePrompt(question, contextData);
+
+                return callGeminiApi(prompt).thenApply(responseText -> Map.of("response", responseText.replace("\n", "<br>")));
+            } catch (Exception e) {
+                logger.error("Error preparing data for AI interactive response for account {}", accountId, e);
+                return CompletableFuture.failedFuture(e);
+            }
+        });
+    }
+
+    private String buildInteractivePrompt(String question, String contextJson) {
+        return "You are an expert FinOps advisor for a company called XamOps. " +
+               "Answer the user's question based on the provided JSON context. " +
+               "Be concise and helpful. Do not mention that you are using JSON data. " +
+               "Format your response as a single block of text. Use newline characters for paragraphs. " +
+               "User Question: " + question + "\n\n" +
+               "Context Data: \n" + contextJson;
+    }
+
     private String buildPrompt(String jsonData) {
         return "You are an expert FinOps advisor for a company called XamOps. " +
                "Your tone is professional, concise, and helpful. " +
@@ -105,11 +128,6 @@ public class AiAdvisorService {
                "Data: \n" + jsonData;
     }
 
-    /**
-     * Calls the Gemini API with the provided prompt.
-     * @param prompt The prompt to send.
-     * @return A CompletableFuture with the API's text response.
-     */
     private CompletableFuture<String> callGeminiApi(String prompt) {
         try {
             String requestBody = """
@@ -120,9 +138,8 @@ public class AiAdvisorService {
                     }]
                   }]
                 }
-            """.formatted(prompt.replace("\"", "\\\""));
+            """.formatted(prompt.replace("\"", "\\\"").replace("\n", "\\n"));
 
-            // *** FIXED: Changed model from "gemini-pro" to "gemini-1.5-flash-latest" to resolve 404 error ***
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + geminiApiKey))
                     .header("Content-Type", "application/json")
@@ -145,11 +162,6 @@ public class AiAdvisorService {
         }
     }
 
-    /**
-     * Parses the JSON response from the Gemini API to extract the text content.
-     * @param responseBody The JSON response body from the API.
-     * @return The extracted text summary.
-     */
     private String parseGeminiResponse(String responseBody) {
         try {
             Map<String, Object> responseMap = objectMapper.readValue(responseBody, Map.class);
