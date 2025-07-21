@@ -451,7 +451,7 @@
                                         <td class="px-6 py-4">
                                             <div class="flex flex-col space-y-1">
                                                 <span class="savings-badge" x-text="'$' + rec.estimatedMonthlySavings.toFixed(2)"></span>
-                                                <span class="text-xs text-gray-500" x-text="`${((rec.estimatedMonthlySavings / rec.currentMonthlyCost) * 100).toFixed(1)}% savings`"></span>
+                                                <span class="text-xs text-gray-500" x-text="`${((rec.estimatedMonthlySavings / rec.currentMonthlyCost) * 100).toFixed(1)}% savings`" x-show="rec.currentMonthlyCost > 0"></span>
                                             </div>
                                         </td>
                                         <td class="px-6 py-4">
@@ -485,18 +485,13 @@ function rightsizing() {
         analysisData: {},
 
         init() {
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                console.error("No account selected");
-                this.isLoading = false;
-                return;
-            }
             this.loadRecommendations(true);
         },
 
         loadRecommendations(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
+                console.error("No account selected");
                 this.isLoading = false;
                 return;
             }
@@ -505,14 +500,12 @@ function rightsizing() {
             fetch(`/api/rightsizing/recommendations?accountId=${selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    // Mocking cost data as it is not in the backend DTO
-                    this.recommendations = data.map(rec => ({
-                        ...rec,
-                        currentMonthlyCost: rec.estimatedMonthlySavings * (2 + Math.random()), // Simulate current cost
-                        recommendedMonthlyCost: rec.estimatedMonthlySavings * (1 + Math.random() * 0.5) // Simulate recommended cost
-                    }));
+                    this.recommendations = data;
                 })
-                .catch(err => console.error('Failed to load rightsizing recommendations:', err))
+                .catch(err => {
+                    console.error('Failed to load rightsizing recommendations:', err);
+                    this.recommendations = [];
+                })
                 .finally(() => this.isLoading = false);
         },
 

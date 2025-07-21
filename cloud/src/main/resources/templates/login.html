@@ -26,6 +26,23 @@
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
         }
 
+        /* Aurora Background */
+        .aurora-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .aurora-canvas {
+            width: 100%;
+            height: 100%;
+            opacity: 0.7;
+        }
+
         /* Enhanced Cloud Background Animation */
         .cloud-background {
             position: fixed;
@@ -33,7 +50,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 0;
+            z-index: 2;
             overflow: hidden;
         }
 
@@ -45,7 +62,7 @@
 
         .floating-cloud {
             position: absolute;
-            opacity: 0.1;
+            opacity: 0.05;
             animation: float-cloud 20s linear infinite;
         }
 
@@ -70,7 +87,7 @@
         .floating-icon {
             position: absolute;
             animation: float-icon 15s ease-in-out infinite;
-            opacity: 0.05;
+            opacity: 0.03;
         }
 
         .floating-icon i {
@@ -83,7 +100,7 @@
             50% { transform: translateY(-20px) rotate(180deg); }
         }
 
-        /* Enhanced Glassmorphism */
+        /* Enhanced Glassmorphism - Updated for Square Shape */
         .glass-container {
             position: relative;
             z-index: 10;
@@ -94,6 +111,10 @@
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
             border-radius: 2rem;
             transition: all 0.3s ease;
+            max-width: 380px;
+            width: 380px;
+            height: 400px;
+            padding: 1.5rem;
         }
 
         .glass-container:hover {
@@ -112,8 +133,8 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 80px;
-            height: 80px;
+            width: 60px;
+            height: 60px;
             background: var(--primary-gradient);
             border-radius: 50%;
             opacity: 0.3;
@@ -169,102 +190,12 @@
             box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
         }
 
-        /* Cloud Provider Icons */
-        .cloud-providers {
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            margin-top: 2rem;
-        }
-
-        .provider-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .provider-icon:hover {
-            transform: translateY(-3px);
-            background: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .provider-icon.aws { color: var(--aws-orange); }
-        .provider-icon.azure { color: var(--cloud-azure); }
-        .provider-icon.gcp { color: #4285f4; }
-        .provider-icon.kubernetes { color: var(--cloud-blue); }
-
         /* Error Alert Enhancement */
         .error-alert {
             background: rgba(239, 68, 68, 0.1);
             border: 1px solid rgba(239, 68, 68, 0.3);
             backdrop-filter: blur(10px);
             color: #fca5a5;
-        }
-
-        /* Features List */
-        .features-list {
-            position: absolute;
-            left: 2rem;
-            top: 50%;
-            transform: translateY(-50%);
-            color: rgba(255, 255, 255, 0.6);
-            z-index: 5;
-        }
-
-        .feature-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
-
-        .feature-item i {
-            margin-right: 0.5rem;
-            color: var(--cloud-blue);
-        }
-
-        /* Stats */
-        .stats-container {
-            position: absolute;
-            right: 2rem;
-            top: 50%;
-            transform: translateY(-50%);
-            color: rgba(255, 255, 255, 0.6);
-            z-index: 5;
-        }
-
-        .stat-item {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 1024px) {
-            .features-list, .stats-container {
-                display: none;
-            }
         }
 
         /* Loading Animation */
@@ -323,6 +254,11 @@
 </head>
 <body class="flex items-center justify-center min-h-screen px-4">
 
+    <!-- Aurora Background -->
+    <div class="aurora-container">
+        <canvas class="aurora-canvas" id="auroraCanvas"></canvas>
+    </div>
+
     <!-- Enhanced Cloud Background -->
     <div class="cloud-background">
         <!-- Floating Clouds -->
@@ -364,121 +300,77 @@
         </div>
     </div>
 
-    <!-- Features List (Left Side) -->
-    <div class="features-list">
-        <div class="feature-item">
-            <i class="fas fa-chart-line"></i>
-            <span>Real-time Cost Analytics</span>
-        </div>
-        <div class="feature-item">
-            <i class="fas fa-shield-alt"></i>
-            <span>Multi-Cloud Security</span>
-        </div>
-        <div class="feature-item">
-            <i class="fas fa-cogs"></i>
-            <span>Automated Optimization</span>
-        </div>
-        <div class="feature-item">
-            <i class="fas fa-users"></i>
-            <span>Team Collaboration</span>
-        </div>
-        <div class="feature-item">
-            <i class="fas fa-bell"></i>
-            <span>Smart Alerts</span>
-        </div>
-    </div>
-
-    <!-- Stats (Right Side) -->
-    <div class="stats-container">
-        <div class="stat-item">
-            <div class="stat-number">99.9%</div>
-            <div class="stat-label">Uptime</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-number">500+</div>
-            <div class="stat-label">Enterprises</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-number">$50M+</div>
-            <div class="stat-label">Costs Saved</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-number">24/7</div>
-            <div class="stat-label">Support</div>
-        </div>
-    </div>
-
     <!-- Main Login Container -->
-    <div class="max-w-md w-full glass-container p-8">
+    <div class="glass-container">
         
         <!-- Logo and Title -->
-        <div class="text-center mb-8">
-            <div class="logo-container mb-4">
+        <div class="text-center mb-6">
+            <div class="logo-container mb-3">
                 <div class="logo-glow"></div>
-                <div class="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-2xl text-white font-bold relative z-10">
+                <div class="w-12 h-12 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-xl text-white font-bold relative z-10">
                     <i class="fas fa-cloud-upload-alt"></i>
                 </div>
             </div>
-            <h1 class="text-3xl font-bold text-white mb-2">
+            <h1 class="text-2xl font-bold text-white mb-1">
                 Welcome to <span class="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">XamOps</span>
             </h1>
-            <p class="text-gray-300 text-sm">Cloud FinOps & DevOps Platform</p>
+            <p class="text-gray-300 text-xs">Cloud FinOps & DevOps Platform</p>
         </div>
 
         <!-- Error Alert -->
-        <div th:if="${param.error}" class="error-alert p-4 rounded-xl mb-6" role="alert">
+        <div th:if="${param.error}" class="error-alert p-3 rounded-lg mb-4" role="alert">
             <div class="flex items-center">
-                <i class="fas fa-exclamation-triangle mr-3"></i>
+                <i class="fas fa-exclamation-triangle mr-2 text-sm"></i>
                 <div>
-                    <p class="font-semibold">Authentication Failed</p>
-                    <p class="text-sm opacity-90">Invalid credentials. Please verify and try again.</p>
+                    <p class="font-semibold text-sm">Authentication Failed</p>
+                    <p class="text-xs opacity-90">Invalid credentials. Please verify and try again.</p>
                 </div>
             </div>
         </div>
 
         <!-- Login Form -->
-        <form th:action="@{/login}" method="post" class="space-y-6" id="loginForm">
+        <form th:action="@{/login}" method="post" class="space-y-4" id="loginForm">
             <div>
-                <label for="username" class="block text-sm font-semibold text-gray-200 mb-2">
-                    <i class="fas fa-user mr-2"></i>Username
+                <label for="username" class="block text-xs font-semibold text-gray-200 mb-1">
+                    <i class="fas fa-user mr-1"></i>Username
                 </label>
                 <input type="text" 
                        id="username" 
                        name="username" 
-                       class="form-input w-full px-4 py-3 rounded-xl text-white placeholder-gray-400 focus:outline-none" 
+                       class="form-input w-full px-3 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none text-sm" 
                        placeholder="Enter your username" 
                        required 
                        autofocus>
             </div>
             
             <div>
-                <label for="password" class="block text-sm font-semibold text-gray-200 mb-2">
-                    <i class="fas fa-lock mr-2"></i>Password
+                <label for="password" class="block text-xs font-semibold text-gray-200 mb-1">
+                    <i class="fas fa-lock mr-1"></i>Password
                 </label>
                 <input type="password" 
                        id="password" 
                        name="password" 
-                       class="form-input w-full px-4 py-3 rounded-xl text-white placeholder-gray-400 focus:outline-none" 
+                       class="form-input w-full px-3 py-2 rounded-lg text-white placeholder-gray-400 focus:outline-none text-sm" 
                        placeholder="Enter your password" 
                        required>
             </div>
             
             <div class="flex items-center justify-between">
                 <label class="flex items-center">
-                    <input type="checkbox" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                    <span class="ml-2 text-sm text-gray-300">Remember me</span>
+                    <input type="checkbox" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 w-3 h-3">
+                    <span class="ml-2 text-xs text-gray-300">Remember me</span>
                 </label>
-                <a href="#" class="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                <a href="#" class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
                     Forgot password?
                 </a>
             </div>
             
             <button type="submit" 
-                    class="btn-primary w-full py-3 px-4 rounded-xl text-white font-semibold text-lg relative overflow-hidden group"
+                    class="btn-primary w-full py-2.5 px-4 rounded-lg text-white font-semibold text-sm relative overflow-hidden group"
                     id="loginButton">
                 <span class="flex items-center justify-center">
                     <i class="fas fa-sign-in-alt mr-2"></i>
-                    <span id="buttonText">Sign In to Cloud</span>
+                    <span id="buttonText">Sign In</span>
                     <div id="buttonLoading" class="loading-dots ml-2" style="display: none;">
                         <div></div>
                         <div></div>
@@ -489,34 +381,249 @@
             </button>
         </form>
 
-        <!-- Cloud Providers -->
-        <div class="cloud-providers">
-            <div class="provider-icon aws" title="Amazon Web Services">
-                <i class="fab fa-aws"></i>
-            </div>
-            <div class="provider-icon azure" title="Microsoft Azure">
-                <i class="fab fa-microsoft"></i>
-            </div>
-            <div class="provider-icon gcp" title="Google Cloud Platform">
-                <i class="fab fa-google"></i>
-            </div>
-            <div class="provider-icon kubernetes" title="Kubernetes">
-                <i class="fab fa-kubernetes"></i>
-            </div>
-        </div>
-
         <!-- Footer -->
-        <div class="text-center mt-8 pt-6 border-t border-gray-600">
+        <div class="text-center mt-4 pt-4 border-t border-gray-600">
             <p class="text-xs text-gray-400">
                 Secure • Compliant • Enterprise Ready
             </p>
             <p class="text-xs text-gray-500 mt-1">
-                © 2024 XamOps. All rights reserved.
+                © 2025 Xammer. All rights reserved.
             </p>
         </div>
     </div>
 
     <script>
+        // Aurora WebGL Implementation
+        class Aurora {
+            constructor(canvas, options = {}) {
+                this.canvas = canvas;
+                this.gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                this.options = {
+                    colorStops: ["#3A29FF", "#FF94B4", "#FF3232"],
+                    blend: 0.5,
+                    amplitude: 1.0,
+                    speed: 0.5,
+                    ...options
+                };
+                
+                this.startTime = Date.now();
+                this.animationId = null;
+                
+                this.init();
+            }
+            
+            init() {
+                if (!this.gl) {
+                    console.error('WebGL not supported');
+                    return;
+                }
+                
+                this.setupGL();
+                this.createShaders();
+                this.createGeometry();
+                this.resize();
+                this.animate();
+                
+                window.addEventListener('resize', () => this.resize());
+            }
+            
+            setupGL() {
+                const gl = this.gl;
+                gl.clearColor(0, 0, 0, 0);
+                gl.enable(gl.BLEND);
+                gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            }
+            
+            createShaders() {
+                const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, `
+                    attribute vec2 position;
+                    void main() {
+                        gl_Position = vec4(position, 0.0, 1.0);
+                    }
+                `);
+                
+                const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, `
+                    precision mediump float;
+                    
+                    uniform float uTime;
+                    uniform float uAmplitude;
+                    uniform vec3 uColorStops[3];
+                    uniform vec2 uResolution;
+                    uniform float uBlend;
+                    
+                    vec3 permute(vec3 x) {
+                        return mod(((x * 34.0) + 1.0) * x, 289.0);
+                    }
+                    
+                    float snoise(vec2 v) {
+                        const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+                        vec2 i = floor(v + dot(v, C.yy));
+                        vec2 x0 = v - i + dot(i, C.xx);
+                        vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                        vec4 x12 = x0.xyxy + C.xxzz;
+                        x12.xy -= i1;
+                        i = mod(i, 289.0);
+                        
+                        vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+                        vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+                        m = m * m;
+                        m = m * m;
+                        
+                        vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                        vec3 h = abs(x) - 0.5;
+                        vec3 ox = floor(x + 0.5);
+                        vec3 a0 = x - ox;
+                        m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+                        
+                        vec3 g;
+                        g.x = a0.x * x0.x + h.x * x0.y;
+                        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                        return 130.0 * dot(m, g);
+                    }
+                    
+                    void main() {
+                        vec2 uv = gl_FragCoord.xy / uResolution;
+                        
+                        vec3 rampColor;
+                        if (uv.x < 0.5) {
+                            rampColor = mix(uColorStops[0], uColorStops[1], uv.x * 2.0);
+                        } else {
+                            rampColor = mix(uColorStops[1], uColorStops[2], (uv.x - 0.5) * 2.0);
+                        }
+                        
+                        float height = snoise(vec2(uv.x * 2.0 + uTime * 0.1, uTime * 0.25)) * 0.5 * uAmplitude;
+                        height = exp(height);
+                        height = (uv.y * 2.0 - height + 0.2);
+                        float intensity = 0.6 * height;
+                        
+                        float midPoint = 0.20;
+                        float auroraAlpha = smoothstep(midPoint - uBlend * 0.5, midPoint + uBlend * 0.5, intensity);
+                        
+                        vec3 auroraColor = intensity * rampColor;
+                        
+                        gl_FragColor = vec4(auroraColor * auroraAlpha, auroraAlpha);
+                    }
+                `);
+                
+                this.program = this.gl.createProgram();
+                this.gl.attachShader(this.program, vertexShader);
+                this.gl.attachShader(this.program, fragmentShader);
+                this.gl.linkProgram(this.program);
+                
+                if (!this.gl.getProgramParameter(this.program, this.gl.LINK_STATUS)) {
+                    console.error('Program linking failed:', this.gl.getProgramInfoLog(this.program));
+                    return;
+                }
+                
+                this.gl.useProgram(this.program);
+                
+                // Get uniform locations
+                this.uniforms = {
+                    uTime: this.gl.getUniformLocation(this.program, 'uTime'),
+                    uAmplitude: this.gl.getUniformLocation(this.program, 'uAmplitude'),
+                    uColorStops: this.gl.getUniformLocation(this.program, 'uColorStops'),
+                    uResolution: this.gl.getUniformLocation(this.program, 'uResolution'),
+                    uBlend: this.gl.getUniformLocation(this.program, 'uBlend')
+                };
+            }
+            
+            compileShader(type, source) {
+                const shader = this.gl.createShader(type);
+                this.gl.shaderSource(shader, source);
+                this.gl.compileShader(shader);
+                
+                if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
+                    console.error('Shader compilation failed:', this.gl.getShaderInfoLog(shader));
+                    this.gl.deleteShader(shader);
+                    return null;
+                }
+                
+                return shader;
+            }
+            
+            createGeometry() {
+                // Create a triangle that covers the entire screen
+                const vertices = new Float32Array([
+                    -1, -1,
+                     3, -1,
+                    -1,  3
+                ]);
+                
+                this.buffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+                
+                const positionLocation = this.gl.getAttribLocation(this.program, 'position');
+                this.gl.enableVertexAttribArray(positionLocation);
+                this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+            }
+            
+            hexToRgb(hex) {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? [
+                    parseInt(result[1], 16) / 255,
+                    parseInt(result[2], 16) / 255,
+                    parseInt(result[3], 16) / 255
+                ] : [0, 0, 0];
+            }
+            
+            resize() {
+                const displayWidth = this.canvas.clientWidth;
+                const displayHeight = this.canvas.clientHeight;
+                
+                if (this.canvas.width !== displayWidth || this.canvas.height !== displayHeight) {
+                    this.canvas.width = displayWidth;
+                    this.canvas.height = displayHeight;
+                    
+                    this.gl.viewport(0, 0, displayWidth, displayHeight);
+                    this.gl.uniform2f(this.uniforms.uResolution, displayWidth, displayHeight);
+                }
+            }
+            
+            animate() {
+                const currentTime = Date.now();
+                const time = (currentTime - this.startTime) * 0.001;
+                
+                this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+                
+                // Update uniforms
+                this.gl.uniform1f(this.uniforms.uTime, time * this.options.speed);
+                this.gl.uniform1f(this.uniforms.uAmplitude, this.options.amplitude);
+                this.gl.uniform1f(this.uniforms.uBlend, this.options.blend);
+                
+                // Convert color stops to RGB
+                const colorStops = this.options.colorStops.map(hex => this.hexToRgb(hex));
+                this.gl.uniform3fv(this.uniforms.uColorStops, colorStops.flat());
+                
+                // Draw
+                this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
+                
+                this.animationId = requestAnimationFrame(() => this.animate());
+            }
+            
+            destroy() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                
+                if (this.gl) {
+                    this.gl.deleteProgram(this.program);
+                    this.gl.deleteBuffer(this.buffer);
+                }
+            }
+        }
+        
+        // Initialize Aurora
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('auroraCanvas');
+            const aurora = new Aurora(canvas, {
+                colorStops: ["#3A29FF", "#FF94B4", "#FF3232"],
+                blend: 0.5,
+                amplitude: 1.0,
+                speed: 0.5
+            });
+        });
+
         // Enhanced form submission with loading state
         document.getElementById('loginForm').addEventListener('submit', function() {
             const button = document.getElementById('loginButton');
@@ -543,17 +650,6 @@
             
             input.addEventListener('blur', function() {
                 this.parentElement.style.transform = 'translateY(0)';
-            });
-        });
-
-        // Cloud providers hover effects
-        document.querySelectorAll('.provider-icon').forEach(icon => {
-            icon.addEventListener('mouseenter', function() {
-                this.style.transform = 'translateY(-5px) scale(1.1)';
-            });
-            
-            icon.addEventListener('mouseleave', function() {
-                this.style.transform = 'translateY(0) scale(1)';
             });
         });
     </script>

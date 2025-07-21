@@ -485,10 +485,10 @@
                                                         <span class="status-badge" :class="pod.status === 'Running' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'" x-text="pod.status"></span>
                                                     </td>
                                                     <td class="px-6 py-4">
-                                                        <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="pod.cpu || 'N/A'"></span>
+                                                        <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="pod.cpu"></span>
                                                     </td>
                                                     <td class="px-6 py-4">
-                                                        <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="pod.memory || 'N/A'"></span>
+                                                        <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="pod.memory"></span>
                                                     </td>
                                                     <td class="px-6 py-4">
                                                         <span class="font-mono text-xs text-gray-600" x-text="pod.nodeName"></span>
@@ -612,12 +612,7 @@ function cloudK8s() {
             fetch(`/api/k8s/clusters/${this.selectedClusterName}/nodes?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    // NOTE: Backend doesn't provide usage data. Simulating it here.
-                    this.nodes = data.map(node => ({
-                        ...node,
-                        cpuUsage: { current: (Math.random() * 2).toFixed(2), total: 4 }, // Example: 4 cores total
-                        memUsage: { current: (Math.random() * 8).toFixed(2), total: 16 }  // Example: 16Gi total
-                    }));
+                    this.nodes = data;
                 })
                 .catch(err => console.error('Failed to fetch nodes', err))
                 .finally(() => this.isLoading.nodes = false);
@@ -652,20 +647,15 @@ function cloudK8s() {
             fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
                 .then(data => {
-                    // NOTE: Backend doesn't provide resource requests/limits. Simulating it here.
-                    this.pods = data.map(pod => ({
-                        ...pod,
-                        cpu: '100m / 500m',
-                        memory: '128Mi / 512Mi'
-                    }));
+                    this.pods = data;
                 })
                 .catch(err => console.error('Failed to fetch pods', err))
                 .finally(() => this.isLoading.pods = false);
         },
         
         renderUsageBar(usage, unit) {
-            if (!usage) return 'N/A';
-            const percentage = (usage.current / usage.total) * 100;
+            if (!usage || usage.total === undefined || usage.current === undefined) return 'N/A';
+            const percentage = (usage.total > 0) ? (usage.current / usage.total) * 100 : 0;
             let color = 'bg-green-500';
             if (percentage > 80) color = 'bg-red-500';
             else if (percentage > 60) color = 'bg-yellow-500';
@@ -675,7 +665,7 @@ function cloudK8s() {
                     <div class="flex-1 progress-bar">
                         <div class="progress-bar-fill ${color}" style="width: ${percentage}%"></div>
                     </div>
-                    <span class="text-xs font-mono w-28 text-right text-gray-600">${usage.current} / ${usage.total} ${unit}</span>
+                    <span class="text-xs font-mono w-28 text-right text-gray-600">${usage.current.toFixed(2)} / ${usage.total.toFixed(2)} ${unit}</span>
                 </div>
             `;
         }

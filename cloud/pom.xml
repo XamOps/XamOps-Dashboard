@@ -219,6 +219,26 @@
     <artifactId>spring-boot-starter-websocket</artifactId>
 </dependency>
 
+<!-- Add these to your pom.xml if not already present -->
+<dependency>
+    <groupId>software.amazon.awssdk</groupId>
+    <artifactId>lambda</artifactId>
+    <version>2.20.26</version>
+</dependency>
+
+<dependency>
+    <groupId>software.amazon.awssdk</groupId>
+    <artifactId>cloudwatch</artifactId>
+    <version>2.20.26</version>
+</dependency>
+
+<dependency>
+    <groupId>software.amazon.awssdk</groupId>
+    <artifactId>rds</artifactId>
+    <version>2.20.26</version>
+</dependency>
+
+
         <!-- Dependency for Excel Export -->
         <dependency>
             <groupId>org.apache.poi</groupId>

@@ -9,6 +9,7 @@ import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.AppsV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
+import io.kubernetes.client.openapi.models.V1Container;
 import io.kubernetes.client.openapi.models.V1Deployment;
 import io.kubernetes.client.openapi.models.V1Node;
 import io.kubernetes.client.openapi.models.V1Pod;
@@ -37,6 +38,8 @@ import software.amazon.awssdk.services.cloudtrail.model.Trail;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.cloudwatch.model.*;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
+import software.amazon.awssdk.services.cloudwatchlogs.model.DescribeLogStreamsResponse;
+import software.amazon.awssdk.services.cloudwatchlogs.model.LogGroup;
 import software.amazon.awssdk.services.computeoptimizer.ComputeOptimizerClient;
 import software.amazon.awssdk.services.computeoptimizer.model.*;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
@@ -52,7 +55,6 @@ import software.amazon.awssdk.services.elasticache.ElastiCacheClient;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.iam.IamClient;
 import software.amazon.awssdk.services.iam.model.NoSuchEntityException;
-import software.amazon.awssdk.services.iam.model.PasswordPolicy;
 import software.amazon.awssdk.services.iam.model.PolicyScopeType;
 import software.amazon.awssdk.services.iam.model.Role;
 import software.amazon.awssdk.services.lambda.LambdaClient;
@@ -102,13 +104,16 @@ import java.util.stream.Stream;
 public class AwsDataService {
 
     private static final Logger logger = LoggerFactory.getLogger(AwsDataService.class);
-    private static final List<String> REQUIRED_TAGS = Arrays.asList("cost-center", "project");
+    
+    private final List<String> requiredTags;
+    private final List<String> instanceSizeOrder;
+    private final Set<String> keyQuotas;
 
     private final PricingService pricingService;
     private final String hostAccountId;
     private final String configuredRegion;
     private final CloudAccountRepository cloudAccountRepository;
-    private final AwsClientProvider awsClientProvider;
+    public final AwsClientProvider awsClientProvider;
     private final DashboardUpdateService dashboardUpdateService;
     private final AiAdvisorService aiAdvisorService;
 
@@ -136,18 +141,26 @@ public class AwsDataService {
             Map.entry("sa-east-1", new double[]{-23.5505, -46.6333}));
 
     @Autowired
-    public AwsDataService(PricingService pricingService,
-                          CloudAccountRepository cloudAccountRepository,
-                          AwsClientProvider awsClientProvider,
-                          StsClient stsClient,
-                          DashboardUpdateService dashboardUpdateService,
-                          @Lazy AiAdvisorService aiAdvisorService) {
+    public AwsDataService(
+            PricingService pricingService,
+            CloudAccountRepository cloudAccountRepository,
+            AwsClientProvider awsClientProvider,
+            StsClient stsClient,
+            DashboardUpdateService dashboardUpdateService,
+            @Lazy AiAdvisorService aiAdvisorService,
+            @Value("${tagging.compliance.required-tags}") List<String> requiredTags,
+            @Value("${rightsizing.instance-size-order}") List<String> instanceSizeOrder,
+            @Value("${quotas.key-codes}") Set<String> keyQuotas
+    ) {
         this.pricingService = pricingService;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.dashboardUpdateService = dashboardUpdateService;
         this.aiAdvisorService = aiAdvisorService;
+        this.requiredTags = requiredTags;
+        this.instanceSizeOrder = instanceSizeOrder;
+        this.keyQuotas = keyQuotas;
 
         String tmpAccountId;
         try {
@@ -163,6 +176,146 @@ public class AwsDataService {
         return cloudAccountRepository.findByAwsAccountId(accountId)
             .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
     }
+
+ public LambdaClient getLambdaClient(String accountId, String region) {
+    return awsClientProvider.getLambdaClient(getAccount(accountId), region);
+}
+
+    public S3Client getS3Client(String accountId) {
+        return awsClientProvider.getS3Client(getAccount(accountId), "us-east-1");
+    }
+
+public CloudWatchClient getCloudWatchClient(String accountId, String region) {
+    return awsClientProvider.getCloudWatchClient(getAccount(accountId), region);
+}
+public Ec2Client getEc2Client(String accountId, String region) {
+    return awsClientProvider.getEc2Client(getAccount(accountId), region);
+}
+
+public RdsClient getRdsClient(String accountId, String region) {
+    return awsClientProvider.getRdsClient(getAccount(accountId), region);
+}
+
+    public String getCurrentRegion(String accountId) {
+        // Get region from account configuration or use default
+        return configuredRegion;
+    }
+
+    public Map<String, Object> getResourcesList(String accountId) {
+        Map<String, Object> resources = new HashMap<>();
+        CloudAccount account = getAccount(accountId);
+        
+        try {
+            // Get EC2 instances
+            CompletableFuture<List<Map<String, String>>> ec2Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    List<Map<String, String>> ec2Instances = new ArrayList<>();
+                    Ec2Client ec2Client = awsClientProvider.getEc2Client(account, configuredRegion);
+                    DescribeInstancesResponse instancesResponse = ec2Client.describeInstances();
+                    
+                    instancesResponse.reservations().forEach(reservation -> {
+                        reservation.instances().forEach(instance -> {
+                            Map<String, String> instanceInfo = new HashMap<>();
+                            instanceInfo.put("id", instance.instanceId());
+                            instanceInfo.put("name", getTagName(instance.tags(), "N/A"));
+                            instanceInfo.put("state", instance.state().nameAsString());
+                            instanceInfo.put("type", instance.instanceType().toString());
+                            instanceInfo.put("region", instance.placement().availabilityZone());
+                            ec2Instances.add(instanceInfo);
+                        });
+                    });
+                    return ec2Instances;
+                } catch (Exception e) {
+                    logger.error("Error fetching EC2 instances for account: {}", accountId, e);
+                    return new ArrayList<>();
+                }
+            });
+            
+            // Get RDS instances
+            CompletableFuture<List<Map<String, String>>> rdsFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    List<Map<String, String>> rdsInstances = new ArrayList<>();
+                    RdsClient rdsClient = awsClientProvider.getRdsClient(account, configuredRegion);
+                    var dbInstancesResponse = rdsClient.describeDBInstances();
+                    
+                    dbInstancesResponse.dbInstances().forEach(dbInstance -> {
+                        Map<String, String> dbInfo = new HashMap<>();
+                        dbInfo.put("id", dbInstance.dbInstanceIdentifier());
+                        dbInfo.put("name", dbInstance.dbName() != null ? dbInstance.dbName() : dbInstance.dbInstanceIdentifier());
+                        dbInfo.put("engine", dbInstance.engine());
+                        dbInfo.put("status", dbInstance.dbInstanceStatus());
+                        dbInfo.put("class", dbInstance.dbInstanceClass());
+                        dbInfo.put("region", dbInstance.availabilityZone());
+                        rdsInstances.add(dbInfo);
+                    });
+                    return rdsInstances;
+                } catch (Exception e) {
+                    logger.error("Error fetching RDS instances for account: {}", accountId, e);
+                    return new ArrayList<>();
+                }
+            });
+            
+            // Get Lambda functions
+            CompletableFuture<List<Map<String, String>>> lambdaFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    List<Map<String, String>> lambdaFunctions = new ArrayList<>();
+                    LambdaClient lambdaClient = awsClientProvider.getLambdaClient(account, configuredRegion);
+                    var functionsResponse = lambdaClient.listFunctions();
+                    
+                    functionsResponse.functions().forEach(function -> {
+                        Map<String, String> functionInfo = new HashMap<>();
+                        functionInfo.put("name", function.functionName());
+                        functionInfo.put("id", function.functionName());
+                        functionInfo.put("runtime", function.runtime().toString());
+                        functionInfo.put("state", function.state().toString());
+                        functionInfo.put("region", getCurrentRegion(accountId));
+                        lambdaFunctions.add(functionInfo);
+                    });
+                    return lambdaFunctions;
+                } catch (Exception e) {
+                    logger.error("Error fetching Lambda functions for account: {}", accountId, e);
+                    return new ArrayList<>();
+                }
+            });
+            
+            // Get S3 buckets
+            CompletableFuture<List<Map<String, String>>> s3Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    List<Map<String, String>> s3Buckets = new ArrayList<>();
+                    S3Client s3Client = awsClientProvider.getS3Client(account, "us-east-1");
+                    var bucketsResponse = s3Client.listBuckets();
+                    
+                    bucketsResponse.buckets().forEach(bucket -> {
+                        Map<String, String> bucketInfo = new HashMap<>();
+                        bucketInfo.put("name", bucket.name());
+                        bucketInfo.put("id", bucket.name());
+                        bucketInfo.put("created", bucket.creationDate().toString());
+                        bucketInfo.put("region", getCurrentRegion(accountId));
+                        s3Buckets.add(bucketInfo);
+                    });
+                    return s3Buckets;
+                } catch (Exception e) {
+                    logger.error("Error fetching S3 buckets for account: {}", accountId, e);
+                    return new ArrayList<>();
+                }
+            });
+            
+            // Wait for all futures to complete
+            CompletableFuture<Void> allFutures = CompletableFuture.allOf(ec2Future, rdsFuture, lambdaFuture, s3Future);
+            allFutures.get();
+            
+            resources.put("ec2", ec2Future.get());
+            resources.put("rds", rdsFuture.get());
+            resources.put("lambda", lambdaFuture.get());
+            resources.put("s3", s3Future.get());
+            
+        } catch (Exception e) {
+            logger.error("Error fetching resources list for account: {}", accountId, e);
+        }
+        
+        return resources;
+    }
+
 
     @Cacheable(value = "dashboardData", key = "#accountId")
     public DashboardData getDashboardData(String accountId) throws ExecutionException, InterruptedException {
@@ -187,7 +340,14 @@ public class AwsDataService {
             CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
             CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = getBillingSummary(account);
             CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account);
-            CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(account);
+            
+            CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(
+                wastedResourcesFuture, 
+                ec2RecsFuture, 
+                ebsRecsFuture, 
+                lambdaRecsFuture
+            );
+
             CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
             CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = getReservationAnalysis(account);
             CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = getReservationPurchaseRecommendations(account);
@@ -230,7 +390,7 @@ public class AwsDataService {
                         ec2Recs, anomalies, ebsRecs, lambdaRecs,
                         reservationFuture.join(), reservationPurchaseFuture.join(),
                         optimizationSummary, wastedResourcesFuture.join(), serviceQuotasFuture.join(),
-                        securityScore); // ADDED securityScore
+                        securityScore);
 
                 data.setSelectedAccount(mainAccount);
 
@@ -703,14 +863,19 @@ public class AwsDataService {
 
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId) {
         CloudAccount account = getAccount(accountId);
-        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, configuredRegion);
-        logger.info("Fetching CloudWatch metrics for instance: {} in account {}", instanceId, accountId);
+        String instanceRegion = findInstanceRegion(account, instanceId);
+        if (instanceRegion == null) {
+            logger.error("Could not determine region for EC2 instance {}. Cannot fetch metrics.", instanceId);
+            return Collections.emptyMap();
+        }
+        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, instanceRegion);
+        logger.info("Fetching CloudWatch metrics for instance: {} in region {} for account {}", instanceId, instanceRegion, accountId);
         try {
-            GetMetricDataRequest cpuRequest = buildMetricDataRequest(instanceId, "CPUUtilization", "AWS/EC2");
+            GetMetricDataRequest cpuRequest = buildMetricDataRequest(instanceId, "CPUUtilization", "AWS/EC2", "InstanceId");
             MetricDataResult cpuResult = cwClient.getMetricData(cpuRequest).metricDataResults().get(0);
             List<MetricDto> cpuDatapoints = buildMetricDtos(cpuResult);
 
-            GetMetricDataRequest networkInRequest = buildMetricDataRequest(instanceId, "NetworkIn", "AWS/EC2");
+            GetMetricDataRequest networkInRequest = buildMetricDataRequest(instanceId, "NetworkIn", "AWS/EC2", "InstanceId");
             MetricDataResult networkInResult = cwClient.getMetricData(networkInRequest).metricDataResults().get(0);
             List<MetricDto> networkInDatapoints = buildMetricDtos(networkInResult);
 
@@ -721,10 +886,97 @@ public class AwsDataService {
         }
     }
 
-    private List<MetricDto> buildMetricDtos(MetricDataResult result) { List<Instant> timestamps = result.timestamps(); List<Double> values = result.values(); if (timestamps == null || values == null || timestamps.size() != values.size()) { return Collections.emptyList(); } return IntStream.range(0, timestamps.size()).mapToObj(i -> new MetricDto(timestamps.get(i), values.get(i))).collect(Collectors.toList()); }
-    private GetMetricDataRequest buildMetricDataRequest(String instanceId, String metricName, String namespace) { Metric metric = Metric.builder().namespace(namespace).metricName(metricName).dimensions(Dimension.builder().name("InstanceId").value(instanceId).build()).build(); MetricStat metricStat = MetricStat.builder().metric(metric).period(86400).stat("Average").build(); MetricDataQuery metricDataQuery = MetricDataQuery.builder().id(metricName.toLowerCase().replace(" ", "")).metricStat(metricStat).returnData(true).build(); return GetMetricDataRequest.builder().startTime(Instant.now().minus(30, ChronoUnit.DAYS)).endTime(Instant.now()).metricDataQueries(metricDataQuery).scanBy(ScanBy.TIMESTAMP_DESCENDING).build(); }
+    public Map<String, List<MetricDto>> getRdsInstanceMetrics(String accountId, String instanceId) {
+        CloudAccount account = getAccount(accountId);
+        String rdsRegion = findResourceRegion(account, "RDS", instanceId);
+        if (rdsRegion == null) {
+            logger.error("Could not determine region for RDS instance {}. Cannot fetch metrics.", instanceId);
+            return Collections.emptyMap();
+        }
+        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, rdsRegion);
+        logger.info("Fetching CloudWatch metrics for RDS instance: {} in region {} for account {}", instanceId, rdsRegion, accountId);
+        try {
+            GetMetricDataRequest connectionsRequest = buildMetricDataRequest(instanceId, "DatabaseConnections", "AWS/RDS", "DBInstanceIdentifier");
+            MetricDataResult connectionsResult = cwClient.getMetricData(connectionsRequest).metricDataResults().get(0);
+            List<MetricDto> connectionsDatapoints = buildMetricDtos(connectionsResult);
 
-    @Async("awsTaskExecutor")
+            GetMetricDataRequest readIopsRequest = buildMetricDataRequest(instanceId, "ReadIOPS", "AWS/RDS", "DBInstanceIdentifier");
+            MetricDataResult readIopsResult = cwClient.getMetricData(readIopsRequest).metricDataResults().get(0);
+            List<MetricDto> readIopsDatapoints = buildMetricDtos(readIopsResult);
+
+            GetMetricDataRequest writeIopsRequest = buildMetricDataRequest(instanceId, "WriteIOPS", "AWS/RDS", "DBInstanceIdentifier");
+            MetricDataResult writeIopsResult = cwClient.getMetricData(writeIopsRequest).metricDataResults().get(0);
+            List<MetricDto> writeIopsDatapoints = buildMetricDtos(writeIopsResult);
+
+            return Map.of(
+                "DatabaseConnections", connectionsDatapoints,
+                "ReadIOPS", readIopsDatapoints,
+                "WriteIOPS", writeIopsDatapoints
+            );
+        } catch (Exception e) {
+            logger.error("Failed to fetch metrics for RDS instance {} in account {}", instanceId, accountId, e);
+            return Collections.emptyMap();
+        }
+    }
+
+    public Map<String, List<MetricDto>> getS3BucketMetrics(String accountId, String bucketName, String region) {
+        CloudAccount account = getAccount(accountId);
+        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
+        logger.info("Fetching CloudWatch metrics for S3 bucket: {} in region {} for account {}", bucketName, region, accountId);
+        try {
+            GetMetricDataRequest sizeRequest = buildMetricDataRequest(bucketName, "BucketSizeBytes", "AWS/S3", "BucketName");
+            MetricDataResult sizeResult = cwClient.getMetricData(sizeRequest).metricDataResults().get(0);
+            List<MetricDto> sizeDatapoints = buildMetricDtos(sizeResult);
+
+            GetMetricDataRequest objectsRequest = buildMetricDataRequest(bucketName, "NumberOfObjects", "AWS/S3", "BucketName");
+            MetricDataResult objectsResult = cwClient.getMetricData(objectsRequest).metricDataResults().get(0);
+            List<MetricDto> objectsDatapoints = buildMetricDtos(objectsResult);
+
+            return Map.of("BucketSizeBytes", sizeDatapoints, "NumberOfObjects", objectsDatapoints);
+        } catch (Exception e) {
+            logger.error("Failed to fetch metrics for S3 bucket {} in account {}", bucketName, accountId, e);
+            return Collections.emptyMap();
+        }
+    }
+
+    public Map<String, List<MetricDto>> getLambdaFunctionMetrics(String accountId, String functionName, String region) {
+        CloudAccount account = getAccount(accountId);
+        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
+        logger.info("Fetching CloudWatch metrics for Lambda function: {} in region {} for account {}", functionName, region, accountId);
+        try {
+            GetMetricDataRequest invocationsRequest = buildMetricDataRequest(functionName, "Invocations", "AWS/Lambda", "FunctionName");
+            MetricDataResult invocationsResult = cwClient.getMetricData(invocationsRequest).metricDataResults().get(0);
+            List<MetricDto> invocationsDatapoints = buildMetricDtos(invocationsResult);
+
+            GetMetricDataRequest errorsRequest = buildMetricDataRequest(functionName, "Errors", "AWS/Lambda", "FunctionName");
+            MetricDataResult errorsResult = cwClient.getMetricData(errorsRequest).metricDataResults().get(0);
+            List<MetricDto> errorsDatapoints = buildMetricDtos(errorsResult);
+            
+            GetMetricDataRequest durationRequest = buildMetricDataRequest(functionName, "Duration", "AWS/Lambda", "FunctionName");
+            MetricDataResult durationResult = cwClient.getMetricData(durationRequest).metricDataResults().get(0);
+            List<MetricDto> durationDatapoints = buildMetricDtos(durationResult);
+
+            return Map.of(
+                "Invocations", invocationsDatapoints,
+                "Errors", errorsDatapoints,
+                "Duration", durationDatapoints
+            );
+        } catch (Exception e) {
+            logger.error("Failed to fetch metrics for Lambda function {} in account {}", functionName, accountId, e);
+            return Collections.emptyMap();
+        }
+    }
+
+
+    private List<MetricDto> buildMetricDtos(MetricDataResult result) { List<Instant> timestamps = result.timestamps(); List<Double> values = result.values(); if (timestamps == null || values == null || timestamps.size() != values.size()) { return Collections.emptyList(); } return IntStream.range(0, timestamps.size()).mapToObj(i -> new MetricDto(timestamps.get(i), values.get(i))).collect(Collectors.toList()); }
+    private GetMetricDataRequest buildMetricDataRequest(String resourceId, String metricName, String namespace, String dimensionName) { 
+        Metric metric = Metric.builder().namespace(namespace).metricName(metricName).dimensions(Dimension.builder().name(dimensionName).value(resourceId).build()).build(); 
+        MetricStat metricStat = MetricStat.builder().metric(metric).period(300).stat("Average").build(); 
+        MetricDataQuery metricDataQuery = MetricDataQuery.builder().id(metricName.toLowerCase().replace(" ", "")).metricStat(metricStat).returnData(true).build(); 
+        return GetMetricDataRequest.builder().startTime(Instant.now().minus(1, ChronoUnit.DAYS)).endTime(Instant.now()).metricDataQueries(metricDataQuery).scanBy(ScanBy.TIMESTAMP_DESCENDING).build(); 
+    }
+
+@Async("awsTaskExecutor")
     @Cacheable(value = "wastedResources", key = "#account.awsAccountId")
     public CompletableFuture<List<DashboardData.WastedResource>> getWastedResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("Fetching wasted resources for account {}...", account.getAwsAccountId());
@@ -737,7 +989,14 @@ public class AwsDataService {
                 findIdleLoadBalancers(account, activeRegions),
                 findUnusedSecurityGroups(account, activeRegions),
                 findIdleEc2Instances(account, activeRegions),
-                findUnattachedEnis(account, activeRegions)
+                findUnattachedEnis(account, activeRegions),
+                // --- ADD THE NEW METHOD CALLS HERE ---
+                findIdleEksClusters(account, activeRegions),
+                findIdleEcsClusters(account, activeRegions),
+                findUnderutilizedLambdaFunctions(account, activeRegions),
+                findOldDbSnapshots(account, activeRegions),
+                findUnusedCloudWatchLogGroups(account, activeRegions)
+                // You can continue to add more methods here for VPC, RDS Proxy etc.
         );
 
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
@@ -767,9 +1026,10 @@ public class AwsDataService {
     private CompletableFuture<List<DashboardData.WastedResource>> findUnusedElasticIps(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+            double monthlyCost = pricingService.getElasticIpMonthlyPrice(regionId);
             return ec2.describeAddresses().addresses().stream()
                     .filter(address -> address.associationId() == null)
-                    .map(address -> new DashboardData.WastedResource(address.allocationId(), address.publicIp(), "Elastic IP", regionId, 5.0, "Unassociated EIP"))
+                    .map(address -> new DashboardData.WastedResource(address.allocationId(), address.publicIp(), "Elastic IP", regionId, monthlyCost, "Unassociated EIP"))
                     .collect(Collectors.toList());
         }, "Unused Elastic IPs");
     }
@@ -791,7 +1051,7 @@ public class AwsDataService {
             DescribeImagesRequest imagesRequest = DescribeImagesRequest.builder().owners("self").build();
             return ec2.describeImages(imagesRequest).images().stream()
                     .filter(image -> image.state() != ImageState.AVAILABLE)
-                    .map(image -> new DashboardData.WastedResource(image.imageId(), image.name(), "AMI", regionId, 1.0, "Deregistered or Failed State"))
+                    .map(image -> new DashboardData.WastedResource(image.imageId(), image.name(), "AMI", regionId, 0.5, "Deregistered or Failed State")) // Nominal cost
                     .collect(Collectors.toList());
         }, "Deregistered AMIs");
     }
@@ -801,7 +1061,10 @@ public class AwsDataService {
             RdsClient rds = awsClientProvider.getRdsClient(account, regionId);
             return rds.describeDBInstances().dbInstances().stream()
                     .filter(db -> isRdsInstanceIdle(account, db, regionId))
-                    .map(dbInstance -> new DashboardData.WastedResource(dbInstance.dbInstanceIdentifier(), dbInstance.dbInstanceIdentifier(), "RDS Instance", regionId, 20.0, "Idle RDS Instance (no connections)"))
+                    .map(dbInstance -> {
+                        double monthlyCost = pricingService.getRdsInstanceMonthlyPrice(dbInstance, regionId);
+                        return new DashboardData.WastedResource(dbInstance.dbInstanceIdentifier(), dbInstance.dbInstanceIdentifier(), "RDS Instance", regionId, monthlyCost, "Idle RDS Instance (no connections)");
+                    })
                     .collect(Collectors.toList());
         }, "Idle RDS Instances");
     }
@@ -838,9 +1101,138 @@ public class AwsDataService {
                             .allMatch(tg -> elbv2.describeTargetHealth(req -> req.targetGroupArn(tg.targetGroupArn())).targetHealthDescriptions().isEmpty());
                     return isIdle;
                 })
-                .map(lb -> new DashboardData.WastedResource(lb.loadBalancerArn(), lb.loadBalancerName(), "Load Balancer", regionId, 15.0, "Idle Load Balancer (no targets)"))
+                .map(lb -> new DashboardData.WastedResource(lb.loadBalancerArn(), lb.loadBalancerName(), "Load Balancer", regionId, 17.0, "Idle Load Balancer (no targets)")) // Approx cost
                 .collect(Collectors.toList());
         }, "Idle Load Balancers");
+    }
+
+        private CompletableFuture<List<DashboardData.WastedResource>> findIdleEksClusters(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            EksClient eks = awsClientProvider.getEksClient(account, regionId);
+            CloudWatchClient cw = awsClientProvider.getCloudWatchClient(account, regionId);
+            List<DashboardData.WastedResource> findings = new ArrayList<>();
+            
+            eks.listClusters().clusters().forEach(clusterName -> {
+                try {
+                    // Simplified check: Assumes idle if node CPU is consistently low.
+                    // A more robust check would aggregate pod metrics.
+                    GetMetricDataRequest request = GetMetricDataRequest.builder()
+                        .startTime(Instant.now().minus(14, ChronoUnit.DAYS))
+                        .endTime(Instant.now())
+                        .metricDataQueries(MetricDataQuery.builder()
+                            .id("cpu")
+                            .metricStat(MetricStat.builder()
+                                .metric(Metric.builder()
+                                    .namespace("ContainerInsights")
+                                    .metricName("node_cpu_utilization")
+                                    .dimensions(Dimension.builder().name("ClusterName").value(clusterName).build())
+                                    .build())
+                                .period(86400) // Daily average
+                                .stat("Average")
+                                .build())
+                            .returnData(true)
+                            .build())
+                        .build();
+
+                    List<MetricDataResult> results = cw.getMetricData(request).metricDataResults();
+                    if (!results.isEmpty() && !results.get(0).values().isEmpty()) {
+                        double avgCpu = results.get(0).values().stream().mapToDouble(Double::doubleValue).average().orElse(100.0);
+                        if (avgCpu < 5.0) { // If average daily CPU over 14 days is < 5%
+                            findings.add(new DashboardData.WastedResource(clusterName, clusterName, "EKS Cluster", regionId, 73.0, "Idle Cluster (low CPU)")); // Using fixed cost for NAT gateway as proxy
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not check EKS cluster {} for waste in region {}", clusterName, regionId, e);
+                }
+            });
+            return findings;
+        }, "Idle EKS Clusters");
+    }
+
+    private CompletableFuture<List<DashboardData.WastedResource>> findIdleEcsClusters(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            EcsClient ecs = awsClientProvider.getEcsClient(account, regionId);
+            return ecs.listClusters().clusterArns().stream()
+                .map(clusterArn -> ecs.describeClusters(r -> r.clusters(clusterArn)).clusters().get(0))
+                .filter(cluster -> cluster.runningTasksCount() == 0 && cluster.activeServicesCount() == 0)
+                .map(cluster -> new DashboardData.WastedResource(cluster.clusterArn(), cluster.clusterName(), "ECS Cluster", regionId, 0.0, "Idle Cluster (0 tasks/services)"))
+                .collect(Collectors.toList());
+        }, "Idle ECS Clusters");
+    }
+
+    private CompletableFuture<List<DashboardData.WastedResource>> findUnderutilizedLambdaFunctions(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            LambdaClient lambda = awsClientProvider.getLambdaClient(account, regionId);
+            CloudWatchClient cw = awsClientProvider.getCloudWatchClient(account, regionId);
+            List<DashboardData.WastedResource> findings = new ArrayList<>();
+
+            lambda.listFunctions().functions().forEach(func -> {
+                try {
+                    GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
+                        .namespace("AWS/Lambda")
+                        .metricName("Invocations")
+                        .dimensions(Dimension.builder().name("FunctionName").value(func.functionName()).build())
+                        .startTime(Instant.now().minus(30, ChronoUnit.DAYS))
+                        .endTime(Instant.now())
+                        .period(2592000) // 30 days in seconds
+                        .statistics(Statistic.SUM)
+                        .build();
+                    
+                    List<Datapoint> datapoints = cw.getMetricStatistics(request).datapoints();
+                    if (datapoints.isEmpty() || datapoints.get(0).sum() < 10) {
+                        findings.add(new DashboardData.WastedResource(func.functionArn(), func.functionName(), "Lambda", regionId, 0.50, "Low Invocations (<10 in 30d)")); // Nominal cost
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not check Lambda function {} for waste in region {}", func.functionName(), regionId, e);
+                }
+            });
+            return findings;
+        }, "Underutilized Lambda Functions");
+    }
+
+    private CompletableFuture<List<DashboardData.WastedResource>> findOldDbSnapshots(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            RdsClient rds = awsClientProvider.getRdsClient(account, regionId);
+            Instant ninetyDaysAgo = Instant.now().minus(90, ChronoUnit.DAYS);
+            return rds.describeDBSnapshots(r -> r.snapshotType("manual")).dbSnapshots().stream()
+                .filter(snap -> snap.snapshotCreateTime().isBefore(ninetyDaysAgo))
+                .map(snap -> new DashboardData.WastedResource(snap.dbSnapshotIdentifier(), snap.dbSnapshotIdentifier(), "DB Snapshot", regionId, snap.allocatedStorage() * 0.095, "Older than 90 days"))
+                .collect(Collectors.toList());
+        }, "Old DB Snapshots");
+    }
+
+private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWatchLogGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            CloudWatchLogsClient logs = awsClientProvider.getCloudWatchLogsClient(account, regionId);
+            long sixtyDaysAgoMillis = Instant.now().minus(60, ChronoUnit.DAYS).toEpochMilli();
+            List<DashboardData.WastedResource> findings = new ArrayList<>();
+
+            List<LogGroup> logGroups = logs.describeLogGroups().logGroups();
+            
+            for (LogGroup lg : logGroups) {
+                // Initial cheap checks: created a while ago and is empty.
+                if (lg.creationTime() < sixtyDaysAgoMillis && lg.storedBytes() == 0) {
+                    findings.add(new DashboardData.WastedResource(lg.logGroupName(), lg.logGroupName(), "Log Group", regionId, 0.0, "Empty and created over 60 days ago"));
+                    continue;
+                }
+
+                // More expensive check for log groups that are not empty but might be unused
+                try {
+                    DescribeLogStreamsResponse response = logs.describeLogStreams(req -> req
+                        .logGroupName(lg.logGroupName())
+                        .orderBy("LastEventTime")
+                        .descending(true)
+                        .limit(1));
+
+                    if (response.logStreams().isEmpty() || response.logStreams().get(0).lastEventTimestamp() == null || response.logStreams().get(0).lastEventTimestamp() < sixtyDaysAgoMillis) {
+                         findings.add(new DashboardData.WastedResource(lg.logGroupName(), lg.logGroupName(), "Log Group", regionId, 0.0, "No new events in 60+ days"));
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not describe log streams for {}: {}", lg.logGroupName(), e.getMessage());
+                }
+            }
+            return findings;
+        }, "Unused Log Groups");
     }
 
     private CompletableFuture<List<DashboardData.WastedResource>> findUnusedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
@@ -871,7 +1263,10 @@ public class AwsDataService {
             return ec2.describeInstances().reservations().stream()
                     .flatMap(r -> r.instances().stream())
                     .filter(instance -> isEc2InstanceIdle(account, instance, regionId))
-                    .map(instance -> new DashboardData.WastedResource(instance.instanceId(), getTagName(instance.tags(), instance.instanceId()), "EC2 Instance", regionId, 10.0, "Idle EC2 Instance (low CPU)"))
+                    .map(instance -> {
+                        double monthlyCost = pricingService.getEc2InstanceMonthlyPrice(instance.instanceTypeAsString(), regionId);
+                        return new DashboardData.WastedResource(instance.instanceId(), getTagName(instance.tags(), instance.instanceId()), "EC2 Instance", regionId, monthlyCost, "Idle EC2 Instance (low CPU)");
+                    })
                     .collect(Collectors.toList());
         }, "Idle EC2 Instances");
     }
@@ -879,7 +1274,7 @@ public class AwsDataService {
     private boolean isEc2InstanceIdle(CloudAccount account, Instance instance, String regionId) {
         try {
             CloudWatchClient cw = awsClientProvider.getCloudWatchClient(account, regionId);
-            GetMetricDataRequest request = buildMetricDataRequest(instance.instanceId(), "CPUUtilization", "AWS/EC2");
+            GetMetricDataRequest request = buildMetricDataRequest(instance.instanceId(), "CPUUtilization", "AWS/EC2", "InstanceId");
             List<MetricDataResult> results = cw.getMetricData(request).metricDataResults();
             if (!results.isEmpty() && !results.get(0).values().isEmpty()) {
                 return results.get(0).values().stream().mapToDouble(Double::doubleValue).average().orElse(100.0) < 3.0;
@@ -895,7 +1290,7 @@ public class AwsDataService {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             return ec2.describeNetworkInterfaces(req -> req.filters(f -> f.name("status").values("available")))
                     .networkInterfaces().stream()
-                    .map(eni -> new DashboardData.WastedResource(eni.networkInterfaceId(), getTagName(eni.tagSet(), eni.networkInterfaceId()), "ENI", regionId, 2.0, "Unattached ENI"))
+                    .map(eni -> new DashboardData.WastedResource(eni.networkInterfaceId(), getTagName(eni.tagSet(), eni.networkInterfaceId()), "ENI", regionId, 0.0, "Unattached ENI"))
                     .collect(Collectors.toList());
         }, "Unattached ENIs");
     }
@@ -927,10 +1322,25 @@ public class AwsDataService {
             GetEc2InstanceRecommendationsRequest request = GetEc2InstanceRecommendationsRequest.builder().build();
             return co.getEC2InstanceRecommendations(request).instanceRecommendations().stream()
                     .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.recommendationOptions() != null && !r.recommendationOptions().isEmpty())
-                    .map(r -> new DashboardData.OptimizationRecommendation("EC2", r.instanceArn().split("/")[1], r.currentInstanceType(), r.recommendationOptions().get(0).instanceType(),
-                            r.recommendationOptions().get(0).savingsOpportunity() != null && r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings() != null && r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings().value() != null
-                                    ? r.recommendationOptions().get(0).savingsOpportunity().estimatedMonthlySavings().value() : 0.0,
-                            r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", "))))
+                    .map(r -> {
+                        InstanceRecommendationOption opt = r.recommendationOptions().get(0);
+                        double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null && opt.savingsOpportunity().estimatedMonthlySavings().value() != null
+                                ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
+                        
+                        double recommendedCost = pricingService.getEc2InstanceMonthlyPrice(opt.instanceType(), regionId);
+                        double currentCost = recommendedCost + savings;
+
+                        return new DashboardData.OptimizationRecommendation(
+                            "EC2", 
+                            r.instanceArn().split("/")[1], 
+                            r.currentInstanceType(), 
+                            opt.instanceType(),
+                            savings,
+                            r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
+                            currentCost,
+                            recommendedCost
+                        );
+                    })
                     .collect(Collectors.toList());
         }, "EC2 Recommendations");
     }
@@ -969,11 +1379,19 @@ public class AwsDataService {
                     .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.volumeRecommendationOptions() != null && !r.volumeRecommendationOptions().isEmpty())
                     .map(r -> {
                         VolumeRecommendationOption opt = r.volumeRecommendationOptions().get(0);
+                        double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
+                        
+                        double recommendedCost = pricingService.getEbsGbMonthPrice(regionId, opt.configuration().volumeType()) * opt.configuration().volumeSize();
+                        double currentCost = savings + recommendedCost;
+
                         return new DashboardData.OptimizationRecommendation("EBS", r.volumeArn().split("/")[1],
                                 r.currentConfiguration().volumeType() + " - " + r.currentConfiguration().volumeSize() + "GiB",
                                 opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB",
-                                opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0,
-                                r.finding().toString());
+                                savings,
+                                r.finding().toString(),
+                                currentCost,
+                                recommendedCost
+                                );
                     })
                     .collect(Collectors.toList());
         }, "EBS Recommendations");
@@ -990,11 +1408,18 @@ public class AwsDataService {
                         .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.memorySizeRecommendationOptions() != null && !r.memorySizeRecommendationOptions().isEmpty())
                         .map(r -> {
                             LambdaFunctionMemoryRecommendationOption opt = r.memorySizeRecommendationOptions().get(0);
+                            double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
+                            // Lambda pricing is complex, this remains an estimate
+                            double recommendedCost = savings > 0 ? savings * 1.5 : 0; 
+                            double currentCost = recommendedCost + savings;
+
                             return new DashboardData.OptimizationRecommendation("Lambda",
                                     r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1),
                                     r.currentMemorySize() + " MB", opt.memorySize() + " MB",
-                                    opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0,
-                                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")));
+                                    savings,
+                                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
+                                    currentCost,
+                                    recommendedCost);
                         })
                         .collect(Collectors.toList());
             }, "Lambda Recommendations");
@@ -1130,11 +1555,35 @@ public class AwsDataService {
     }
 
     @Async("awsTaskExecutor")
-    public CompletableFuture<DashboardData.SavingsSummary> getSavingsSummary(CloudAccount account) {
-        List<DashboardData.SavingsSuggestion> suggestions = List.of(
-                new DashboardData.SavingsSuggestion("Rightsizing", 155.93), new DashboardData.SavingsSuggestion("Spots", 211.78));
-        return CompletableFuture.completedFuture(new DashboardData.SavingsSummary(
-                suggestions.stream().mapToDouble(DashboardData.SavingsSuggestion::getSuggested).sum(), suggestions));
+    public CompletableFuture<DashboardData.SavingsSummary> getSavingsSummary(
+            CompletableFuture<List<DashboardData.WastedResource>> wastedFuture,
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture,
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture,
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture) {
+        
+        return CompletableFuture.allOf(wastedFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture)
+            .thenApply(v -> {
+                double wasteSavings = wastedFuture.join().stream()
+                        .mapToDouble(DashboardData.WastedResource::getMonthlySavings)
+                        .sum();
+
+                double rightsizingSavings = Stream.of(ec2RecsFuture.join(), ebsRecsFuture.join(), lambdaRecsFuture.join())
+                        .flatMap(List::stream)
+                        .mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings)
+                        .sum();
+                
+                List<DashboardData.SavingsSuggestion> suggestions = new ArrayList<>();
+                if (rightsizingSavings > 0) {
+                    suggestions.add(new DashboardData.SavingsSuggestion("Rightsizing", rightsizingSavings));
+                }
+                if (wasteSavings > 0) {
+                    suggestions.add(new DashboardData.SavingsSuggestion("Waste Elimination", wasteSavings));
+                }
+                
+                double totalPotential = wasteSavings + rightsizingSavings;
+                
+                return new DashboardData.SavingsSummary(totalPotential, suggestions);
+            });
     }
     
     // --- HELPER METHODS ---
@@ -1362,17 +1811,13 @@ public class AwsDataService {
         long criticalWeight = 5;
         long highWeight = 2;
         long mediumWeight = 1;
-        long lowWeight = 0; // Low severity findings might not impact the score
+        long lowWeight = 0;
 
         long weightedScore = (counts.getOrDefault("Critical", 0L) * criticalWeight) +
                              (counts.getOrDefault("High", 0L) * highWeight) +
                              (counts.getOrDefault("Medium", 0L) * mediumWeight) +
                              (counts.getOrDefault("Low", 0L) * lowWeight);
 
-        // Normalize the score. This is a simple heuristic and can be adjusted.
-        // Let's assume a "perfect" account has 0 weighted score.
-        // A "very bad" account might have a weighted score of 50+.
-        // We can use a simple inverse formula.
         double score = 100.0 / (1 + 0.1 * weightedScore);
         
         return Math.max(0, (int) Math.round(score * 100 / 100.0));
@@ -1675,21 +2120,28 @@ public class AwsDataService {
     public CompletableFuture<DashboardData.TaggingCompliance> getTaggingCompliance(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         logger.info("FinOps Scan: Checking tagging compliance for account {}...", account.getAwsAccountId());
 
-        CompletableFuture<List<ResourceDto>> ec2Future = fetchEc2InstancesForCloudlist(account, activeRegions);
-        CompletableFuture<List<ResourceDto>> rdsFuture = fetchRdsInstancesForCloudlist(account, activeRegions);
-        CompletableFuture<List<ResourceDto>> s3Future = fetchS3BucketsForCloudlist(account);
+        CompletableFuture<List<ResourceDto>> allResourcesFuture = getAllResources(account);
 
-        return CompletableFuture.allOf(ec2Future, rdsFuture, s3Future).thenApply(v -> {
-            List<ResourceDto> allResources = Stream.of(ec2Future.join(), rdsFuture.join(), s3Future.join()).flatMap(List::stream).collect(Collectors.toList());
+        return allResourcesFuture.thenApply(allResources -> {
             List<DashboardData.UntaggedResource> untaggedList = new ArrayList<>();
             int taggedCount = 0;
 
             for (ResourceDto resource : allResources) {
-                List<String> missingTags = new ArrayList<>();
-                if (resource.getName() == null || resource.getName().equals("N/A") || resource.getName().equals(resource.getId())) missingTags.add("Name");
-                if (System.currentTimeMillis() % 4 == 0) missingTags.add("cost-center");
-                if (missingTags.isEmpty()) taggedCount++;
-                else untaggedList.add(new DashboardData.UntaggedResource(resource.getId(), resource.getType(), resource.getRegion(), missingTags));
+                List<String> missingTags = new ArrayList<>(this.requiredTags);
+                
+                Map<String, String> resourceTags = resource.getDetails() != null ?
+                    resource.getDetails().entrySet().stream()
+                        .filter(e -> e.getKey().toLowerCase().startsWith("tag:"))
+                        .collect(Collectors.toMap(e -> e.getKey().substring(4), Map.Entry::getValue))
+                    : Collections.emptyMap();
+                
+                missingTags.removeAll(resourceTags.keySet());
+
+                if (missingTags.isEmpty()) {
+                    taggedCount++;
+                } else {
+                    untaggedList.add(new DashboardData.UntaggedResource(resource.getId(), resource.getType(), resource.getRegion(), missingTags));
+                }
             }
 
             int totalScanned = allResources.size();
@@ -1764,47 +2216,156 @@ public class AwsDataService {
             logger.warn("No active regions found for account {}, skipping service quota check.", account.getAwsAccountId());
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
-        String primaryRegion = activeRegions.get(0).getRegionId();
-        ServiceQuotasClient sqClient = awsClientProvider.getServiceQuotasClient(account, primaryRegion);
-        logger.info("Fetching service quota info for account {} in region {}...", account.getAwsAccountId(), primaryRegion);
-        List<DashboardData.ServiceQuotaInfo> quotaInfos = new ArrayList<>();
-        List<String> serviceCodes = Arrays.asList("ec2", "vpc", "rds", "lambda", "elasticloadbalancing");
 
-        for (String serviceCode : serviceCodes) {
-            try {
-                logger.info("Fetching quotas for service: {} in account {}", serviceCode, account.getAwsAccountId());
-                ListServiceQuotasRequest request = ListServiceQuotasRequest.builder()
-                        .serviceCode(serviceCode)
-                        .build();
+        CompletableFuture<Map<String, Double>> usageFuture = getCurrentUsageData(account, activeRegions);
 
-                List<ServiceQuota> quotas = sqClient.listServiceQuotas(request).quotas();
+        return usageFuture.thenCompose(usageMap -> {
+            String primaryRegion = activeRegions.get(0).getRegionId();
+            ServiceQuotasClient sqClient = awsClientProvider.getServiceQuotasClient(account, primaryRegion);
+            logger.info("Fetching service quota info for account {} in region {}...", account.getAwsAccountId(), primaryRegion);
+            List<DashboardData.ServiceQuotaInfo> quotaInfos = new ArrayList<>();
+            List<String> serviceCodes = Arrays.asList("ec2", "vpc", "rds", "lambda", "elasticloadbalancing");
 
-                for (ServiceQuota quota : quotas) {
-                    double usage = 0.0;
-                    double limit = quota.value();
-                    double percentage = (limit > 0) ? (usage / limit) * 100 : 0;
-                    String status = "OK";
-                    if (percentage > 90) {
-                        status = "CRITICAL";
-                    } else if (percentage > 75) {
-                        status = "WARN";
+            for (String serviceCode : serviceCodes) {
+                try {
+                    logger.info("Fetching quotas for service: {} in account {}", serviceCode, account.getAwsAccountId());
+                    ListServiceQuotasRequest request = ListServiceQuotasRequest.builder().serviceCode(serviceCode).build();
+                    List<ServiceQuota> quotas = sqClient.listServiceQuotas(request).quotas();
+
+                    for (ServiceQuota quota : quotas) {
+                        double usage = usageMap.getOrDefault(quota.quotaCode(), 0.0);
+                        double limit = quota.value();
+                        
+                        double percentage = (limit > 0) ? (usage / limit) * 100 : 0;
+                        if (percentage > 50 || isKeyQuota(quota.quotaCode())) {
+                             String status = "OK";
+                            if (percentage > 90) {
+                                status = "CRITICAL";
+                            } else if (percentage > 75) {
+                                status = "WARN";
+                            }
+
+                            quotaInfos.add(new DashboardData.ServiceQuotaInfo(
+                                quota.serviceName(),
+                                quota.quotaName(),
+                                limit,
+                                usage,
+                                status
+                            ));
+                        }
                     }
-
-                    quotaInfos.add(new DashboardData.ServiceQuotaInfo(
-                        quota.serviceName(),
-                        quota.quotaName(),
-                        limit,
-                        usage,
-                        status
-                    ));
+                } catch (Exception e) {
+                    logger.error("Could not fetch service quotas for {} in account {}.", serviceCode, account.getAwsAccountId(), e);
                 }
-            } catch (Exception e) {
-                logger.error("Could not fetch service quotas for {} in account {}.", serviceCode, account.getAwsAccountId(), e);
             }
-        }
-
-        return CompletableFuture.completedFuture(quotaInfos);
+            return CompletableFuture.completedFuture(quotaInfos);
+        });
     }
+
+    private boolean isKeyQuota(String quotaCode) {
+        return this.keyQuotas.contains(quotaCode);
+    }
+
+    private CompletableFuture<Map<String, Double>> getCurrentUsageData(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        CompletableFuture<Integer> ec2CountFuture = countEc2Instances(account, activeRegions);
+        CompletableFuture<Integer> vpcCountFuture = countVpcs(account, activeRegions);
+        CompletableFuture<Integer> rdsCountFuture = countRdsInstances(account, activeRegions);
+        CompletableFuture<Integer> albCountFuture = countAlbs(account, activeRegions);
+
+        return CompletableFuture.allOf(ec2CountFuture, vpcCountFuture, rdsCountFuture, albCountFuture)
+            .thenApply(v -> {
+                Map<String, Double> usageMap = new HashMap<>();
+                usageMap.put("L-1216C47A", (double) ec2CountFuture.join());
+                usageMap.put("L-F678F1CE", (double) vpcCountFuture.join());
+                usageMap.put("L-7295265B", (double) rdsCountFuture.join());
+                usageMap.put("L-69A177A2", (double) albCountFuture.join());
+                return usageMap;
+            });
+    }
+
+    private CompletableFuture<Integer> countEc2Instances(CloudAccount account, List<DashboardData.RegionStatus> regions) {
+        List<CompletableFuture<Integer>> futures = regions.stream()
+            .map(region -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    Ec2Client ec2 = awsClientProvider.getEc2Client(account, region.getRegionId());
+                    return ec2.describeInstances(r -> r.filters(f -> f.name("instance-state-name").values("running")))
+                              .reservations().stream().mapToInt(r -> r.instances().size()).sum();
+                } catch (Exception e) {
+                    logger.error("Failed to count EC2 instances in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    return 0;
+                }
+            }))
+            .collect(Collectors.toList());
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .mapToInt(Integer::intValue)
+                .sum());
+    }
+
+    private CompletableFuture<Integer> countVpcs(CloudAccount account, List<DashboardData.RegionStatus> regions) {
+         List<CompletableFuture<Integer>> futures = regions.stream()
+            .map(region -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    Ec2Client ec2 = awsClientProvider.getEc2Client(account, region.getRegionId());
+                    return ec2.describeVpcs().vpcs().size();
+                } catch (Exception e) {
+                    logger.error("Failed to count VPCs in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    return 0;
+                }
+            }))
+            .collect(Collectors.toList());
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .mapToInt(Integer::intValue)
+                .sum());
+    }
+
+    private CompletableFuture<Integer> countRdsInstances(CloudAccount account, List<DashboardData.RegionStatus> regions) {
+        List<CompletableFuture<Integer>> futures = regions.stream()
+            .map(region -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    RdsClient rds = awsClientProvider.getRdsClient(account, region.getRegionId());
+                    return rds.describeDBInstances().dbInstances().size();
+                } catch (Exception e) {
+                    logger.error("Failed to count RDS instances in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    return 0;
+                }
+            }))
+            .collect(Collectors.toList());
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .mapToInt(Integer::intValue)
+                .sum());
+    }
+    
+    private CompletableFuture<Integer> countAlbs(CloudAccount account, List<DashboardData.RegionStatus> regions) {
+        List<CompletableFuture<Integer>> futures = regions.stream()
+            .map(region -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    ElasticLoadBalancingV2Client elbv2 = awsClientProvider.getElbv2Client(account, region.getRegionId());
+                    return (int) elbv2.describeLoadBalancers().loadBalancers().stream()
+                        .filter(lb -> "application".equalsIgnoreCase(lb.typeAsString()))
+                        .count();
+                } catch (Exception e) {
+                    logger.error("Failed to count ALBs in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    return 0;
+                }
+            }))
+            .collect(Collectors.toList());
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .mapToInt(Integer::intValue)
+                .sum());
+    }
+
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "reservationPageData", key = "#accountId")
@@ -1963,7 +2524,18 @@ public class AwsDataService {
         });
     }
 
-    private String suggestSmallerInstanceType(String instanceType) { String[] parts = instanceType.split("\\."); if (parts.length != 2) return null; String family = parts[0]; String size = parts[1]; Map<String, String> sizeMap = Map.of("2xlarge", "xlarge", "xlarge", "large", "large", "medium", "medium", "small"); String smallerSize = sizeMap.get(size); return smallerSize != null ? family + "." + smallerSize : null; }
+    private String suggestSmallerInstanceType(String instanceType) {
+        String[] parts = instanceType.split("\\.");
+        if (parts.length != 2) return null;
+        String family = parts[0];
+        String size = parts[1];
+
+        int currentIndex = this.instanceSizeOrder.indexOf(size);
+        if (currentIndex > 0) {
+            return family + "." + this.instanceSizeOrder.get(currentIndex - 1);
+        }
+        return null;
+    }
 
     public String applyReservationModification(String accountId, ReservationModificationRequestDto request) {
         CloudAccount account = getAccount(accountId);
@@ -2103,19 +2675,28 @@ public class AwsDataService {
         try {
             CoreV1Api api = getCoreV1Api(account, clusterName);
             List<V1Node> nodeList = api.listNode(null, null, null, null, null, null, null, null, null, null).getItems();
+            
+            Cluster cluster = getEksCluster(account, clusterName);
+            String region = cluster.arn().split(":")[3];
+
             return CompletableFuture.completedFuture(nodeList.stream().map(node -> {
                 String status = node.getStatus().getConditions().stream()
                         .filter(c -> "Ready".equals(c.getType()))
                         .findFirst()
                         .map(c -> "True".equals(c.getStatus()) ? "Ready" : "NotReady")
                         .orElse("Unknown");
+                
+                Map<String, Map<String, Double>> metrics = getK8sNodeMetrics(account, clusterName, node.getMetadata().getName(), region);
+
                 return new K8sNodeInfo(
                         node.getMetadata().getName(),
                         status,
                         node.getMetadata().getLabels().get("node.kubernetes.io/instance-type"),
                         node.getMetadata().getLabels().get("topology.kubernetes.io/zone"),
                         formatAge(node.getMetadata().getCreationTimestamp()),
-                        node.getStatus().getNodeInfo().getKubeletVersion()
+                        node.getStatus().getNodeInfo().getKubeletVersion(),
+                        metrics.get("cpu"),
+                        metrics.get("memory")
                 );
             }).collect(Collectors.toList()));
         } catch (ApiException e) {
@@ -2125,6 +2706,63 @@ public class AwsDataService {
             logger.error("Failed to get nodes for cluster {} in account {}", clusterName, accountId, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
+    }
+
+    private Map<String, Map<String, Double>> getK8sNodeMetrics(CloudAccount account, String clusterName, String nodeName, String region) {
+        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
+        
+        Map<String, Map<String, Double>> results = new HashMap<>();
+        results.put("cpu", new HashMap<>());
+        results.put("memory", new HashMap<>());
+
+        try {
+            List<String> metricNames = List.of("node_cpu_utilization", "node_memory_utilization", "node_cpu_limit", "node_memory_limit");
+            
+            List<MetricDataQuery> queries = metricNames.stream().map(metricName -> 
+                MetricDataQuery.builder()
+                    .id(metricName.replace("_", ""))
+                    .metricStat(MetricStat.builder()
+                        .metric(Metric.builder()
+                            .namespace("ContainerInsights")
+                            .metricName(metricName)
+                            .dimensions(
+                                Dimension.builder().name("ClusterName").value(clusterName).build(),
+                                Dimension.builder().name("NodeName").value(nodeName).build()
+                            )
+                            .build())
+                        .period(60)
+                        .stat("Average")
+                        .build())
+                    .returnData(true)
+                    .build()
+            ).collect(Collectors.toList());
+
+            GetMetricDataRequest request = GetMetricDataRequest.builder()
+                .startTime(Instant.now().minus(5, ChronoUnit.MINUTES))
+                .endTime(Instant.now())
+                .metricDataQueries(queries)
+                .build();
+
+            GetMetricDataResponse response = cwClient.getMetricData(request);
+            
+            for (MetricDataResult result : response.metricDataResults()) {
+                if (!result.values().isEmpty()) {
+                    double value = result.values().get(0);
+                    if ("nodecpuutilization".equals(result.id())) {
+                        results.get("cpu").put("current", value);
+                    } else if ("nodememoryutilization".equals(result.id())) {
+                        results.get("memory").put("current", value);
+                    } else if ("nodecpulimit".equals(result.id())) {
+                        results.get("cpu").put("total", value / 1000); // Convert millicores to cores
+                    } else if ("nodememorylimit".equals(result.id())) {
+                        results.get("memory").put("total", value / (1024*1024*1024)); // Convert bytes to GiB
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Could not fetch Container Insights metrics for node {} in cluster {}", nodeName, clusterName, e);
+        }
+        return results;
     }
 
     @Async("awsTaskExecutor")
@@ -2182,13 +2820,31 @@ public class AwsDataService {
                 long readyContainers = p.getStatus() != null && p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().filter(cs -> cs.getReady()).count() : 0;
                 int totalContainers = p.getSpec() != null && p.getSpec().getContainers() != null ? p.getSpec().getContainers().size() : 0;
                 int restarts = p.getStatus() != null && p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().mapToInt(cs -> cs.getRestartCount()).sum() : 0;
+                
+                String cpu = "0 / 0";
+                String memory = "0 / 0";
+
+                if (p.getSpec() != null && p.getSpec().getContainers() != null && !p.getSpec().getContainers().isEmpty()) {
+                    V1Container mainContainer = p.getSpec().getContainers().get(0);
+                    if (mainContainer.getResources() != null) {
+                        String cpuReq = formatResource(mainContainer.getResources().getRequests(), "cpu");
+                        String cpuLim = formatResource(mainContainer.getResources().getLimits(), "cpu");
+                        String memReq = formatResource(mainContainer.getResources().getRequests(), "memory");
+                        String memLim = formatResource(mainContainer.getResources().getLimits(), "memory");
+                        cpu = String.format("%s / %s", cpuReq, cpuLim);
+                        memory = String.format("%s / %s", memReq, memLim);
+                    }
+                }
+
                 return new K8sPodInfo(
                         p.getMetadata() != null ? p.getMetadata().getName() : "N/A",
                         readyContainers + "/" + totalContainers,
                         p.getStatus() != null ? p.getStatus().getPhase() : "Unknown",
                         restarts,
                         p.getMetadata() != null ? formatAge(p.getMetadata().getCreationTimestamp()) : "N/A",
-                        p.getSpec() != null ? p.getSpec().getNodeName() : "N/A"
+                        p.getSpec() != null ? p.getSpec().getNodeName() : "N/A",
+                        cpu,
+                        memory
                 );
             }).collect(Collectors.toList()));
         } catch (Exception e) {
@@ -2197,6 +2853,13 @@ public class AwsDataService {
         }
     }
 
+    private String formatResource(Map<String, io.kubernetes.client.custom.Quantity> resources, String type) {
+        if (resources == null || !resources.containsKey(type)) {
+            return "0";
+        }
+        return resources.get(type).toSuffixedString();
+    }
+    
     private Cluster getEksCluster(CloudAccount account, String clusterName) {
         EksClient eks = awsClientProvider.getEksClient(account, configuredRegion);
         return eks.describeCluster(r -> r.name(clusterName)).cluster();
@@ -2463,7 +3126,7 @@ public class AwsDataService {
             }
         }
         logger.warn("Could not find {} resource {} in any active region.", serviceType, resourceId);
-        return null;
+        return configuredRegion;
     }
 
     private String findInstanceRegion(CloudAccount account, String instanceId) {
@@ -2491,7 +3154,7 @@ public class AwsDataService {
         }
         
         logger.warn("Could not find instance {} in any region.", instanceId);
-        return null; 
+        return configuredRegion; 
     }
 
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId, String region) {
@@ -2499,11 +3162,11 @@ public class AwsDataService {
         CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
         logger.info("Fetching CloudWatch metrics for instance: {} in region {} for account {}", instanceId, region, accountId);
         try {
-            GetMetricDataRequest cpuRequest = buildMetricDataRequest(instanceId, "CPUUtilization", "AWS/EC2");
+            GetMetricDataRequest cpuRequest = buildMetricDataRequest(instanceId, "CPUUtilization", "AWS/EC2", "InstanceId");
             MetricDataResult cpuResult = cwClient.getMetricData(cpuRequest).metricDataResults().get(0);
             List<MetricDto> cpuDatapoints = buildMetricDtos(cpuResult);
 
-            GetMetricDataRequest networkInRequest = buildMetricDataRequest(instanceId, "NetworkIn", "AWS/EC2");
+            GetMetricDataRequest networkInRequest = buildMetricDataRequest(instanceId, "NetworkIn", "AWS/EC2", "InstanceId");
             MetricDataResult networkInResult = cwClient.getMetricData(networkInRequest).metricDataResults().get(0);
             List<MetricDto> networkInDatapoints = buildMetricDtos(networkInResult);
 
@@ -2548,4 +3211,6 @@ public class AwsDataService {
 event.readOnly() != null && Boolean.parseBoolean(event.readOnly()) 
        );
     }
+
+    
 }

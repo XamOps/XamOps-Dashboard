@@ -37,7 +37,7 @@ public class DashboardData {
     @Data @AllArgsConstructor @NoArgsConstructor public static class BudgetDetails { private String budgetName; private BigDecimal budgetLimit; private String budgetUnit; private BigDecimal actualSpend; private BigDecimal forecastedSpend; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class TaggingCompliance { private double compliancePercentage; private int totalResourcesScanned; private int untaggedResourcesCount; private List<UntaggedResource> untaggedResources; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class UntaggedResource { private String resourceId; private String resourceType; private String region; private List<String> missingTags; }
-    @Data @NoArgsConstructor @AllArgsConstructor public static class Account { private String id; private String name; private List<RegionStatus> regionStatus; private ResourceInventory resourceInventory; private CloudWatchStatus cloudWatchStatus; private List<SecurityInsight> securityInsights; private CostHistory costHistory; private List<BillingSummary> billingSummary; private IamResources iamResources; private SavingsSummary savingsSummary; private List<OptimizationRecommendation> ec2Recommendations; private List<CostAnomaly> costAnomalies; private List<OptimizationRecommendation> ebsRecommendations; private List<OptimizationRecommendation> lambdaRecommendations; private ReservationAnalysis reservationAnalysis; private List<ReservationPurchaseRecommendation> reservationPurchaseRecommendations; private OptimizationSummary optimizationSummary; private List<WastedResource> wastedResources; private List<ServiceQuotaInfo> serviceQuotas; private int securityScore; } // ADDED securityScore
+    @Data @NoArgsConstructor @AllArgsConstructor public static class Account { private String id; private String name; private List<RegionStatus> regionStatus; private ResourceInventory resourceInventory; private CloudWatchStatus cloudWatchStatus; private List<SecurityInsight> securityInsights; private CostHistory costHistory; private List<BillingSummary> billingSummary; private IamResources iamResources; private SavingsSummary savingsSummary; private List<OptimizationRecommendation> ec2Recommendations; private List<CostAnomaly> costAnomalies; private List<OptimizationRecommendation> ebsRecommendations; private List<OptimizationRecommendation> lambdaRecommendations; private ReservationAnalysis reservationAnalysis; private List<ReservationPurchaseRecommendation> reservationPurchaseRecommendations; private OptimizationSummary optimizationSummary; private List<WastedResource> wastedResources; private List<ServiceQuotaInfo> serviceQuotas; private int securityScore; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class RegionStatus { private String regionName; private String regionId; private String status; private double lat; private double lon; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class CloudWatchStatus { private long ok; private long alarm; private long insufficient; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class IamResources { private int users; private int groups; private int customerManagedPolicies; private int roles; }
@@ -46,7 +46,19 @@ public class DashboardData {
     @Data @NoArgsConstructor @AllArgsConstructor public static class SavingsSummary { private double potential; private List<SavingsSuggestion> suggestions; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class SavingsSuggestion { private String service; private double suggested; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class CostHistory { private List<String> labels; private List<Double> costs; private List<Boolean> anomalies; }
-    @Data @AllArgsConstructor @NoArgsConstructor public static class OptimizationRecommendation { private String service; private String resourceId; private String currentType; private String recommendedType; private double estimatedMonthlySavings; private String recommendationReason; }
+    
+    @Data @AllArgsConstructor @NoArgsConstructor 
+    public static class OptimizationRecommendation { 
+        private String service; 
+        private String resourceId; 
+        private String currentType; 
+        private String recommendedType; 
+        private double estimatedMonthlySavings; 
+        private String recommendationReason; 
+        private double currentMonthlyCost;
+        private double recommendedMonthlyCost;
+    }
+
     @Data @AllArgsConstructor @NoArgsConstructor public static class RightsizingRecommendation { private String resourceId; private String accountName; private String region; private String service; private String currentType; private String usage; private String recommendedType; private double currentMonthlyCost; private double recommendedMonthlyCost; private double estimatedMonthlySavings; private List<RightsizingOption> recommendationOptions; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class RightsizingOption { private String recommendedType; private double recommendedMonthlyCost; private double estimatedMonthlySavings; private String usage; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class CostAnomaly { private String anomalyId; private String service; private double unexpectedSpend; private LocalDate startDate; private LocalDate endDate; }

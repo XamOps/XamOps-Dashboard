@@ -14,4 +14,7 @@ public class K8sPodInfo {
     private int restarts;
     private String age;
     private String nodeName;
+    // ADDED: Fields for live resource data
+    private String cpu;
+    private String memory;
 }

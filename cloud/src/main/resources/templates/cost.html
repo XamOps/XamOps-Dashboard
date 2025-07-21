@@ -605,17 +605,24 @@ function costManagement() {
             this.historical.isLoading = true;
             this.historical.dimension = dimensionValue;
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            // NOTE: Backend endpoint /api/costs/historical needs to be created
-            // For now, we will simulate the data.
-            console.log(`Simulating fetch for historical data: ${dimensionValue}`);
-            setTimeout(() => {
-                // Mock data simulation
-                const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                const data = labels.map(() => Math.random() * 1000 + 500);
-                this.historical.data = { labels, costs: data };
-                this.renderHistoricalChart();
-                this.historical.isLoading = false;
-            }, 1000);
+            
+            let url = `/api/costs/historical?accountId=${selectedAccountId}&groupBy=${this.groupBy}&dimensionValue=${encodeURIComponent(dimensionValue)}`;
+            if (this.groupBy === 'TAG') {
+                url += `&tagKey=${encodeURIComponent(this.tagKey)}`;
+            }
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    this.historical.data = data;
+                    this.renderHistoricalChart();
+                })
+                .catch(err => {
+                    console.error('Failed to fetch historical cost data:', err);
+                })
+                .finally(() => {
+                    this.historical.isLoading = false;
+                });
         },
 
         renderHistoricalChart() {

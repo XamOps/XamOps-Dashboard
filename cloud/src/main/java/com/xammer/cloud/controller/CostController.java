@@ -1,6 +1,7 @@
 package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.CostDto;
+import com.xammer.cloud.dto.HistoricalCostDto;
 import com.xammer.cloud.service.CostService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,5 +30,15 @@ public class CostController {
         
         List<CostDto> costData = costService.getCostBreakdown(accountId, groupBy, tag).get();
         return ResponseEntity.ok(costData);
+    }
+
+    @GetMapping("/historical")
+    public ResponseEntity<HistoricalCostDto> getHistoricalCost(
+            @RequestParam String accountId,
+            @RequestParam String groupBy,
+            @RequestParam String dimensionValue,
+            @RequestParam(required = false) String tagKey) throws ExecutionException, InterruptedException {
+        HistoricalCostDto historicalData = costService.getHistoricalCostForDimension(accountId, groupBy, dimensionValue, tagKey).get();
+        return ResponseEntity.ok(historicalData);
     }
 }

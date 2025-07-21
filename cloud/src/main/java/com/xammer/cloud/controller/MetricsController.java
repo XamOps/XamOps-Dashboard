@@ -27,4 +27,28 @@ public class MetricsController {
         Map<String, List<MetricDto>> metrics = awsDataService.getEc2InstanceMetrics(accountId, instanceId);
         return ResponseEntity.ok(metrics);
     }
+
+    @GetMapping("/rds/{instanceId}")
+    public ResponseEntity<Map<String, List<MetricDto>>> getRdsMetrics(@RequestParam String accountId, @PathVariable String instanceId) {
+        Map<String, List<MetricDto>> metrics = awsDataService.getRdsInstanceMetrics(accountId, instanceId);
+        return ResponseEntity.ok(metrics);
+    }
+
+    @GetMapping("/s3/{bucketName}")
+    public ResponseEntity<Map<String, List<MetricDto>>> getS3Metrics(
+            @RequestParam String accountId,
+            @PathVariable String bucketName,
+            @RequestParam String region) {
+        Map<String, List<MetricDto>> metrics = awsDataService.getS3BucketMetrics(accountId, bucketName, region);
+        return ResponseEntity.ok(metrics);
+    }
+
+    @GetMapping("/lambda/{functionName}")
+    public ResponseEntity<Map<String, List<MetricDto>>> getLambdaMetrics(
+            @RequestParam String accountId,
+            @PathVariable String functionName,
+            @RequestParam String region) {
+        Map<String, List<MetricDto>> metrics = awsDataService.getLambdaFunctionMetrics(accountId, functionName, region);
+        return ResponseEntity.ok(metrics);
+    }
 }

@@ -389,7 +389,7 @@
                                 <span class="text-sm font-semibold text-gray-700">Filter by category:</span>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                                <template x-for="cat in categories" :key="cat">
+                                <template x-for="cat in allPossibleCategories" :key="cat">
                                     <button 
                                         @click="filter = cat" 
                                         :class="filter === cat ? 'active' : ''" 
@@ -551,6 +551,12 @@ function wasteManagement() {
         wastedResources: [],
         selectedResources: [],
         savingsChart: null,
+        // --- MODIFIED: Static list of all possible categories ---
+        allPossibleCategories: [
+            'All', 'EBS Volume', 'Snapshot', 'AMI', 'Elastic IP', 
+            'RDS Instance', 'Load Balancer', 'Security Group', 'EC2 Instance', 
+            'ENI', 'EKS Cluster', 'ECS Cluster', 'Lambda', 'DB Snapshot', 'Log Group'
+        ],
 
         init() {
             this.loadWastedResources();
@@ -592,10 +598,8 @@ function wasteManagement() {
                 .finally(() => this.isLoading = false);
         },
 
-        get categories() {
-            const cats = this.wastedResources.map(r => r.resourceType);
-            return ['All', ...new Set(cats)];
-        },
+        // --- REMOVED DYNAMIC CATEGORIES GETTER ---
+        // The `allPossibleCategories` property is now used directly in the HTML.
 
         get filteredResources() {
             if (this.filter === 'All') {
@@ -676,7 +680,8 @@ function wasteManagement() {
                             cornerRadius: 8,
                             callbacks: {
                                 label: function(context) {
-                                    const percentage = ((context.parsed / data.reduce((a, b) => a + b, 0)) * 100).toFixed(1);
+                                    const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
                                     return `${context.label}: $${context.parsed.toFixed(2)} (${percentage}%)`;
                                 }
                             }
@@ -696,14 +701,24 @@ function wasteManagement() {
                 'Load Balancer': 'bg-cyan-100 text-cyan-800 border-cyan-200',
                 'Security Group': 'bg-gray-100 text-gray-800 border-gray-200',
                 'EC2 Instance': 'bg-teal-100 text-teal-800 border-teal-200',
-                'ENI': 'bg-pink-100 text-pink-800 border-pink-200'
+                'ENI': 'bg-pink-100 text-pink-800 border-pink-200',
+                'EKS Cluster': 'bg-blue-200 text-blue-900 border-blue-300',
+                'ECS Cluster': 'bg-orange-200 text-orange-900 border-orange-300',
+                'Lambda': 'bg-yellow-200 text-yellow-900 border-yellow-300',
+                'DB Snapshot': 'bg-indigo-200 text-indigo-900 border-indigo-300',
+                'Log Group': 'bg-gray-200 text-gray-900 border-gray-300'
             };
             return colors[type] || 'bg-gray-100 text-gray-800 border-gray-200';
         },
 
         isActionable(resource, action) {
             if (action === 'delete') {
-                return resource.resourceType === 'EBS Volume' && resource.reason === 'Unattached Volume';
+                // --- MODIFIED: Added new deletable types ---
+                const deletableTypes = [
+                    'EBS Volume', 'Elastic IP', 'Snapshot', 'AMI', 
+                    'ENI', 'Log Group', 'DB Snapshot'
+                ];
+                return deletableTypes.includes(resource.resourceType);
             }
             return true; // For archive action
         },

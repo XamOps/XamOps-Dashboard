@@ -53,10 +53,11 @@ public class SecurityConfig {
 
     @Bean
     public UserDetailsService userDetailsService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        // Create a default user if it doesn't exist
-        if (userRepository.findByUsername("user").isEmpty()) {
-            userRepository.save(new com.xammer.cloud.domain.User("user", passwordEncoder.encode("password")));
-        }
+        // 🚨 SECURITY ALERT: The automatic creation of a default user has been removed.
+        // User management should be handled through a secure, administrative process.
+        // To create an initial user, you can add them directly to your database.
+        // Example SQL:
+        // INSERT INTO app_user (username, password) VALUES ('admin', '{bcrypt-encoded-password}');
 
         return username -> userRepository.findByUsername(username)
                 .map(user -> new User(user.getUsername(), user.getPassword(), new ArrayList<>()))

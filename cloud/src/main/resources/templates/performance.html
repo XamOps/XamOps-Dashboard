@@ -3,27 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XamOps - Performance</title>
+    <title>XamOps - Performance Insights</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         
-        :root {
-            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            --performance-gradient: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
-            --glass-bg: rgba(255, 255, 255, 0.95);
-            --glass-border: rgba(255, 255, 255, 0.2);
-        }
-
-        body { 
-            font-family: 'Inter', sans-serif; 
+        body {
+            font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             min-height: 100vh;
         }
@@ -31,189 +20,92 @@
         [x-cloak] { display: none !important; }
         
         .glass-card {
-            background: var(--glass-bg);
+            background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        .glass-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        .severity-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: capitalize;
         }
         
-        .metric-card {
+        .severity-critical {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        
+        .severity-warning {
+            background: #fef3c7;
+            color: #d97706;
+            border: 1px solid #fde68a;
+        }
+        
+        .severity-weak-warning {
+            background: #fef9c3;
+            color: #ca8a04;
+            border: 1px solid #fef08a;
+        }
+        
+        .insight-row {
+            transition: all 0.2s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .insight-row:hover {
+            background: rgba(59, 130, 246, 0.05);
+            border-left-color: #3b82f6;
+        }
+        
+        .filter-button {
+            transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        .metric-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: var(--performance-gradient);
-            transform: scaleX(0);
-            transition: transform 0.3s ease;
+        .filter-button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.4);
         }
         
-        .metric-card:hover::before {
-            transform: scaleX(1);
+        .action-button {
+            transition: all 0.2s ease;
         }
         
-        .metric-card:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        .action-button:hover {
+            transform: translateY(-1px);
+        }
+        
+        .bulk-action-bar {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         
         .skeleton {
             background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
             background-size: 200% 100%;
             animation: shimmer 1.5s infinite;
-            border-radius: 12px;
+            border-radius: 8px;
         }
         
         @keyframes shimmer {
             0% { background-position: -200% 0; }
             100% { background-position: 200% 0; }
-        }
-        
-        .header-gradient {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
-        }
-        
-        .form-select {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            transition: all 0.3s ease;
-        }
-        
-        .form-select:focus {
-            background: rgba(255, 255, 255, 1);
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-            transform: translateY(-1px);
-        }
-        
-        .chart-container {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 24px;
-            border: 1px solid var(--glass-border);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .chart-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--performance-gradient);
-        }
-        
-        .empty-state {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 2px dashed rgba(59, 130, 246, 0.3);
-            transition: all 0.3s ease;
-        }
-        
-        .empty-state:hover {
-            border-color: rgba(59, 130, 246, 0.5);
-            background: rgba(255, 255, 255, 0.98);
-        }
-        
-        .selector-section {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.1) 100%);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-        
-        .pulse-dot {
-            animation: pulse-dot 2s infinite;
-        }
-        
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading-spinner {
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #3b82f6;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .gradient-text {
-            background: var(--performance-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .metric-icon {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            transition: all 0.3s ease;
-        }
-        
-        .metric-icon:hover {
-            transform: scale(1.1) rotate(5deg);
-        }
-        
-        .real-time-indicator {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.2) 100%);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-        
-        .chart-hover-effect {
-            transition: all 0.3s ease;
-        }
-        
-        .chart-hover-effect:hover {
-            transform: scale(1.02);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-        }
-        
-        .service-badge {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(102, 126, 234, 0.2) 100%);
-            border: 1px solid rgba(102, 126, 234, 0.3);
-            color: #667eea;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
         }
     </style>
 </head>
@@ -225,203 +117,202 @@
     </aside>
 
     <div class="ml-64 flex-1">
-        <main class="flex-1 flex flex-col min-h-screen" x-data="performanceDashboard()">
-            <!-- Enhanced Header -->
-            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
-                <div class="flex items-center space-x-4">
-                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-chart-line text-white text-xl"></i>
+        <main class="flex-1 flex flex-col min-h-screen" x-data="performanceInsights()">
+            <!-- Header -->
+            <header class="bg-white border-b border-gray-200 px-8 py-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-chart-line text-white text-xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">Performance Insights</h1>
+                            <p class="text-sm text-gray-600">AWS performance recommendations and optimization insights</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-800">Performance Monitoring</h1>
-                        <p class="text-sm text-gray-600">Real-time metrics and analytics for your cloud resources</p>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="real-time-indicator flex items-center space-x-2 px-4 py-2 rounded-xl">
-                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-                        <span class="text-sm font-semibold text-green-700">Live Metrics</span>
+                    <div class="flex items-center space-x-4">
+                        <button @click="exportToExcel()" class="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
+                            <i class="fas fa-file-excel text-green-600"></i>
+                            <span class="text-sm font-medium text-gray-700">Save To Excel</span>
+                        </button>
+                        <button @click="loadInsights(true)" class="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all" :disabled="isLoading">
+                            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                            <span x-text="isLoading ? 'Loading...' : 'Refresh'"></span>
+                        </button>
                     </div>
                 </div>
             </header>
 
             <div class="flex-1 p-8 space-y-8">
-                <!-- Enhanced Resource Selector -->
-                <div class="selector-section rounded-2xl p-6 fade-in">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                                <i class="fas fa-filter text-white text-sm"></i>
-                            </div>
-                            <h3 class="text-lg font-bold text-gray-800">Resource Selection</h3>
-                        </div>
-                        <div class="text-sm text-gray-600" x-show="selectedResource">
-                            <span class="service-badge" x-text="selectedService"></span>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label for="service-type" class="block text-sm font-semibold text-gray-700 mb-2">Service Type</label>
-                            <div class="relative">
-                                <select id="service-type" x-model="selectedService" class="form-select block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none">
-                                    <option value="">-- Select Service --</option>
-                                    <template x-for="service in availableServices" :key="service">
-                                        <option :value="service" x-text="service"></option>
-                                    </template>
-                                </select>
-                                <i class="fas fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="resource-id" class="block text-sm font-semibold text-gray-700 mb-2">Resource</label>
-                            <div class="relative">
-                                <select id="resource-id" x-model="selectedResource" @change="fetchMetrics()" class="form-select block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none" :disabled="!selectedService">
-                                    <option value="">-- Select Resource --</option>
-                                    <template x-for="resource in resourcesForSelectedService" :key="resource.id">
-                                        <option :value="resource.id" x-text="resource.name + ' (' + resource.id + ')'"></option>
-                                    </template>
-                                </select>
-                                <i class="fas fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
-                            </div>
-                        </div>
-                        <div class="flex items-end">
-                            <div class="w-full">
-                                <label class="block text-sm font-semibold text-gray-700 mb-2">Available Resources</label>
-                                <div class="bg-white/70 backdrop-blur-sm rounded-xl p-3 border border-gray-200/50">
-                                    <span class="text-2xl font-bold gradient-text" x-text="resourcesForSelectedService.length"></span>
-                                    <span class="text-sm text-gray-600 ml-2">resources found</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Enhanced Initial/Empty State -->
-                <div x-show="!selectedResource && !isLoading" class="empty-state text-center py-20 px-8 rounded-2xl fade-in">
-                    <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <i class="fas fa-chart-bar text-white text-3xl"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">Ready to Monitor Performance</h3>
-                    <p class="text-gray-600 mb-6">Select a service and resource from the dropdowns above to view real-time performance metrics and analytics.</p>
-                    <div class="flex justify-center space-x-4 text-sm text-gray-500">
-                        <div class="flex items-center space-x-2">
-                            <i class="fas fa-clock text-blue-500"></i>
-                            <span>Real-time data</span>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <i class="fas fa-chart-line text-green-500"></i>
-                            <span>Interactive charts</span>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <i class="fas fa-download text-purple-500"></i>
-                            <span>Export data</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Enhanced Loading State -->
-                <div x-show="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-8 fade-in">
-                    <div class="glass-card rounded-2xl p-8">
-                        <div class="flex items-center justify-between mb-6">
-                            <div class="skeleton h-6 w-32 rounded"></div>
-                            <div class="skeleton h-8 w-8 rounded-lg"></div>
-                        </div>
-                        <div class="skeleton h-64 rounded-lg"></div>
-                    </div>
-                    <div class="glass-card rounded-2xl p-8">
-                        <div class="flex items-center justify-between mb-6">
-                            <div class="skeleton h-6 w-32 rounded"></div>
-                            <div class="skeleton h-8 w-8 rounded-lg"></div>
-                        </div>
-                        <div class="skeleton h-64 rounded-lg"></div>
-                    </div>
-                </div>
-
-                <!-- Enhanced Metrics Display -->
-                <div x-show="selectedResource && !isLoading" x-cloak class="space-y-8 fade-in">
-                    <!-- Resource Information Panel -->
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6" x-show="!isLoading">
                     <div class="glass-card rounded-2xl p-6">
                         <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-4">
-                                <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-server text-white text-lg"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-lg font-bold text-gray-800">Resource Performance</h3>
-                                    <p class="text-sm text-gray-600" x-text="'Monitoring ' + selectedService + ' metrics'"></p>
-                                </div>
+                            <div>
+                                <h3 class="text-gray-600 text-sm font-medium">Total Insights</h3>
+                                <p class="text-3xl font-bold text-gray-800 mt-1" x-text="summary.totalInsights || 0"></p>
                             </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-600">Resource ID</p>
-                                <p class="font-mono text-sm text-gray-800" x-text="selectedResource"></p>
+                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-lightbulb text-blue-600"></i>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Enhanced Metrics Charts -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <!-- CPU Utilization Chart -->
-                        <div class="metric-card rounded-2xl chart-hover-effect">
-                            <div class="chart-container">
-                                <div class="flex items-center justify-between mb-6">
-                                    <h3 class="text-lg font-bold text-gray-800">CPU Utilization</h3>
-                                    <div class="metric-icon w-10 h-10 rounded-lg flex items-center justify-center">
-                                        <i class="fas fa-microchip text-blue-600 text-lg"></i>
-                                    </div>
-                                </div>
-                                <div class="h-64">
-                                    <canvas id="cpuChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Network In Chart -->
-                        <div class="metric-card rounded-2xl chart-hover-effect">
-                            <div class="chart-container">
-                                <div class="flex items-center justify-between mb-6">
-                                    <h3 class="text-lg font-bold text-gray-800">Network In</h3>
-                                    <div class="metric-icon w-10 h-10 rounded-lg flex items-center justify-center">
-                                        <i class="fas fa-download text-green-600 text-lg"></i>
-                                    </div>
-                                </div>
-                                <div class="h-64">
-                                    <canvas id="networkInChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Performance Insights Panel -->
                     <div class="glass-card rounded-2xl p-6">
-                        <div class="flex items-center space-x-3 mb-4">
-                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
-                                <i class="fas fa-lightbulb text-white text-sm"></i>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-gray-600 text-sm font-medium">Critical</h3>
+                                <p class="text-3xl font-bold text-red-600 mt-1" x-text="summary.critical || 0"></p>
                             </div>
-                            <h3 class="text-lg font-bold text-gray-800">Performance Insights</h3>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div class="bg-blue-50 rounded-xl p-4">
-                                <div class="flex items-center space-x-2 mb-2">
-                                    <i class="fas fa-info-circle text-blue-600"></i>
-                                    <span class="text-sm font-semibold text-blue-800">Monitoring Status</span>
-                                </div>
-                                <p class="text-sm text-blue-700">Real-time CloudWatch metrics are being collected and displayed for this resource.</p>
-                            </div>
-                            <div class="bg-green-50 rounded-xl p-4">
-                                <div class="flex items-center space-x-2 mb-2">
-                                    <i class="fas fa-clock text-green-600"></i>
-                                    <span class="text-sm font-semibold text-green-800">Data Freshness</span>
-                                </div>
-                                <p class="text-sm text-green-700">Metrics are updated every 5 minutes with the latest available data points.</p>
-                            </div>
-                            <div class="bg-purple-50 rounded-xl p-4">
-                                <div class="flex items-center space-x-2 mb-2">
-                                    <i class="fas fa-chart-line text-purple-600"></i>
-                                    <span class="text-sm font-semibold text-purple-800">Historical Data</span>
-                                </div>
-                                <p class="text-sm text-purple-700">Charts display performance trends over the last 24 hours for analysis.</p>
+                            <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-exclamation-triangle text-red-600"></i>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-gray-600 text-sm font-medium">Warnings</h3>
+                                <p class="text-3xl font-bold text-orange-600 mt-1" x-text="(summary.warning || 0) + (summary.weakWarning || 0)"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-exclamation-circle text-orange-600"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-gray-600 text-sm font-medium">Potential Savings</h3>
+                                <p class="text-3xl font-bold text-green-600 mt-1" x-text="'$' + (summary.potentialSavings || 0).toFixed(2)"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-dollar-sign text-green-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Insights Table -->
+                <div class="glass-card rounded-2xl p-8">
+                    <!-- Filters and Bulk Actions -->
+                    <div class="flex flex-wrap justify-between items-center gap-6 mb-8">
+                        <div x-show="selectedInsights.length === 0" class="flex flex-wrap items-center gap-4">
+                            <h2 class="text-xl font-bold text-gray-800">Insights</h2>
+                            <div class="flex gap-2">
+                                <template x-for="severity in severityFilters" :key="severity.value">
+                                    <button 
+                                        @click="currentSeverity = severity.value" 
+                                        :class="currentSeverity === severity.value ? 'active' : ''" 
+                                        class="filter-button px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2"
+                                        x-html="severity.label">
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <div x-show="selectedInsights.length > 0" x-cloak class="bulk-action-bar flex items-center gap-4 p-4 rounded-xl w-full">
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-check-circle text-blue-600"></i>
+                                <span class="text-sm font-bold text-blue-800" x-text="`${selectedInsights.length} insight${selectedInsights.length > 1 ? 's' : ''} selected`"></span>
+                            </div>
+                            <div class="flex items-center gap-3 ml-auto">
+                                <button @click="bulkArchive()" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
+                                    <i class="fas fa-archive mr-2"></i>Archive Selected
+                                </button>
+                                <button @click="selectedInsights = []" class="text-gray-400 hover:text-gray-600 transition-colors">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Loading Skeleton -->
+                    <div x-show="isLoading" x-cloak class="space-y-4">
+                        <template x-for="i in 5" :key="i">
+                            <div class="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg">
+                                <div class="skeleton w-6 h-6 rounded"></div>
+                                <div class="flex-1 space-y-2">
+                                    <div class="skeleton h-4 w-3/4 rounded"></div>
+                                    <div class="skeleton h-3 w-1/2 rounded"></div>
+                                </div>
+                                <div class="skeleton h-6 w-16 rounded-full"></div>
+                                <div class="skeleton h-8 w-24 rounded"></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Insights Table -->
+                    <div x-show="!isLoading && filteredInsights.length > 0" x-cloak class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="p-4 w-8">
+                                        <input type="checkbox" @change="toggleAllInsights" :checked="isAllSelected" class="rounded">
+                                    </th>
+                                    <th class="px-6 py-4 text-left font-bold">Insight</th>
+                                    <th class="px-6 py-4 text-center font-bold">Qty</th>
+                                    <th class="px-6 py-4 text-left font-bold">Account</th>
+                                    <th class="px-6 py-4 text-center font-bold">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template x-for="insight in filteredInsights" :key="insight.id">
+                                    <tr class="insight-row" :class="selectedInsights.includes(insight.id) ? 'bg-blue-50 border-l-blue-500' : ''">
+                                        <td class="p-4">
+                                            <input type="checkbox" :value="insight.id" x-model="selectedInsights" class="rounded">
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-start space-x-3">
+                                                <div class="flex-shrink-0 mt-1">
+                                                    <i class="fas" :class="{
+                                                        'fa-exclamation-triangle text-red-500': insight.severity === 'CRITICAL',
+                                                        'fa-exclamation-circle text-orange-500': insight.severity === 'WARNING',
+                                                        'fa-info-circle text-yellow-500': insight.severity === 'WEAK_WARNING'
+                                                    }"></i>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <p class="font-medium text-gray-900 leading-relaxed" x-text="insight.insight"></p>
+                                                    <p class="text-xs text-gray-500 mt-1" x-text="insight.description" x-show="insight.description"></p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-red-500 rounded-full" 
+                                                  x-text="insight.quantity"></span>
+                                            <span class="text-xs text-gray-500 ml-1">Insight</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="font-medium text-gray-900" x-text="insight.account"></span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex justify-center gap-2">
+                                                <button class="action-button px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                                                    Read Docs
+                                                </button>
+                                                <button @click="archiveInsight(insight.id)" class="action-button px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">
+                                                    Archive
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div x-show="!isLoading && filteredInsights.length === 0" x-cloak class="text-center py-16">
+                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-search text-gray-400 text-xl"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">No insights found</h3>
+                        <p class="text-gray-600 mb-4" x-text="currentSeverity === 'ALL' ? 'No performance insights available.' : `No ${currentSeverity.toLowerCase()} insights found.`"></p>
+                        <button @click="loadInsights(true)" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh Insights
+                        </button>
                     </div>
                 </div>
             </div>
@@ -430,169 +321,129 @@
 </div>
 
 <script>
-function performanceDashboard() {
+function performanceInsights() {
     return {
-        isLoading: false,
-        allResources: [],
-        selectedService: '',
-        selectedResource: '',
-        charts: {},
+        isLoading: true,
+        insights: [],
+        selectedInsights: [],
+        currentSeverity: 'ALL',
+        summary: {},
+        
+        severityFilters: [
+            { value: 'ALL', label: 'All Insights' },
+            { value: 'CRITICAL', label: '<i class="fas fa-circle text-red-500 mr-1"></i> Critical' },
+            { value: 'WARNING', label: '<i class="fas fa-circle text-orange-500 mr-1"></i> Warning' },
+            { value: 'WEAK_WARNING', label: '<i class="fas fa-circle text-yellow-500 mr-1"></i> Weak warning' }
+        ],
 
         init() {
-            this.fetchAllResources();
+            this.loadInsights();
+            this.loadSummary();
+            this.$watch('currentSeverity', () => {
+                this.loadInsights();
+            });
         },
 
-        fetchAllResources() {
+        loadInsights(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
-                console.error("No account selected");
-                return;
-            }
-            fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
-                .then(res => res.json())
-                .then(data => {
-                    this.allResources = data.flatMap(group => 
-                        group.resources.map(res => ({...res, serviceType: group.serviceType}))
-                    );
-                });
-        },
-
-        get availableServices() {
-            const services = this.allResources.map(r => r.serviceType);
-            return [...new Set(services)].sort();
-        },
-
-        get resourcesForSelectedService() {
-            if (!this.selectedService) return [];
-            return this.allResources.filter(r => r.serviceType === this.selectedService);
-        },
-
-        fetchMetrics() {
-            if (!this.selectedResource) {
-                this.destroyCharts();
-                return;
-            }
-            
-            const resource = this.allResources.find(r => r.id === this.selectedResource);
-            if (!resource) return;
-
-            // For now, we only support EC2. Add other services here.
-            if (resource.serviceType !== 'EC2 Instance') {
-                alert('Performance metrics are currently only available for EC2 Instances.');
-                this.destroyCharts();
+                this.isLoading = false;
                 return;
             }
 
             this.isLoading = true;
-            this.destroyCharts();
+            const severity = this.currentSeverity === 'ALL' ? '' : this.currentSeverity;
             
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            fetch(`/api/metrics/ec2/${this.selectedResource}?accountId=${selectedAccountId}`)
+            fetch(`/api/metrics/insights?accountId=${selectedAccountId}&severity=${severity}`)
                 .then(res => res.json())
                 .then(data => {
-                    this.renderChart('cpuChart', 'CPU Utilization (%)', data.CPUUtilization, {
-                        borderColor: 'rgb(59, 130, 246)',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        gradient: 'rgba(59, 130, 246, 0.3)'
-                    });
-                    this.renderChart('networkInChart', 'Network In (Bytes)', data.NetworkIn, {
-                        borderColor: 'rgb(16, 185, 129)',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        gradient: 'rgba(16, 185, 129, 0.3)'
-                    });
+                    this.insights = data;
                 })
-                .catch(err => console.error('Failed to fetch metrics:', err))
-                .finally(() => this.isLoading = false);
+                .catch(err => {
+                    console.error('Failed to load insights', err);
+                    this.insights = [];
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
         },
 
-        renderChart(canvasId, label, data, colors) {
-            const ctx = document.getElementById(canvasId);
-            if (!ctx || !data) return;
+        loadSummary() {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) return;
 
-            const chartData = data.map(dp => ({
-                x: new Date(dp.timestamp),
-                y: dp.average
-            }));
+            fetch(`/api/metrics/insights/summary?accountId=${selectedAccountId}`)
+                .then(res => res.json())
+                .then(data => {
+                    this.summary = data;
+                })
+                .catch(err => {
+                    console.error('Failed to load summary', err);
+                });
+        },
 
-            // Create gradient
-            const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, colors.gradient);
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        get filteredInsights() {
+            return this.insights;
+        },
 
-            this.charts[canvasId] = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: label,
-                        data: chartData,
-                        borderColor: colors.borderColor,
-                        backgroundColor: gradient,
-                        fill: true,
-                        tension: 0.4,
-                        borderWidth: 3,
-                        pointBackgroundColor: colors.borderColor,
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: { 
-                                unit: 'hour',
-                                displayFormats: {
-                                    hour: 'HH:mm'
-                                }
-                            },
-                            ticks: {
-                                color: '#6b7280'
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                color: '#6b7280'
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: { 
-                            display: false 
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            titleColor: 'white',
-                            bodyColor: 'white',
-                            borderColor: colors.borderColor,
-                            borderWidth: 1,
-                            cornerRadius: 8,
-                            displayColors: false
-                        }
-                    }
+        get isAllSelected() {
+            return this.filteredInsights.length > 0 && 
+                   this.selectedInsights.length === this.filteredInsights.length;
+        },
+
+        toggleAllInsights() {
+            if (this.isAllSelected) {
+                this.selectedInsights = [];
+            } else {
+                this.selectedInsights = this.filteredInsights.map(i => i.id);
+            }
+        },
+
+        archiveInsight(insightId) {
+            if (!confirm('Are you sure you want to archive this insight?')) return;
+            
+            fetch(`/api/metrics/insights/${insightId}/archive`, {
+                method: 'POST'
+            })
+            .then(res => {
+                if (res.ok) {
+                    this.insights = this.insights.filter(i => i.id !== insightId);
+                    this.loadSummary();
                 }
+            })
+            .catch(err => {
+                console.error('Failed to archive insight', err);
             });
         },
 
-        destroyCharts() {
-            Object.values(this.charts).forEach(chart => {
-                if (chart) chart.destroy();
+        bulkArchive() {
+            if (this.selectedInsights.length === 0) return;
+            if (!confirm(`Are you sure you want to archive ${this.selectedInsights.length} insights?`)) return;
+
+            fetch('/api/metrics/insights/bulk-archive', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(this.selectedInsights)
+            })
+            .then(res => {
+                if (res.ok) {
+                    this.insights = this.insights.filter(i => !this.selectedInsights.includes(i.id));
+                    this.selectedInsights = [];
+                    this.loadSummary();
+                }
+            })
+            .catch(err => {
+                console.error('Failed to bulk archive insights', err);
             });
-            this.charts = {};
+        },
+
+        exportToExcel() {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            const severity = this.currentSeverity === 'ALL' ? '' : this.currentSeverity;
+            
+            window.open(`/api/metrics/insights/export?accountId=${selectedAccountId}&severity=${severity}`, '_blank');
         }
     }
 }
