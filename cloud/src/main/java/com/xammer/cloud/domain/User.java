@@ -1,5 +1,6 @@
 package com.xammer.cloud.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -9,6 +10,9 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Table;
 import javax.persistence.Column;
+import javax.persistence.FetchType;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 
 @Entity
 @Table(name = "app_user") // "user" is a reserved keyword in many SQL dialects
@@ -26,8 +30,14 @@ public class User {
     @Column(nullable = false)
     private String password;
 
-    public User(String username, String password) {
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "client_id", nullable = false)
+    @JsonIgnore // Important to avoid infinite loops in serialization
+    private Client client;
+
+    public User(String username, String password, Client client) {
         this.username = username;
         this.password = password;
+        this.client = client;
     }
 }

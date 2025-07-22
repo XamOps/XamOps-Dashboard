@@ -1,9 +1,11 @@
 package com.xammer.cloud.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xammer.cloud.domain.Client;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.*;
 import com.xammer.cloud.dto.k8s.*;
+import com.xammer.cloud.repository.ClientRepository;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
@@ -113,6 +115,7 @@ public class AwsDataService {
     private final String hostAccountId;
     private final String configuredRegion;
     private final CloudAccountRepository cloudAccountRepository;
+    private final ClientRepository clientRepository;
     public final AwsClientProvider awsClientProvider;
     private final DashboardUpdateService dashboardUpdateService;
     private final AiAdvisorService aiAdvisorService;
@@ -144,6 +147,7 @@ public class AwsDataService {
     public AwsDataService(
             PricingService pricingService,
             CloudAccountRepository cloudAccountRepository,
+            ClientRepository clientRepository,
             AwsClientProvider awsClientProvider,
             StsClient stsClient,
             DashboardUpdateService dashboardUpdateService,
@@ -155,6 +159,7 @@ public class AwsDataService {
         this.pricingService = pricingService;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
         this.cloudAccountRepository = cloudAccountRepository;
+        this.clientRepository = clientRepository;
         this.awsClientProvider = awsClientProvider;
         this.dashboardUpdateService = dashboardUpdateService;
         this.aiAdvisorService = aiAdvisorService;
@@ -2889,16 +2894,19 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
 
     private String formatAge(OffsetDateTime creationTimestamp) { if (creationTimestamp == null) return "N/A"; Duration duration = Duration.between(creationTimestamp, OffsetDateTime.now()); long days = duration.toDays(); if (days > 0) return days + "d"; long hours = duration.toHours(); if (hours > 0) return hours + "h"; long minutes = duration.toMinutes(); if (minutes > 0) return minutes + "m"; return duration.toSeconds() + "s"; }
 
-    public URL generateCloudFormationUrl(String accountName, String accessType) throws Exception {
+    public URL generateCloudFormationUrl(String accountName, String accessType, Long clientId) throws Exception {
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new RuntimeException("Client not found with id: " + clientId));
+
         String externalId = UUID.randomUUID().toString();
-        CloudAccount newAccount = new CloudAccount(accountName, externalId, accessType);
+        CloudAccount newAccount = new CloudAccount(accountName, externalId, accessType, client);
         cloudAccountRepository.save(newAccount);
         String stackName = "XamOps-Connection-" + accountName.replaceAll("[^a-zA-Z0-9-]", "");
         String xamopsAccountId = this.hostAccountId;
         String urlString = String.format("https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=%s&stackName=%s&param_XamOpsAccountId=%s&param_ExternalId=%s", cloudFormationTemplateUrl, stackName, xamopsAccountId, externalId);
         return new URL(urlString);
     }
-
+    
     public CloudAccount verifyAccount(VerifyAccountRequest request) {
         CloudAccount account = cloudAccountRepository.findByExternalId(request.getExternalId()).orElseThrow(() -> new RuntimeException("No pending account found for the given external ID."));
         if (!"PENDING".equals(account.getStatus())) {

@@ -5,8 +5,10 @@ import com.xammer.cloud.dto.AccountCreationRequestDto;
 import com.xammer.cloud.dto.AccountDto;
 import com.xammer.cloud.dto.VerifyAccountRequest;
 import com.xammer.cloud.repository.CloudAccountRepository;
+import com.xammer.cloud.security.ClientUserDetails;
 import com.xammer.cloud.service.AwsDataService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,9 +35,11 @@ public class AccountManagerController {
     }
 
     @PostMapping("/generate-stack-url")
-    public ResponseEntity<Map<String, String>> generateStackUrl(@RequestBody AccountCreationRequestDto request) {
+    public ResponseEntity<Map<String, String>> generateStackUrl(@RequestBody AccountCreationRequestDto request, Authentication authentication) {
+        ClientUserDetails userDetails = (ClientUserDetails) authentication.getPrincipal();
+        Long clientId = userDetails.getClientId();
         try {
-            URL stackUrl = awsDataService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType());
+            URL stackUrl = awsDataService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType(), clientId);
             return ResponseEntity.ok(Map.of("url", stackUrl.toString()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Could not generate CloudFormation URL", "message", e.getMessage()));
@@ -53,8 +57,10 @@ public class AccountManagerController {
     }
 
     @GetMapping("/accounts")
-    public ResponseEntity<List<AccountDto>> getAccounts() {
-        List<AccountDto> accounts = cloudAccountRepository.findAll().stream()
+    public ResponseEntity<List<AccountDto>> getAccounts(Authentication authentication) {
+        ClientUserDetails userDetails = (ClientUserDetails) authentication.getPrincipal();
+        Long clientId = userDetails.getClientId();
+        List<AccountDto> accounts = cloudAccountRepository.findByClientId(clientId).stream()
                 .map(this::mapToAccountDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(accounts);

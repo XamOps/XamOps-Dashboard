@@ -1,5 +1,6 @@
 package com.xammer.cloud.config;
 
+import com.xammer.cloud.security.ClientUserDetails;
 import com.xammer.cloud.security.CustomAuthenticationSuccessHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,8 +12,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import com.xammer.cloud.repository.UserRepository;
-import org.springframework.security.core.userdetails.User;
-
 import java.util.ArrayList;
 
 @Configuration
@@ -52,15 +51,14 @@ public class SecurityConfig {
     }
 
     @Bean
-    public UserDetailsService userDetailsService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        // 🚨 SECURITY ALERT: The automatic creation of a default user has been removed.
-        // User management should be handled through a secure, administrative process.
-        // To create an initial user, you can add them directly to your database.
-        // Example SQL:
-        // INSERT INTO app_user (username, password) VALUES ('admin', '{bcrypt-encoded-password}');
-
+    public UserDetailsService userDetailsService(UserRepository userRepository) {
         return username -> userRepository.findByUsername(username)
-                .map(user -> new User(user.getUsername(), user.getPassword(), new ArrayList<>()))
+                .map(user -> new ClientUserDetails(
+                        user.getUsername(),
+                        user.getPassword(),
+                        new ArrayList<>(),
+                        user.getClient().getId() // Pass the client ID here
+                ))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
 }

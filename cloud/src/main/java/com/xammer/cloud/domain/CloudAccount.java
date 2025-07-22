@@ -1,5 +1,6 @@
 package com.xammer.cloud.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +9,9 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Column;
+import javax.persistence.FetchType;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 
 @Entity
 @Data
@@ -36,9 +40,15 @@ public class CloudAccount {
     @Column(nullable = false)
     private String status = "PENDING"; // PENDING, CONNECTED, FAILED
 
-    public CloudAccount(String accountName, String externalId, String accessType) {
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "client_id", nullable = false)
+    @JsonIgnore
+    private Client client;
+
+    public CloudAccount(String accountName, String externalId, String accessType, Client client) {
         this.accountName = accountName;
         this.externalId = externalId;
         this.accessType = accessType;
+        this.client = client;
     }
 }
