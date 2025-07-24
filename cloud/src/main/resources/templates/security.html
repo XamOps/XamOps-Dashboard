@@ -290,10 +290,51 @@
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.2) 100%);
             border: 1px solid rgba(59, 130, 246, 0.3);
             color: #1d4ed8;
-            padding: 4px 12px;
+            padding: 6px 12px;
             border-radius: 12px;
             font-size: 11px;
             font-weight: 600;
+            text-align: center;
+            white-space: nowrap;
+        }
+        
+        .resource-cell {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        .category-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .category-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .s3-icon { background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%); }
+        .vpc-icon { background: linear-gradient(135deg, #4285f4 0%, #1a73e8 100%); }
+        .ec2-icon { background: linear-gradient(135deg, #ff9500 0%, #ff7b00 100%); }
+        .rds-icon { background: linear-gradient(135deg, #5c6bc0 0%, #3f51b5 100%); }
+        .iam-icon { background: linear-gradient(135deg, #26a69a 0%, #00695c 100%); }
+        .sg-icon { background: linear-gradient(135deg, #f06292 0%, #e91e63 100%); }
+        .lambda-icon { background: linear-gradient(135deg, #ff7043 0%, #d84315 100%); }
+        .default-icon { background: linear-gradient(135deg, #78909c 0%, #546e7a 100%); }
+        
+        .description-cell {
+            max-width: 350px;
+            line-height: 1.5;
+            color: #374151;
         }
         
         .remediation-steps {
@@ -326,6 +367,31 @@
         .remediation-steps hr {
             border-color: rgba(16, 185, 129, 0.2);
             margin: 16px 0;
+        }
+
+        /* Enhanced table styling for perfect alignment */
+        .table-enhanced table {
+            table-layout: fixed;
+            width: 100%;
+        }
+        
+        .table-enhanced th:nth-child(1) { width: 15%; } /* Category */
+        .table-enhanced th:nth-child(2) { width: 35%; } /* Description */
+        .table-enhanced th:nth-child(3) { width: 20%; } /* Resource */
+        .table-enhanced th:nth-child(4) { width: 15%; } /* Compliance */
+        .table-enhanced th:nth-child(5) { width: 15%; } /* Action */
+        
+        .table-enhanced td {
+            vertical-align: top;
+            padding: 16px 20px;
+        }
+        
+        .table-enhanced th {
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: 0.5px;
         }
     </style>
 </head>
@@ -478,27 +544,33 @@
                                                     <template x-for="finding in getFindingsBySeverity(severity)" :key="finding.resourceId + finding.description">
                                                         <tr class="finding-row hover:bg-gray-50 transition-all" :class="severity.toLowerCase()">
                                                             <td class="px-6 py-4">
-                                                                <div class="flex items-center space-x-3">
-                                                                    <div class="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
-                                                                        <i class="fas fa-tag text-white text-xs"></i>
+                                                                <div class="category-cell">
+                                                                    <div class="category-icon" :class="getCategoryIcon(finding.category)">
+                                                                        <span x-text="getCategoryShortName(finding.category)"></span>
                                                                     </div>
                                                                     <span class="font-semibold text-gray-800" x-text="finding.category"></span>
                                                                 </div>
                                                             </td>
                                                             <td class="px-6 py-4">
-                                                                <p class="text-gray-700 leading-relaxed" x-text="finding.description"></p>
+                                                                <div class="description-cell">
+                                                                    <p class="text-gray-700 leading-relaxed" x-text="finding.description"></p>
+                                                                </div>
                                                             </td>
                                                             <td class="px-6 py-4">
-                                                                <div class="space-y-1">
-                                                                    <p class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="finding.resourceId"></p>
-                                                                    <div class="flex items-center space-x-1">
+                                                                <div class="resource-cell space-y-2">
+                                                                    <div class="bg-gray-100 px-3 py-2 rounded-lg">
+                                                                        <p class="font-mono text-xs text-gray-800 break-all" x-text="finding.resourceId"></p>
+                                                                    </div>
+                                                                    <div class="flex items-center space-x-2">
                                                                         <i class="fas fa-map-marker-alt text-gray-400 text-xs"></i>
-                                                                        <span class="text-xs text-gray-500" x-text="finding.region"></span>
+                                                                        <span class="text-xs text-gray-600 font-medium" x-text="finding.region"></span>
                                                                     </div>
                                                                 </div>
                                                             </td>
                                                             <td class="px-6 py-4">
-                                                                <span class="compliance-badge" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
+                                                                <div class="text-center">
+                                                                    <span class="compliance-badge" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
+                                                                </div>
                                                             </td>
                                                             <td class="px-6 py-4 text-center">
                                                                 <button @click="openRemediationModal(finding)" class="btn-primary px-4 py-2 text-xs font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
@@ -668,6 +740,32 @@ function securityCenter() {
                 'Low': 'bg-blue-600'
             };
             return colors[severity] || 'bg-gray-600';
+        },
+        
+        getCategoryIcon(category) {
+            const icons = {
+                'S3': 's3-icon',
+                'VPC': 'vpc-icon',
+                'EC2': 'ec2-icon',
+                'RDS': 'rds-icon',
+                'IAM': 'iam-icon',
+                'Security Group': 'sg-icon',
+                'Lambda': 'lambda-icon'
+            };
+            return icons[category] || 'default-icon';
+        },
+        
+        getCategoryShortName(category) {
+            const shortNames = {
+                'S3': 'S3',
+                'VPC': 'VPC',
+                'EC2': 'EC2',
+                'RDS': 'RDS',
+                'IAM': 'IAM',
+                'Security Group': 'SG',
+                'Lambda': 'λ'
+            };
+            return shortNames[category] || category.charAt(0);
         },
         
         openRemediationModal(finding) {

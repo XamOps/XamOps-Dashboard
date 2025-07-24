@@ -606,669 +606,681 @@
     </button>
 
     <script>
-    function dashboardApp() {
-        return {
-            isLoading: true,
-            stompClient: null,
-            layoutChanged: false,
-            showQuickActions: false,
-            
-            init() {
-                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-                if (!selectedAccountId) {
-                    this.isLoading = false;
-                    document.getElementById('unselectedState').classList.remove('hidden');
-                    return;
+function dashboardApp() {
+    return {
+        isLoading: true,
+        stompClient: null,
+        layoutChanged: false,
+        showQuickActions: false,
+        
+        init() {
+            // The storage event listener is still useful for cross-tab communication.
+            window.addEventListener('storage', (event) => {
+                if (event.key === 'selectedAccountId') {
+                    window.location.reload();
                 }
-                this.connectWebSocket(selectedAccountId);
-                this.initializeDashboardLayout();
-                this.fetchDashboardData(false);
-            },
+            });
 
-            showNotification(type, message) {
-                const notification = document.getElementById(type + 'Notification');
-                if (notification) {
-                    notification.classList.add('show');
-                    setTimeout(() => {
-                        notification.classList.remove('show');
-                    }, 3000);
-                }
-            },
+            // Now, when init() is called, the DOM is guaranteed to be ready.
+            this.fetchDashboardData(false);
+        },
 
-            initializeDashboardLayout() {
-                const container = document.getElementById('widgets-container');
-                fetch('/api/dashboard/layout')
-                    .then(res => res.json())
-                    .then(layout => {
-                        if (layout && layout.layoutConfig) {
-                            const widgetOrder = JSON.parse(layout.layoutConfig);
-                            if (widgetOrder && widgetOrder.length > 0) {
-                                widgetOrder.forEach(widgetId => {
-                                    const widget = document.getElementById(widgetId);
-                                    if (widget) container.appendChild(widget);
-                                });
-                            }
+        connectWebSocket() {
+            const accountId = sessionStorage.getItem('selectedAccountId');
+            if (!accountId) {
+                console.log("No account selected, WebSocket will not connect.");
+                return; 
+            }
+
+            const socket = new SockJS('/ws');
+            this.stompClient = Stomp.over(socket);
+            this.stompClient.debug = null;
+            this.stompClient.connect({}, (frame) => {
+                console.log('WebSocket Connected: ' + frame);
+                this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
+                    console.log("Received inventory update via WebSocket.");
+                    this.populateResourceInventory(JSON.parse(message.body));
+                });
+                const sessionId = socket._transport.url.split('/')[5];
+                this.stompClient.subscribe(`/topic/advisor/response/${sessionId}`, (message) => {
+                    const response = JSON.parse(message.body);
+                    this.addAiChatMessage(response.response || response.error, 'ai');
+                });
+            });
+        },
+
+        initializeDashboardLayout() {
+            const container = document.getElementById('widgets-container');
+            fetch('/api/dashboard/layout')
+                .then(res => res.json())
+                .then(layout => {
+                    if (layout && layout.layoutConfig) {
+                        const widgetOrder = JSON.parse(layout.layoutConfig);
+                        if (widgetOrder && widgetOrder.length > 0) {
+                            widgetOrder.forEach(widgetId => {
+                                const widget = document.getElementById(widgetId);
+                                if (widget) container.appendChild(widget);
+                            });
                         }
-                        new Sortable(container, {
-                            animation: 200,
-                            ghostClass: 'sortable-ghost',
-                            chosenClass: 'sortable-chosen',
-                            handle: '.widget-handle',
-                            onEnd: () => { this.layoutChanged = true; }
-                        });
-                    }).catch(err => {
-                        console.error("Failed to load layout, using default.", err);
-                        new Sortable(container, {
-                            animation: 200,
-                            ghostClass: 'sortable-ghost',
-                            chosenClass: 'sortable-chosen',
-                            handle: '.widget-handle',
-                            onEnd: () => { this.layoutChanged = true; }
-                        });
-                    });
-            },
-
-            saveLayout() {
-                const container = document.getElementById('widgets-container');
-                const widgetOrder = [...container.children].map(w => w.id);
-                fetch('/api/dashboard/layout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(widgetOrder)
-                }).then(res => {
-                    if (res.ok) {
-                        this.layoutChanged = false;
-                        this.showNotification('success', 'Layout saved successfully!');
-                    } else {
-                        alert('Failed to save layout.');
                     }
-                });
-            },
-
-            connectWebSocket(accountId) {
-                const socket = new SockJS('/ws');
-                this.stompClient = Stomp.over(socket);
-                this.stompClient.debug = null;
-                this.stompClient.connect({}, (frame) => {
-                    console.log('WebSocket Connected: ' + frame);
-                    this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
-                        console.log("Received inventory update via WebSocket.");
-                        this.populateResourceInventory(JSON.parse(message.body));
+                    new Sortable(container, {
+                        animation: 200,
+                        ghostClass: 'sortable-ghost',
+                        chosenClass: 'sortable-chosen',
+                        handle: '.widget-handle',
+                        onEnd: () => { this.layoutChanged = true; }
                     });
-                    const sessionId = socket._transport.url.split('/')[5];
-                    this.stompClient.subscribe(`/topic/advisor/response/${sessionId}`, (message) => {
-                        const response = JSON.parse(message.body);
-                        this.addAiChatMessage(response.response || response.error, 'ai');
+                }).catch(err => {
+                    console.error("Failed to load layout, using default.", err);
+                    new Sortable(container, {
+                        animation: 200,
+                        ghostClass: 'sortable-ghost',
+                        chosenClass: 'sortable-chosen',
+                        handle: '.widget-handle',
+                        onEnd: () => { this.layoutChanged = true; }
                     });
                 });
-            },
+        },
 
-            fetchDashboardData(forceRefresh = false) {
-                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-                if (!selectedAccountId) {
-                    this.isLoading = false;
-                    document.getElementById('unselectedState').classList.remove('hidden');
-                    return;
-                }
-                
-                if (forceRefresh) {
-                    this.showNotification('loading', 'Updating dashboard...');
-                }
-                
-                const cacheKey = `dashboardData-${selectedAccountId}`;
-                const cachedData = sessionStorage.getItem(cacheKey);
+        fetchDashboardData(forceRefresh = false) {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isLoading = false;
+                document.getElementById('unselectedState').classList.remove('hidden');
+                return;
+            }
+            
+            // Connect WebSocket here, ensuring we have an account ID.
+            this.connectWebSocket();
+            this.initializeDashboardLayout();
 
-                if (cachedData && !forceRefresh) {
+            if (forceRefresh) {
+                this.showNotification('loading', 'Updating dashboard...');
+            }
+            
+            const cacheKey = `dashboardData-${selectedAccountId}`;
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                this.isLoading = false;
+                document.getElementById('dashboardContent').classList.remove('hidden');
+                this.populatePage(JSON.parse(cachedData));
+                return;
+            }
+            
+            this.isLoading = true;
+            document.getElementById('dashboardContent').classList.add('hidden');
+            if (forceRefresh) sessionStorage.removeItem(cacheKey);
+
+            fetch(`/api/dashboard?accountId=${selectedAccountId}&force=true`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data) return;
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                    this.populatePage(data);
+                    if (forceRefresh) {
+                        this.showNotification('success', 'Dashboard updated successfully!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to fetch dashboard data:', error);
+                    document.getElementById('errorMessage').textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
+                    document.getElementById('errorState').classList.remove('hidden');
+                })
+                .finally(() => {
                     this.isLoading = false;
                     document.getElementById('dashboardContent').classList.remove('hidden');
-                    this.populatePage(JSON.parse(cachedData));
-                    return;
-                }
-                
-                this.isLoading = true;
-                document.getElementById('dashboardContent').classList.add('hidden');
-                if (forceRefresh) sessionStorage.removeItem(cacheKey);
-
-                fetch(`/api/dashboard?accountId=${selectedAccountId}&force=true`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (!data) return;
-                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
-                        this.populatePage(data);
-                        if (forceRefresh) {
-                            this.showNotification('success', 'Dashboard updated successfully!');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Failed to fetch dashboard data:', error);
-                        document.getElementById('errorMessage').textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
-                        document.getElementById('errorState').classList.remove('hidden');
-                    })
-                    .finally(() => {
-                        this.isLoading = false;
-                        document.getElementById('dashboardContent').classList.remove('hidden');
-                    });
-            },
-            
-            populatePage(data) {
-                const account = data.selectedAccount;
-                if (!account) return;
-                document.getElementById('updateTime').textContent = `Updated ${new Date().toLocaleTimeString()}`;
-                this.populateKpiCards(account);
-                this.populateResourceInventory(account.resourceInventory);
-                this.populateOptimizationHub(account.optimizationSummary, account.costAnomalies, account.ec2Recommendations, account.ebsRecommendations, account.lambdaRecommendations);
-                this.populateBillingSummary(account.billingSummary);
-                this.renderCostHistoryChart(account.costHistory);
-                this.renderHighchartMap(account.regionStatus);
-            },
-
-            populateKpiCards(account) {
-                const kpiContainer = document.getElementById('kpi-cards');
-                if (!kpiContainer) return;
-                const costHistory = account.costHistory;
-                const mtdSpend = costHistory.costs.length > 0 ? costHistory.costs[costHistory.costs.length - 1] : 0;
-                const lastMonthSpend = costHistory.costs.length > 1 ? costHistory.costs[costHistory.costs.length - 2] : 0;
-                const forecastedSpend = (mtdSpend / new Date().getDate()) * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-
-                const kpis = [
-                    { 
-                        id: 'mtdSpend', 
-                        title: 'Month-to-Date Spend', 
-                        value: this.formatCurrency(mtdSpend), 
-                        icon: 'fa-dollar-sign', 
-                        color: { iconClass: 'text-blue-500', chartColor: '#3b82f6', gradientClass: 'from-blue-500 to-blue-600' }, 
-                        trendData: costHistory.costs,
-                        change: lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend * 100).toFixed(1) : 0
-                    },
-                    { 
-                        id: 'forecastedSpend', 
-                        title: 'Forecasted Spend', 
-                        value: this.formatCurrency(forecastedSpend), 
-                        icon: 'fa-chart-line', 
-                        color: { iconClass: 'text-yellow-500', chartColor: '#f59e0b', gradientClass: 'from-yellow-500 to-yellow-600' }, 
-                        trendData: costHistory.costs,
-                        change: '+' + ((forecastedSpend - mtdSpend) / mtdSpend * 100).toFixed(1)
-                    },
-                    { 
-                        id: 'lastMonthSpend', 
-                        title: 'Last Month Spend', 
-                        value: this.formatCurrency(lastMonthSpend), 
-                        icon: 'fa-calendar-alt', 
-                        color: { iconClass: 'text-gray-500', chartColor: '#6b7280', gradientClass: 'from-gray-500 to-gray-600' }, 
-                        trendData: costHistory.costs.slice(0, -1),
-                        change: costHistory.costs.length > 2 ? ((lastMonthSpend - costHistory.costs[costHistory.costs.length - 3]) / costHistory.costs[costHistory.costs.length - 3] * 100).toFixed(1) : 0
-                    },
-                    { 
-                        id: 'potentialSavings', 
-                        title: 'Potential Savings', 
-                        value: this.formatCurrency(account.optimizationSummary.totalPotentialSavings), 
-                        icon: 'fa-piggy-bank', 
-                        color: { iconClass: 'text-green-500', chartColor: '#22c55e', gradientClass: 'from-green-500 to-green-600' }, 
-                        trendData: [account.optimizationSummary.totalPotentialSavings],
-                        change: '+100.0'
-                    }
-                ];
-                
-                kpiContainer.innerHTML = kpis.map(kpi => `
-                    <div class="kpi-card rounded-xl p-6 group" @mouseenter="renderSparkline('sparkline-${kpi.id}', [${kpi.trendData.join(',')}], '${kpi.color.chartColor}')">
-                        <div class="main-content">
-                            <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    <h3 class="text-gray-600 text-sm font-medium mb-1">${kpi.title}</h3>
-                                    <p class="text-2xl font-bold text-gray-900 mb-2">${kpi.value}</p>
-                                    <div class="flex items-center text-sm">
-                                        <span class="text-${kpi.change.startsWith('+') ? 'green' : kpi.change.startsWith('-') ? 'red' : 'gray'}-600 font-medium">
-                                            ${kpi.change}%
-                                        </span>
-                                        <span class="text-gray-500 ml-1">vs last period</span>
-                                    </div>
-                                </div>
-                                <div class="bg-gradient-to-br ${kpi.color.gradientClass} p-3 rounded-xl shadow-lg">
-                                    <i class="fas ${kpi.icon} text-white text-lg"></i>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="sparkline-container p-4 flex items-center justify-center">
-                            <div class="w-full h-full">
-                                <canvas id="sparkline-${kpi.id}"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-            },
-
-            populateResourceInventory(inv) {
-                if (!inv) return;
-                const container = document.getElementById('resourceInventory');
-                const resources = [
-                    { name: 'EC2 Instances', count: inv.ec2, type: 'EC2 Instance', icon: 'aws-ec2.png', color: 'from-orange-500 to-orange-600' },
-                    { name: 'S3 Buckets', count: inv.s3Buckets, type: 'S3 Bucket', icon: 'aws-s3.png', color: 'from-green-500 to-green-600' },
-                    { name: 'RDS Instances', count: inv.rdsInstances, type: 'RDS Instance', icon: 'aws-rds.png', color: 'from-blue-500 to-blue-600' },
-                    { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'aws-vpc.png', color: 'from-purple-500 to-purple-600' },
-                    { name: 'Lambda Functions', count: inv.lambdas, type: 'Lambda Function', icon: 'aws-lambda.png', color: 'from-yellow-500 to-yellow-600' },
-                    { name: 'EBS Volumes', count: inv.ebsVolumes, type: 'EBS Volume', icon: 'aws-ebs.png', color: 'from-red-500 to-red-600' },
-                    { name: 'Route 53 Zones', count: inv.route53Zones, type: 'Route 53 Zone', icon: 'aws-route53.png', color: 'from-indigo-500 to-indigo-600' },
-                    { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'aws-elb.png', color: 'from-pink-500 to-pink-600' },
-                    { name: 'ECS Clusters', count: inv.ecs, type: 'ECS', icon: 'aws-ecs.png', color: 'from-teal-500 to-teal-600' },
-                    { name: 'EKS Clusters', count: inv.kubernetes, type: 'EKS', icon: 'aws-eks.png', color: 'from-cyan-500 to-cyan-600' },
-                ];
-                
-                container.innerHTML = resources.map(res => `
-                    <a href="/cloudlist?service=${encodeURIComponent(res.type)}" class="resource-card flex items-center gap-4 p-4 rounded-xl hover:shadow-md transition-all group">
-                        <div class="resource-icon w-10 h-10 bg-gradient-to-br ${res.color} rounded-lg flex items-center justify-center flex-shrink-0">
-                            <img src="/icons/${res.icon}" alt="${res.name}" class="w-6 h-6 filter brightness-0 invert">
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="font-semibold text-gray-800 truncate">${res.name}</p>
-                            <p class="text-sm text-gray-500">Active resources</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-xl font-bold text-gray-900">${res.count}</p>
-                            <p class="text-xs text-gray-500">total</p>
-                        </div>
-                    </a>
-                `).join('');
-            },
-
-            populateOptimizationHub(summary, anomalies, ec2Recs, ebsRecs, lambdaRecs) {
-                const container = document.getElementById('optimizationHub');
-                if(!summary || !container) return;
-                
-                const recsHtml = (title, recs, icon, color, gradientClass) => {
-                    if (!recs || recs.length === 0) return '';
-                    return `
-                        <div class="optimization-card rounded-xl p-6 border-t-4 border-${color}-500 mt-6">
-                            <div class="flex items-center justify-between mb-4">
-                                <h4 class="font-bold text-lg text-gray-800 flex items-center">
-                                    <div class="w-8 h-8 bg-gradient-to-br ${gradientClass} rounded-lg flex items-center justify-center mr-3">
-                                        <i class="fas ${icon} text-white text-sm"></i>
-                                    </div>
-                                    ${title}
-                                </h4>
-                                <span class="bg-${color}-100 text-${color}-800 text-xs font-semibold px-2 py-1 rounded-full">${recs.length} recommendations</span>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-sm">
-                                    <thead class="bg-gray-50 rounded-lg">
-                                        <tr>
-                                            <th class="px-4 py-3 text-left font-semibold text-gray-700 rounded-l-lg">Resource</th>
-                                            <th class="px-4 py-3 text-left font-semibold text-gray-700">Recommendation</th>
-                                            <th class="px-4 py-3 text-right font-semibold text-gray-700 rounded-r-lg">Monthly Savings</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-200">
-                                        ${recs.slice(0, 3).map(rec => `
-                                            <tr class="hover:bg-gray-50 transition-colors">
-                                                <td class="px-4 py-3 font-mono text-xs text-gray-600">${rec.resourceId}</td>
-                                                <td class="px-4 py-3">
-                                                    <div class="flex items-center space-x-2">
-                                                        <span class="text-gray-600">${rec.currentType}</span>
-                                                        <i class="fas fa-arrow-right text-gray-400"></i>
-                                                        <span class="font-semibold text-${color}-600">${rec.recommendedType}</span>
-                                                    </div>
-                                                </td>
-                                                <td class="px-4 py-3 text-right font-bold text-${color}-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                            ${recs.length > 3 ? `
-                                <div class="mt-4 text-center">
-                                    <a href="/rightsizing" class="inline-flex items-center text-sm text-${color}-600 hover:text-${color}-800 font-medium">
-                                        View all ${recs.length} recommendations
-                                        <i class="fas fa-arrow-right ml-1"></i>
-                                    </a>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `;
-                };
-
-                const anomaliesHtml = (anomalies) => {
-                    if (!anomalies || anomalies.length === 0) return '';
-                    return `
-                        <div class="anomaly-card rounded-xl p-6 border-t-4 border-red-500 mt-6">
-                            <div class="flex items-center justify-between mb-4">
-                                <h4 class="font-bold text-lg text-gray-800 flex items-center">
-                                    <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center mr-3">
-                                        <i class="fas fa-exclamation-triangle text-white text-sm"></i>
-                                    </div>
-                                    Cost Anomalies
-                                </h4>
-                                <span class="bg-red-100 text-red-800 text-xs font-semibold px-2 py-1 rounded-full">${anomalies.length} detected</span>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-sm">
-                                    <thead class="bg-gray-50 rounded-lg">
-                                        <tr>
-                                            <th class="px-4 py-3 text-left font-semibold text-gray-700 rounded-l-lg">Service</th>
-                                            <th class="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-                                            <th class="px-4 py-3 text-right font-semibold text-gray-700 rounded-r-lg">Unexpected Spend</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-200">
-                                        ${anomalies.slice(0, 3).map(a => `
-                                            <tr class="hover:bg-gray-50 transition-colors">
-                                                <td class="px-4 py-3 font-semibold text-gray-800">${a.service}</td>
-                                                <td class="px-4 py-3 text-gray-600">${a.startDate}</td>
-                                                <td class="px-4 py-3 text-right font-bold text-red-600">${this.formatCurrency(a.unexpectedSpend)}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    `;
-                };
-
-                container.innerHTML = `
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div class="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 p-6 rounded-xl text-center">
-                            <div class="flex items-center justify-center mb-3">
-                                <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-piggy-bank text-white text-xl"></i>
-                                </div>
-                            </div>
-                            <p class="text-sm text-green-700 font-semibold uppercase tracking-wide">Potential Savings</p>
-                            <p class="text-3xl font-bold text-green-800 my-2">${this.formatCurrency(summary.totalPotentialSavings)}</p>
-                            <p class="text-sm text-green-600">per month</p>
-                        </div>
-                        <div class="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 p-6 rounded-xl text-center">
-                            <div class="flex items-center justify-center mb-3">
-                                <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-exclamation-triangle text-white text-xl"></i>
-                                </div>
-                            </div>
-                            <p class="text-sm text-red-700 font-semibold uppercase tracking-wide">Critical Alerts</p>
-                            <p class="text-3xl font-bold text-red-800 my-2">${summary.criticalAlertsCount}</p>
-                            <p class="text-sm text-red-600">items to review</p>
-                        </div>
-                    </div>
-                    ${recsHtml('EC2 Instance Right-Sizing', ec2Recs, 'fa-server', 'orange', 'from-orange-500 to-orange-600')}
-                    ${recsHtml('EBS Volume Optimization', ebsRecs, 'fa-hdd', 'purple', 'from-purple-500 to-purple-600')}
-                    ${recsHtml('Lambda Function Optimization', lambdaRecs, 'fa-bolt', 'yellow', 'from-yellow-500 to-yellow-600')}
-                    ${anomaliesHtml(anomalies)}
-                `;
-            },
-            
-            populateBillingSummary(summary) { 
-                const container = document.getElementById('billingSummary'); 
-                if (!container || !summary) return; 
-                if (summary.length > 0) { 
-                    container.innerHTML = summary.sort((a,b) => b.monthToDateCost - a.monthToDateCost).map((item, index) => `
-                        <tr class="border-b hover:bg-gray-50 transition-colors">
-                            <th class="px-4 py-4 font-semibold text-gray-800 text-left">
-                                <div class="flex items-center space-x-2">
-                                    <div class="w-2 h-2 bg-indigo-${500 + (index * 100) % 400} rounded-full"></div>
-                                    <span>${item.serviceName}</span>
-                                </div>
-                            </th>
-                            <td class="px-4 py-4 text-right">
-                                <span class="font-bold text-gray-900">${this.formatCurrency(item.monthToDateCost)}</span>
-                            </td>
-                        </tr>
-                    `).join(''); 
-                } else { 
-                    container.innerHTML = `
-                        <tr>
-                            <td colspan="2" class="px-4 py-8 text-center text-gray-500">
-                                <i class="fas fa-receipt text-2xl mb-2"></i>
-                                <p>No billing data available</p>
-                            </td>
-                        </tr>
-                    `; 
-                } 
-            },
-            
-            renderCostHistoryChart(costHistory) { 
-                if (!costHistory || !costHistory.labels) return;
-                const ctx = document.getElementById('costHistoryChart');
-                if(!ctx) return;
-                if (window.costHistoryChartInstance) window.costHistoryChartInstance.destroy();
-                
-                const backgroundColors = costHistory.anomalies.map(isAnomaly => 
-                    isAnomaly ? 'rgba(239, 68, 68, 0.8)' : 'rgba(79, 70, 229, 0.8)'
-                );
-                const borderColors = costHistory.anomalies.map(isAnomaly => 
-                    isAnomaly ? 'rgba(220, 38, 38, 1)' : 'rgba(79, 70, 229, 1)'
-                );
-
-                window.costHistoryChartInstance = new Chart(ctx, { 
-                    type: 'bar', 
-                    data: { 
-                        labels: costHistory.labels, 
-                        datasets: [{ 
-                            label: 'Monthly Cost', 
-                            data: costHistory.costs, 
-                            backgroundColor: backgroundColors,
-                            borderColor: borderColors,
-                            borderWidth: 2,
-                            borderRadius: 8,
-                            borderSkipped: false
-                        }] 
-                    }, 
-                    options: { 
-                        responsive: true, 
-                        maintainAspectRatio: false,
-                        plugins: { 
-                            legend: { display: false },
-                            tooltip: { 
-                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                titleColor: 'white',
-                                bodyColor: 'white',
-                                borderColor: 'rgba(79, 70, 229, 0.8)',
-                                borderWidth: 1,
-                                cornerRadius: 8,
-                                callbacks: { 
-                                    label: (c) => `Cost: ${this.formatCurrency(c.parsed.y)}`,
-                                    afterLabel: (c) => costHistory.anomalies[c.dataIndex] ? 'Anomaly detected!' : ''
-                                }
-                            }
-                        }, 
-                        scales: { 
-                            y: { 
-                                beginAtZero: true, 
-                                ticks: { 
-                                    callback: v => this.formatCurrency(v),
-                                    color: '#6b7280'
-                                },
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.05)'
-                                }
-                            },
-                            x: {
-                                ticks: {
-                                    color: '#6b7280'
-                                },
-                                grid: {
-                                    display: false
-                                }
-                            }
-                        },
-                        onClick: (evt, elements) => {
-                            if (elements.length > 0) {
-                                const index = elements[0].index;
-                                if (costHistory.anomalies[index]) {
-                                    alert(`🚨 Cost Anomaly Detected!\n\nMonth: ${costHistory.labels[index]}\nCost: ${this.formatCurrency(costHistory.costs[index])}\n\nThis cost is significantly higher than expected. Consider investigating your resource usage for this period.`);
-                                }
-                            }
-                        }
-                    } 
-                }); 
-            },
-            
-            renderHighchartMap(regionStatus) {
-                if (!regionStatus || !document.getElementById('highcharts-map-container')) return;
-                const statusColors = { 
-                    'ACTIVE': '#3b82f6', 
-                    'SEMI_ACTIVE': '#ef4444', 
-                    'SUSTAINABLE': '#22c55e', 
-                    'NON_ACTIVE': '#6b7280' 
-                };
-                const regionPoints = regionStatus.map(r => ({ 
-                    name: `${r.regionId}`, 
-                    fullName: `${r.regionId} (${r.status})`,
-                    lat: r.lat, 
-                    lon: r.lon, 
-                    color: statusColors[r.status] || '#6b7280', 
-                    id: r.regionId,
-                    status: r.status
-                }));
-                
-                Highcharts.mapChart('highcharts-map-container', {
-                    chart: { 
-                        map: 'custom/world', 
-                        backgroundColor: 'transparent',
-                        style: {
-                            fontFamily: 'Inter, sans-serif'
-                        }
-                    },
-                    title: { text: null }, 
-                    credits: { enabled: false },
-                    mapNavigation: { 
-                        enabled: true, 
-                        buttonOptions: { 
-                            verticalAlign: 'bottom',
-                            theme: {
-                                'stroke-width': 1,
-                                stroke: '#4f46e5',
-                                r: 4
-                            }
-                        }
-                    },
-                    tooltip: { 
-                        useHTML: true,
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        borderColor: 'rgba(79, 70, 229, 0.8)',
-                        borderRadius: 8,
-                        style: {
-                            color: 'white'
-                        },
-                        pointFormat: '<b>{point.fullName}</b><br/>Click to filter dashboard'
-                    },
-                    plotOptions: {
-                        mappoint: {
-                            point: {
-                                events: {
-                                    click: (e) => {
-                                        this.filterByRegion(e.point.id);
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    series: [
-                        { 
-                            name: 'World', 
-                            color: '#f1f5f9', 
-                            states: { 
-                                hover: { 
-                                    color: '#e2e8f0' 
-                                } 
-                            },
-                            borderColor: '#e2e8f0',
-                            borderWidth: 1
-                        }, 
-                        { 
-                            type: 'mappoint', 
-                            name: 'AWS Regions', 
-                            data: regionPoints, 
-                            marker: { 
-                                lineWidth: 2, 
-                                lineColor: '#ffffff',
-                                radius: 8,
-                                states: {
-                                    hover: {
-                                        lineWidth: 3,
-                                        radius: 10
-                                    }
-                                }
-                            },
-                            cursor: 'pointer'
-                        }
-                    ]
                 });
-            },
-
-            hexToRgba(hex, alpha) {
-                const r = parseInt(hex.slice(1, 3), 16);
-                const g = parseInt(hex.slice(3, 5), 16);
-                const b = parseInt(hex.slice(5, 7), 16);
-                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-            },
-
-            renderSparkline(canvasId, data, chartColor) {
-                const ctx = document.getElementById(canvasId);
-                if (!ctx || !data) return;
-                if (window[canvasId+'_instance']) window[canvasId+'_instance'].destroy();
-                
-                window[canvasId+'_instance'] = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.map((_, i) => i),
-                        datasets: [{
-                            data: data,
-                            borderColor: chartColor,
-                            backgroundColor: this.hexToRgba(chartColor, 0.1),
-                            borderWidth: 3,
-                            pointRadius: 0,
-                            pointHoverRadius: 6,
-                            pointHoverBackgroundColor: chartColor,
-                            pointHoverBorderColor: '#ffffff',
-                            pointHoverBorderWidth: 2,
-                            tension: 0.4,
-                            fill: true
-                        }]
-                    },
-                    options: {
-                        responsive: true, 
-                        maintainAspectRatio: false,
-                        scales: { 
-                            x: { display: false }, 
-                            y: { display: false } 
-                        },
-                        plugins: { 
-                            legend: { display: false }, 
-                            tooltip: { 
-                                enabled: true,
-                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                titleColor: 'white',
-                                bodyColor: 'white',
-                                borderColor: chartColor,
-                                borderWidth: 1,
-                                cornerRadius: 6,
-                                callbacks: {
-                                    label: (context) => `Value: ${context.parsed.y}`
-                                }
-                            }
-                        },
-                        interaction: {
-                            intersect: false,
-                            mode: 'index'
-                        }
-                    }
-                });
-            },
-
-            filterByRegion(regionId) {
-                const notification = document.createElement('div');
-                notification.className = 'fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
-                notification.innerHTML = `
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-filter text-blue-600"></i>
-                        <div>
-                            <p class="font-semibold">Region Filter Applied</p>
-                            <p class="text-sm">Dashboard filtered by: ${regionId}</p>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(notification);
-                
+        },
+        
+        // --- All other helper functions remain unchanged ---
+        showNotification(type, message) {
+            const notification = document.getElementById(type + 'Notification');
+            if (notification) {
+                notification.classList.add('show');
                 setTimeout(() => {
-                    notification.remove();
-                }, 4000);
-            },
+                    notification.classList.remove('show');
+                }, 3000);
+            }
+        },
+
+        saveLayout() {
+            const container = document.getElementById('widgets-container');
+            const widgetOrder = [...container.children].map(w => w.id);
+            fetch('/api/dashboard/layout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(widgetOrder)
+            }).then(res => {
+                if (res.ok) {
+                    this.layoutChanged = false;
+                    this.showNotification('success', 'Layout saved successfully!');
+                } else {
+                    alert('Failed to save layout.');
+                }
+            });
+        },
+        
+        populatePage(data) {
+            const account = data.selectedAccount;
+            if (!account) return;
+            document.getElementById('updateTime').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+            this.populateKpiCards(account);
+            this.populateResourceInventory(account.resourceInventory);
+            this.populateOptimizationHub(account.optimizationSummary, account.costAnomalies, account.ec2Recommendations, account.ebsRecommendations, account.lambdaRecommendations);
+            this.populateBillingSummary(account.billingSummary);
+            this.renderCostHistoryChart(account.costHistory);
+            this.renderHighchartMap(account.regionStatus);
+        },
+
+        populateKpiCards(account) {
+            const kpiContainer = document.getElementById('kpi-cards');
+            if (!kpiContainer) return;
+            const costHistory = account.costHistory;
+            const mtdSpend = costHistory.costs.length > 0 ? costHistory.costs[costHistory.costs.length - 1] : 0;
+            const lastMonthSpend = costHistory.costs.length > 1 ? costHistory.costs[costHistory.costs.length - 2] : 0;
+            const forecastedSpend = (mtdSpend / new Date().getDate()) * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+
+            const kpis = [
+                { 
+                    id: 'mtdSpend', 
+                    title: 'Month-to-Date Spend', 
+                    value: this.formatCurrency(mtdSpend), 
+                    icon: 'fa-dollar-sign', 
+                    color: { iconClass: 'text-blue-500', chartColor: '#3b82f6', gradientClass: 'from-blue-500 to-blue-600' }, 
+                    trendData: costHistory.costs,
+                    change: lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend * 100).toFixed(1) : 0
+                },
+                { 
+                    id: 'forecastedSpend', 
+                    title: 'Forecasted Spend', 
+                    value: this.formatCurrency(forecastedSpend), 
+                    icon: 'fa-chart-line', 
+                    color: { iconClass: 'text-yellow-500', chartColor: '#f59e0b', gradientClass: 'from-yellow-500 to-yellow-600' }, 
+                    trendData: costHistory.costs,
+                    change: '+' + ((forecastedSpend - mtdSpend) / mtdSpend * 100).toFixed(1)
+                },
+                { 
+                    id: 'lastMonthSpend', 
+                    title: 'Last Month Spend', 
+                    value: this.formatCurrency(lastMonthSpend), 
+                    icon: 'fa-calendar-alt', 
+                    color: { iconClass: 'text-gray-500', chartColor: '#6b7280', gradientClass: 'from-gray-500 to-gray-600' }, 
+                    trendData: costHistory.costs.slice(0, -1),
+                    change: costHistory.costs.length > 2 ? ((lastMonthSpend - costHistory.costs[costHistory.costs.length - 3]) / costHistory.costs[costHistory.costs.length - 3] * 100).toFixed(1) : 0
+                },
+                { 
+                    id: 'potentialSavings', 
+                    title: 'Potential Savings', 
+                    value: this.formatCurrency(account.optimizationSummary.totalPotentialSavings), 
+                    icon: 'fa-piggy-bank', 
+                    color: { iconClass: 'text-green-500', chartColor: '#22c55e', gradientClass: 'from-green-500 to-green-600' }, 
+                    trendData: [account.optimizationSummary.totalPotentialSavings],
+                    change: '+100.0'
+                }
+            ];
+            
+            kpiContainer.innerHTML = kpis.map(kpi => `
+                <div class="kpi-card rounded-xl p-6 group" @mouseenter="renderSparkline('sparkline-${kpi.id}', [${kpi.trendData.join(',')}], '${kpi.color.chartColor}')">
+                    <div class="main-content">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <h3 class="text-gray-600 text-sm font-medium mb-1">${kpi.title}</h3>
+                                <p class="text-2xl font-bold text-gray-900 mb-2">${kpi.value}</p>
+                                <div class="flex items-center text-sm">
+                                    <span class="text-${kpi.change.startsWith('+') ? 'green' : kpi.change.startsWith('-') ? 'red' : 'gray'}-600 font-medium">
+                                        ${kpi.change}%
+                                    </span>
+                                    <span class="text-gray-500 ml-1">vs last period</span>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br ${kpi.color.gradientClass} p-3 rounded-xl shadow-lg">
+                                <i class="fas ${kpi.icon} text-white text-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sparkline-container p-4 flex items-center justify-center">
+                        <div class="w-full h-full">
+                            <canvas id="sparkline-${kpi.id}"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        },
+
+        populateResourceInventory(inv) {
+            if (!inv) return;
+            const container = document.getElementById('resourceInventory');
+            const resources = [
+                { name: 'EC2 Instances', count: inv.ec2, type: 'EC2 Instance', icon: 'ec2-instances.png', color: 'from-orange-500 to-orange-600' },
+                { name: 'S3 Buckets', count: inv.s3Buckets, type: 'S3 Bucket', icon: 's3-bucket.png', color: 'from-green-500 to-green-600' },
+                { name: 'RDS Instances', count: inv.rdsInstances, type: 'RDS Instance', icon: 'rds-instance.png', color: 'from-blue-500 to-blue-600' },
+                { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'vpc.png', color: 'from-purple-500 to-purple-600' },
+                { name: 'Lambda Functions', count: inv.lambdas, type: 'Lambda Function', icon: 'aws-lambda.png', color: 'from-yellow-500 to-yellow-600' },
+                { name: 'EBS Volumes', count: inv.ebsVolumes, type: 'EBS Volume', icon: 'aws-ebs.png', color: 'from-red-500 to-red-600' },
+                { name: 'Route 53 Zones', count: inv.route53Zones, type: 'Route 53 Zone', icon: 'aws-route53.png', color: 'from-indigo-500 to-indigo-600' },
+                { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'load-balancer.png', color: 'from-pink-500 to-pink-600' },
+                { name: 'ECS Clusters', count: inv.ecs, type: 'ECS', icon: 'aws-ecs.png', color: 'from-teal-500 to-teal-600' },
+                { name: 'EKS Clusters', count: inv.kubernetes, type: 'EKS', icon: 'aws-eks.png', color: 'from-cyan-500 to-cyan-600' },
+            ];
+            
+            container.innerHTML = resources.map(res => `
+                <a href="/cloudlist?service=${encodeURIComponent(res.type)}" class="resource-card flex items-center gap-4 p-4 rounded-xl hover:shadow-md transition-all group">
+                    <div class="resource-icon w-10 h-10 bg-gradient-to-br ${res.color} rounded-lg flex items-center justify-center flex-shrink-0">
+                        <img src="/icons/${res.icon}" alt="${res.name}" class="w-6 h-6 filter brightness-0 invert">
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-gray-800 truncate">${res.name}</p>
+                        <p class="text-sm text-gray-500">Active resources</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xl font-bold text-gray-900">${res.count}</p>
+                        <p class="text-xs text-gray-500">total</p>
+                    </div>
+                </a>
+            `).join('');
+        },
+
+        populateOptimizationHub(summary, anomalies, ec2Recs, ebsRecs, lambdaRecs) {
+            const container = document.getElementById('optimizationHub');
+            if(!summary || !container) return;
+            
+            const recsHtml = (title, recs, icon, color, gradientClass) => {
+                if (!recs || recs.length === 0) return '';
+                return `
+                    <div class="optimization-card rounded-xl p-6 border-t-4 border-${color}-500 mt-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                <div class="w-8 h-8 bg-gradient-to-br ${gradientClass} rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas ${icon} text-white text-sm"></i>
+                                </div>
+                                ${title}
+                            </h4>
+                            <span class="bg-${color}-100 text-${color}-800 text-xs font-semibold px-2 py-1 rounded-full">${recs.length} recommendations</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 rounded-lg">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700 rounded-l-lg">Resource</th>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700">Recommendation</th>
+                                        <th class="px-4 py-3 text-right font-semibold text-gray-700 rounded-r-lg">Monthly Savings</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    ${recs.slice(0, 3).map(rec => `
+                                        <tr class="hover:bg-gray-50 transition-colors">
+                                            <td class="px-4 py-3 font-mono text-xs text-gray-600">${rec.resourceId}</td>
+                                            <td class="px-4 py-3">
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="text-gray-600">${rec.currentType}</span>
+                                                    <i class="fas fa-arrow-right text-gray-400"></i>
+                                                    <span class="font-semibold text-${color}-600">${rec.recommendedType}</span>
+                                                </div>
+                                            </td>
+                                            <td class="px-4 py-3 text-right font-bold text-${color}-600">${this.formatCurrency(rec.estimatedMonthlySavings)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        ${recs.length > 3 ? `
+                            <div class="mt-4 text-center">
+                                <a href="/rightsizing" class="inline-flex items-center text-sm text-${color}-600 hover:text-${color}-800 font-medium">
+                                    View all ${recs.length} recommendations
+                                    <i class="fas fa-arrow-right ml-1"></i>
+                                </a>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            };
+
+            const anomaliesHtml = (anomalies) => {
+                if (!anomalies || anomalies.length === 0) return '';
+                return `
+                    <div class="anomaly-card rounded-xl p-6 border-t-4 border-red-500 mt-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-exclamation-triangle text-white text-sm"></i>
+                                </div>
+                                Cost Anomalies
+                            </h4>
+                            <span class="bg-red-100 text-red-800 text-xs font-semibold px-2 py-1 rounded-full">${anomalies.length} detected</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 rounded-lg">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700 rounded-l-lg">Service</th>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+                                        <th class="px-4 py-3 text-right font-semibold text-gray-700 rounded-r-lg">Unexpected Spend</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    ${anomalies.slice(0, 3).map(a => `
+                                        <tr class="hover:bg-gray-50 transition-colors">
+                                            <td class="px-4 py-3 font-semibold text-gray-800">${a.service}</td>
+                                            <td class="px-4 py-3 text-gray-600">${a.startDate}</td>
+                                            <td class="px-4 py-3 text-right font-bold text-red-600">${this.formatCurrency(a.unexpectedSpend)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            };
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 p-6 rounded-xl text-center">
+                        <div class="flex items-center justify-center mb-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-piggy-bank text-white text-xl"></i>
+                            </div>
+                        </div>
+                        <p class="text-sm text-green-700 font-semibold uppercase tracking-wide">Potential Savings</p>
+                        <p class="text-3xl font-bold text-green-800 my-2">${this.formatCurrency(summary.totalPotentialSavings)}</p>
+                        <p class="text-sm text-green-600">per month</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 p-6 rounded-xl text-center">
+                        <div class="flex items-center justify-center mb-3">
+                            <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-exclamation-triangle text-white text-xl"></i>
+                            </div>
+                        </div>
+                        <p class="text-sm text-red-700 font-semibold uppercase tracking-wide">Critical Alerts</p>
+                        <p class="text-3xl font-bold text-red-800 my-2">${summary.criticalAlertsCount}</p>
+                        <p class="text-sm text-red-600">items to review</p>
+                    </div>
+                </div>
+                ${recsHtml('EC2 Instance Right-Sizing', ec2Recs, 'fa-server', 'orange', 'from-orange-500 to-orange-600')}
+                ${recsHtml('EBS Volume Optimization', ebsRecs, 'fa-hdd', 'purple', 'from-purple-500 to-purple-600')}
+                ${recsHtml('Lambda Function Optimization', lambdaRecs, 'fa-bolt', 'yellow', 'from-yellow-500 to-yellow-600')}
+                ${anomaliesHtml(anomalies)}
+            `;
+        },
+        
+        populateBillingSummary(summary) { 
+            const container = document.getElementById('billingSummary'); 
+            if (!container || !summary) return; 
+            if (summary.length > 0) { 
+                container.innerHTML = summary.sort((a,b) => b.monthToDateCost - a.monthToDateCost).map((item, index) => `
+                    <tr class="border-b hover:bg-gray-50 transition-colors">
+                        <th class="px-4 py-4 font-semibold text-gray-800 text-left">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2 h-2 bg-indigo-${500 + (index * 100) % 400} rounded-full"></div>
+                                <span>${item.serviceName}</span>
+                            </div>
+                        </th>
+                        <td class="px-4 py-4 text-right">
+                            <span class="font-bold text-gray-900">${this.formatCurrency(item.monthToDateCost)}</span>
+                        </td>
+                    </tr>
+                `).join(''); 
+            } else { 
+                container.innerHTML = `
+                    <tr>
+                        <td colspan="2" class="px-4 py-8 text-center text-gray-500">
+                            <i class="fas fa-receipt text-2xl mb-2"></i>
+                            <p>No billing data available</p>
+                        </td>
+                    </tr>
+                `; 
+            } 
+        },
+        
+        renderCostHistoryChart(costHistory) { 
+            if (!costHistory || !costHistory.labels) return;
+            const ctx = document.getElementById('costHistoryChart');
+            if(!ctx) return;
+            if (window.costHistoryChartInstance) window.costHistoryChartInstance.destroy();
+            
+            const backgroundColors = costHistory.anomalies.map(isAnomaly => 
+                isAnomaly ? 'rgba(239, 68, 68, 0.8)' : 'rgba(79, 70, 229, 0.8)'
+            );
+            const borderColors = costHistory.anomalies.map(isAnomaly => 
+                isAnomaly ? 'rgba(220, 38, 38, 1)' : 'rgba(79, 70, 229, 1)'
+            );
+
+            window.costHistoryChartInstance = new Chart(ctx, { 
+                type: 'bar', 
+                data: { 
+                    labels: costHistory.labels, 
+                    datasets: [{ 
+                        label: 'Monthly Cost', 
+                        data: costHistory.costs, 
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: { 
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(79, 70, 229, 0.8)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: { 
+                                label: (c) => `Cost: ${this.formatCurrency(c.parsed.y)}`,
+                                afterLabel: (c) => costHistory.anomalies[c.dataIndex] ? 'Anomaly detected!' : ''
+                            }
+                        }
+                    }, 
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { 
+                                callback: v => this.formatCurrency(v),
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#6b7280'
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            if (costHistory.anomalies[index]) {
+                                alert(`🚨 Cost Anomaly Detected!\n\nMonth: ${costHistory.labels[index]}\nCost: ${this.formatCurrency(costHistory.costs[index])}\n\nThis cost is significantly higher than expected. Consider investigating your resource usage for this period.`);
+                            }
+                        }
+                    }
+                } 
+            }); 
+        },
+        
+        renderHighchartMap(regionStatus) {
+            if (!regionStatus || !document.getElementById('highcharts-map-container')) return;
+            const statusColors = { 
+                'ACTIVE': '#3b82f6', 
+                'SEMI_ACTIVE': '#ef4444', 
+                'SUSTAINABLE': '#22c55e', 
+                'NON_ACTIVE': '#6b7280' 
+            };
+            const regionPoints = regionStatus.map(r => ({ 
+                name: `${r.regionId}`, 
+                fullName: `${r.regionId} (${r.status})`,
+                lat: r.lat, 
+                lon: r.lon, 
+                color: statusColors[r.status] || '#6b7280', 
+                id: r.regionId,
+                status: r.status
+            }));
+            
+            Highcharts.mapChart('highcharts-map-container', {
+                chart: { 
+                    map: 'custom/world', 
+                    backgroundColor: 'transparent',
+                    style: {
+                        fontFamily: 'Inter, sans-serif'
+                    }
+                },
+                title: { text: null }, 
+                credits: { enabled: false },
+                mapNavigation: { 
+                    enabled: true, 
+                    buttonOptions: { 
+                        verticalAlign: 'bottom',
+                        theme: {
+                            'stroke-width': 1,
+                            stroke: '#4f46e5',
+                            r: 4
+                        }
+                    }
+                },
+                tooltip: { 
+                    useHTML: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    borderColor: 'rgba(79, 70, 229, 0.8)',
+                    borderRadius: 8,
+                    style: {
+                        color: 'white'
+                    },
+                    pointFormat: '<b>{point.fullName}</b><br/>Click to filter dashboard'
+                },
+                plotOptions: {
+                    mappoint: {
+                        point: {
+                            events: {
+                                click: (e) => {
+                                    this.filterByRegion(e.point.id);
+                                }
+                            }
+                        }
+                    }
+                },
+                series: [
+                    { 
+                        name: 'World', 
+                        color: '#f1f5f9', 
+                        states: { 
+                            hover: { 
+                                color: '#e2e8f0' 
+                            } 
+                        },
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1
+                    }, 
+                    { 
+                        type: 'mappoint', 
+                        name: 'AWS Regions', 
+                        data: regionPoints, 
+                        marker: { 
+                            lineWidth: 2, 
+                            lineColor: '#ffffff',
+                            radius: 8,
+                            states: {
+                                hover: {
+                                    lineWidth: 3,
+                                    radius: 10
+                                }
+                            }
+                        },
+                        cursor: 'pointer'
+                    }
+                ]
+            });
+        },
+
+        hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        },
+
+        renderSparkline(canvasId, data, chartColor) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx || !data) return;
+            if (window[canvasId+'_instance']) window[canvasId+'_instance'].destroy();
+            
+            window[canvasId+'_instance'] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map((_, i) => i),
+                    datasets: [{
+                        data: data,
+                        borderColor: chartColor,
+                        backgroundColor: this.hexToRgba(chartColor, 0.1),
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: chartColor,
+                        pointHoverBorderColor: '#ffffff',
+                        pointHoverBorderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    scales: { 
+                        x: { display: false }, 
+                        y: { display: false } 
+                    },
+                    plugins: { 
+                        legend: { display: false }, 
+                        tooltip: { 
+                            enabled: true,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: chartColor,
+                            borderWidth: 1,
+                            cornerRadius: 6,
+                            callbacks: {
+                                label: (context) => `Value: ${context.parsed.y}`
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        },
+
+        filterByRegion(regionId) {
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+            notification.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-filter text-blue-600"></i>
+                    <div>
+                        <p class="font-semibold">Region Filter Applied</p>
+                        <p class="text-sm">Dashboard filtered by: ${regionId}</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 4000);
+        },
+
 
             formatCurrency(num) { 
                 return '$' + (num != null ? num.toLocaleString('en-US', {
@@ -1279,9 +1291,9 @@
         }
     }
     
-    document.addEventListener('DOMContentLoaded', () => {
-        Alpine.start();
-    });
+    // document.addEventListener('DOMContentLoaded', () => {
+    //     Alpine.start();
+    // });
     </script>
 </body>
 </html>
