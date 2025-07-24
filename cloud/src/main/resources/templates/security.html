@@ -28,17 +28,146 @@
         
         [x-cloak] { display: none !important; }
         
+        /* Enhanced table styling matching the screenshot exactly */
+        .table-enhanced {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .table-enhanced table {
+            table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        /* Exact column widths matching screenshot */
+        .table-enhanced th:nth-child(1) { width: 12%; } /* Category */
+        .table-enhanced th:nth-child(2) { width: 42%; } /* Description */
+        .table-enhanced th:nth-child(3) { width: 20%; } /* Resource */
+        .table-enhanced th:nth-child(4) { width: 16%; } /* Compliance */
+        .table-enhanced th:nth-child(5) { width: 10%; } /* Action */
+        
+        .table-enhanced thead {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .table-enhanced th {
+            padding: 16px 12px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #374151;
+            border-right: 1px solid #e5e7eb;
+        }
+        
+        .table-enhanced th:last-child {
+            border-right: none;
+            text-align: center;
+        }
+        
+        .table-enhanced td {
+            padding: 14px 12px;
+            vertical-align: top;
+            border-right: 1px solid #e5e7eb;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .table-enhanced td:last-child {
+            border-right: none;
+            text-align: center;
+        }
+        
+        .table-enhanced tbody tr {
+            transition: all 0.2s ease;
+        }
+        
+        .table-enhanced tbody tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        /* Category column styling */
+        .category-display {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1f2937;
+            text-align: left;
+        }
+        
+        /* Description column styling */
+        .description-text {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #374151;
+            text-align: left;
+        }
+        
+        /* Resource column styling */
+        .resource-info {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+        
+        .resource-id {
+            font-size: 12px;
+            color: #1f2937;
+            font-weight: 500;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+        
+        .resource-region {
+            font-size: 11px;
+            color: #6b7280;
+            font-weight: 400;
+        }
+        
+        /* Compliance badge styling */
+        .compliance-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.15) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            color: #1e40af;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            text-align: center;
+            white-space: nowrap;
+        }
+        
+        /* Action button styling */
+        .fix-now-btn {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .fix-now-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+        }
+        
+        /* Other existing styles remain the same */
         .glass-card {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .glass-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
         
         .security-card {
@@ -48,42 +177,6 @@
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .security-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            transform: scaleX(0);
-            transition: transform 0.3s ease;
-        }
-        
-        .security-card.critical::before {
-            background: var(--critical-gradient);
-        }
-        
-        .security-card.high::before {
-            background: var(--error-gradient);
-        }
-        
-        .security-card.medium::before {
-            background: var(--warning-gradient);
-        }
-        
-        .security-card.low::before {
-            background: var(--primary-gradient);
-        }
-        
-        .security-card:hover::before {
-            transform: scaleX(1);
-        }
-        
-        .security-card:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
         
         .skeleton {
@@ -113,105 +206,11 @@
             overflow: hidden;
         }
         
-        .btn-primary::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
-        }
-        
-        .btn-primary:hover::before {
-            left: 100%;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
-        }
-        
         .btn-success {
             background: var(--success-gradient);
             border: none;
             color: white;
             transition: all 0.3s ease;
-        }
-        
-        .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
-        }
-        
-        .table-enhanced {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid var(--glass-border);
-        }
-        
-        .table-enhanced thead {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        }
-        
-        .table-enhanced tr {
-            transition: all 0.2s ease;
-        }
-        
-        .table-enhanced tr:hover {
-            background: rgba(102, 126, 234, 0.05);
-            transform: translateX(2px);
-        }
-        
-        .finding-row {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .finding-row::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            transform: scaleY(0);
-            transition: transform 0.2s ease;
-        }
-        
-        .finding-row.critical::before {
-            background: var(--critical-gradient);
-        }
-        
-        .finding-row.high::before {
-            background: var(--error-gradient);
-        }
-        
-        .finding-row.medium::before {
-            background: var(--warning-gradient);
-        }
-        
-        .finding-row.low::before {
-            background: var(--primary-gradient);
-        }
-        
-        .finding-row:hover::before {
-            transform: scaleY(1);
-        }
-        
-        .modal-overlay {
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
-        }
-        
-        .modal-content {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
         
         .severity-section {
@@ -228,32 +227,16 @@
             transition: all 0.3s ease;
         }
         
-        .empty-state:hover {
-            border-color: rgba(16, 185, 129, 0.5);
-            background: rgba(255, 255, 255, 0.98);
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
         }
         
-        .pulse-dot {
-            animation: pulse-dot 2s infinite;
-        }
-        
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading-spinner {
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .modal-content {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
         
         .fade-in {
@@ -281,60 +264,29 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
-        .compliance-badge {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.2) 100%);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            color: #1d4ed8;
-            padding: 6px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-align: center;
-            white-space: nowrap;
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
         }
         
-        .resource-cell {
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 11px;
-            line-height: 1.4;
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
         
-        .category-cell {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
         }
         
-        .category-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            color: white;
-            font-weight: bold;
-        }
-        
-        .s3-icon { background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%); }
-        .vpc-icon { background: linear-gradient(135deg, #4285f4 0%, #1a73e8 100%); }
-        .ec2-icon { background: linear-gradient(135deg, #ff9500 0%, #ff7b00 100%); }
-        .rds-icon { background: linear-gradient(135deg, #5c6bc0 0%, #3f51b5 100%); }
-        .iam-icon { background: linear-gradient(135deg, #26a69a 0%, #00695c 100%); }
-        .sg-icon { background: linear-gradient(135deg, #f06292 0%, #e91e63 100%); }
-        .lambda-icon { background: linear-gradient(135deg, #ff7043 0%, #d84315 100%); }
-        .default-icon { background: linear-gradient(135deg, #78909c 0%, #546e7a 100%); }
-        
-        .description-cell {
-            max-width: 350px;
-            line-height: 1.5;
-            color: #374151;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         .remediation-steps {
@@ -342,56 +294,6 @@
             border: 1px solid rgba(16, 185, 129, 0.2);
             border-radius: 12px;
             padding: 20px;
-        }
-        
-        .remediation-steps h4 {
-            color: #065f46;
-            font-weight: 700;
-            margin-bottom: 12px;
-        }
-        
-        .remediation-steps p {
-            margin-bottom: 12px;
-            line-height: 1.6;
-        }
-        
-        .remediation-steps strong {
-            color: #047857;
-        }
-        
-        .remediation-steps em {
-            color: #059669;
-            font-style: italic;
-        }
-        
-        .remediation-steps hr {
-            border-color: rgba(16, 185, 129, 0.2);
-            margin: 16px 0;
-        }
-
-        /* Enhanced table styling for perfect alignment */
-        .table-enhanced table {
-            table-layout: fixed;
-            width: 100%;
-        }
-        
-        .table-enhanced th:nth-child(1) { width: 15%; } /* Category */
-        .table-enhanced th:nth-child(2) { width: 35%; } /* Description */
-        .table-enhanced th:nth-child(3) { width: 20%; } /* Resource */
-        .table-enhanced th:nth-child(4) { width: 15%; } /* Compliance */
-        .table-enhanced th:nth-child(5) { width: 15%; } /* Action */
-        
-        .table-enhanced td {
-            vertical-align: top;
-            padding: 16px 20px;
-        }
-        
-        .table-enhanced th {
-            padding: 16px 20px;
-            text-align: left;
-            font-weight: 700;
-            font-size: 13px;
-            letter-spacing: 0.5px;
         }
     </style>
 </head>
@@ -455,7 +357,7 @@
                             </div>
                         </div>
                         
-                        <div class="security-card critical rounded-2xl p-6 fade-in">
+                        <div class="security-card rounded-2xl p-6 fade-in">
                             <div class="flex justify-between items-start mb-4">
                                 <div class="flex-1">
                                     <h3 class="text-gray-600 text-sm font-medium mb-2">Critical</h3>
@@ -468,7 +370,7 @@
                             </div>
                         </div>
                         
-                        <div class="security-card high rounded-2xl p-6 fade-in">
+                        <div class="security-card rounded-2xl p-6 fade-in">
                             <div class="flex justify-between items-start mb-4">
                                 <div class="flex-1">
                                     <h3 class="text-gray-600 text-sm font-medium mb-2">High Priority</h3>
@@ -481,7 +383,7 @@
                             </div>
                         </div>
                         
-                        <div class="security-card medium rounded-2xl p-6 fade-in">
+                        <div class="security-card rounded-2xl p-6 fade-in">
                             <div class="flex justify-between items-start mb-4">
                                 <div class="flex-1">
                                     <h3 class="text-gray-600 text-sm font-medium mb-2">Medium & Low</h3>
@@ -530,51 +432,37 @@
                                 <div x-show="openSeverities.includes(severity)" x-transition class="bg-white">
                                     <div class="p-6">
                                         <div class="table-enhanced">
-                                            <table class="w-full text-sm">
-                                                <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
+                                            <table>
+                                                <thead>
                                                     <tr>
-                                                        <th class="px-6 py-4 text-left font-bold">Category</th>
-                                                        <th class="px-6 py-4 text-left font-bold">Description</th>
-                                                        <th class="px-6 py-4 text-left font-bold">Resource</th>
-                                                        <th class="px-6 py-4 text-left font-bold">Compliance</th>
-                                                        <th class="px-6 py-4 text-center font-bold">Action</th>
+                                                        <th>Category</th>
+                                                        <th>Description</th>
+                                                        <th>Resource</th>
+                                                        <th>Compliance</th>
+                                                        <th>Action</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody class="divide-y divide-gray-200">
+                                                <tbody>
                                                     <template x-for="finding in getFindingsBySeverity(severity)" :key="finding.resourceId + finding.description">
-                                                        <tr class="finding-row hover:bg-gray-50 transition-all" :class="severity.toLowerCase()">
-                                                            <td class="px-6 py-4">
-                                                                <div class="category-cell">
-                                                                    <div class="category-icon" :class="getCategoryIcon(finding.category)">
-                                                                        <span x-text="getCategoryShortName(finding.category)"></span>
-                                                                    </div>
-                                                                    <span class="font-semibold text-gray-800" x-text="finding.category"></span>
+                                                        <tr>
+                                                            <td>
+                                                                <div class="category-display" x-text="finding.category"></div>
+                                                            </td>
+                                                            <td>
+                                                                <div class="description-text" x-text="finding.description"></div>
+                                                            </td>
+                                                            <td>
+                                                                <div class="resource-info">
+                                                                    <div class="resource-id" x-text="finding.resourceId"></div>
+                                                                    <div class="resource-region" x-text="finding.region"></div>
                                                                 </div>
                                                             </td>
-                                                            <td class="px-6 py-4">
-                                                                <div class="description-cell">
-                                                                    <p class="text-gray-700 leading-relaxed" x-text="finding.description"></p>
-                                                                </div>
+                                                            <td>
+                                                                <span class="compliance-badge" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
                                                             </td>
-                                                            <td class="px-6 py-4">
-                                                                <div class="resource-cell space-y-2">
-                                                                    <div class="bg-gray-100 px-3 py-2 rounded-lg">
-                                                                        <p class="font-mono text-xs text-gray-800 break-all" x-text="finding.resourceId"></p>
-                                                                    </div>
-                                                                    <div class="flex items-center space-x-2">
-                                                                        <i class="fas fa-map-marker-alt text-gray-400 text-xs"></i>
-                                                                        <span class="text-xs text-gray-600 font-medium" x-text="finding.region"></span>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td class="px-6 py-4">
-                                                                <div class="text-center">
-                                                                    <span class="compliance-badge" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
-                                                                </div>
-                                                            </td>
-                                                            <td class="px-6 py-4 text-center">
-                                                                <button @click="openRemediationModal(finding)" class="btn-primary px-4 py-2 text-xs font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
-                                                                    <i class="fas fa-wrench mr-2"></i>Fix Now
+                                                            <td>
+                                                                <button @click="openRemediationModal(finding)" class="fix-now-btn">
+                                                                    Fix Now
                                                                 </button>
                                                             </td>
                                                         </tr>
@@ -740,32 +628,6 @@ function securityCenter() {
                 'Low': 'bg-blue-600'
             };
             return colors[severity] || 'bg-gray-600';
-        },
-        
-        getCategoryIcon(category) {
-            const icons = {
-                'S3': 's3-icon',
-                'VPC': 'vpc-icon',
-                'EC2': 'ec2-icon',
-                'RDS': 'rds-icon',
-                'IAM': 'iam-icon',
-                'Security Group': 'sg-icon',
-                'Lambda': 'lambda-icon'
-            };
-            return icons[category] || 'default-icon';
-        },
-        
-        getCategoryShortName(category) {
-            const shortNames = {
-                'S3': 'S3',
-                'VPC': 'VPC',
-                'EC2': 'EC2',
-                'RDS': 'RDS',
-                'IAM': 'IAM',
-                'Security Group': 'SG',
-                'Lambda': 'λ'
-            };
-            return shortNames[category] || category.charAt(0);
         },
         
         openRemediationModal(finding) {
