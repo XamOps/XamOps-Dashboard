@@ -6,6 +6,9 @@
     <title>XamOps - Cloudmap</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
     <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
@@ -246,7 +249,6 @@
     <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
 
     <main class="flex-1 flex flex-col">
-        <!-- Enhanced Header -->
         <header class="header-gradient h-auto flex-col sm:flex-row flex items-center justify-between border-b px-8 py-4 gap-4">
             <div class="flex items-center space-x-4">
                 <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -275,7 +277,6 @@
             </div>
         </header>
 
-        <!-- Enhanced Graph Container -->
         <div class="flex-1 relative" id="cloudmap-container">
             <div id="graph-container" class="w-full h-full p-4">
                 <div id="message-overlay" class="absolute inset-0 flex items-center justify-center z-20">
@@ -288,10 +289,8 @@
                     </div>
                 </div>
                 
-                <!-- Enhanced Cytoscape Container -->
                 <div id="cy" class="rounded-xl"></div>
                 
-                <!-- Enhanced Toolbar -->
                 <div class="toolbar">
                     <div class="flex items-center space-x-2">
                         <button class="toolbar-button" onclick="cy && cy.fit()" title="Fit to view">
@@ -309,7 +308,6 @@
                     </div>
                 </div>
                 
-                <!-- Enhanced Legend -->
                 <div class="legend">
                     <h4 class="text-sm font-bold text-gray-800 mb-3">Legend</h4>
                     <div class="legend-item">
@@ -339,7 +337,6 @@
                 </div>
             </div>
             
-            <!-- Enhanced Info Panel -->
             <div id="info-panel" class="absolute top-0 right-0 h-full w-96 p-8 border-l transform translate-x-full">
                 <button id="close-panel-btn" class="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors">
                     <i class="fas fa-times text-xl"></i>

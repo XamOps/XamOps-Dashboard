@@ -9,7 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+    
     <style>
+        /* Add x-cloak hiding rule at the top */
+        [x-cloak] { display: none !important; }
+        
         body {
             font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
@@ -276,12 +282,9 @@
 <body class="antialiased">
 
 <div class="flex h-screen">
-    <!-- Sidebar -->
     <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
 
-    <!-- Main Content -->
     <main class="flex-1 flex flex-col">
-        <!-- Enhanced Header -->
         <header class="header-gradient h-20 flex-shrink-0 flex items-center justify-between px-8 sticky top-0 z-10">
             <div class="flex items-center space-x-4">
                 <div class="flex items-center space-x-3">
@@ -306,9 +309,7 @@
             </div>
         </header>
 
-        <!-- Enhanced Page Content -->
         <div class="flex-1 overflow-y-auto p-8">
-            <!-- Enhanced Control Bar -->
             <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 border border-gray-200/50 shadow-lg">
                 <div class="flex flex-wrap items-center justify-between gap-6">
                     <div class="flex items-center space-x-4 flex-1">
@@ -338,9 +339,7 @@
                 </div>
             </div>
 
-            <!-- Enhanced Resource List Container -->
             <div id="resource-list-container" class="space-y-6">
-                <!-- Enhanced Loading State -->
                 <div id="loading-state" class="w-full space-y-4">
                     <div class="service-group rounded-2xl shadow-lg p-6">
                         <div class="flex items-center justify-between animate-pulse">
@@ -376,22 +375,21 @@
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Enhanced Empty State -->
-            <div id="empty-state" class="empty-state hidden text-center py-20 px-8 rounded-2xl mt-8">
-                <div class="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <i class="fas fa-box-open text-white text-3xl"></i>
-                </div>
-                <h3 class="text-2xl font-bold text-gray-800 mb-2">No Resources Found</h3>
-                <p class="text-gray-600 mb-6 max-w-md mx-auto">Try adjusting your search criteria or filters, or make sure you have selected an active AWS account.</p>
-                <div class="flex items-center justify-center space-x-4">
-                    <button class="btn-secondary px-6 py-3 text-sm font-semibold rounded-xl focus-ring">
-                        <i class="fas fa-sync-alt mr-2"></i>Refresh Data
-                    </button>
-                    <button class="btn-primary px-6 py-3 text-sm font-semibold text-white rounded-xl focus-ring">
-                        <i class="fas fa-plus mr-2"></i>Add Account
-                    </button>
+                
+                <div id="empty-state" class="empty-state hidden text-center py-20 px-8 rounded-2xl mt-8">
+                    <div class="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-box-open text-white text-3xl"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">No Resources Found</h3>
+                    <p class="text-gray-600 mb-6 max-w-md mx-auto">Try adjusting your search criteria or filters, or make sure you have selected an active AWS account.</p>
+                    <div class="flex items-center justify-center space-x-4">
+                        <button class="btn-secondary px-6 py-3 text-sm font-semibold rounded-xl focus-ring">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh Data
+                        </button>
+                        <button class="btn-primary px-6 py-3 text-sm font-semibold text-white rounded-xl focus-ring">
+                            <i class="fas fa-plus mr-2"></i>Add Account
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -399,269 +397,351 @@
 </div>
 
 <script>
+// Wait for AlpineJS to be ready before initializing the app
+document.addEventListener('alpine:init', () => {
+    console.log('AlpineJS is ready');
+});
+
+// Use a slight delay to ensure AlpineJS has fully initialized
 document.addEventListener('DOMContentLoaded', function() {
-    const app = {
-        allGroups: [],
-        dom: {
-            searchInput: document.getElementById('search-input'),
-            regionFilter: document.getElementById('region-filter'),
-            listContainer: document.getElementById('resource-list-container'),
-            loadingState: document.getElementById('loading-state'),
-            emptyState: document.getElementById('empty-state'),
-            refreshButton: document.getElementById('refresh-button'),
-            updateStatus: document.getElementById('update-status'),
-        },
+    // Add a small delay to ensure AlpineJS components are ready
+    setTimeout(() => {
+        const app = {
+            allGroups: [],
+            dom: {
+                searchInput: document.getElementById('search-input'),
+                regionFilter: document.getElementById('region-filter'),
+                listContainer: document.getElementById('resource-list-container'),
+                loadingState: document.getElementById('loading-state'),
+                emptyState: document.getElementById('empty-state'),
+                refreshButton: document.getElementById('refresh-button'),
+                updateStatus: document.getElementById('update-status'),
+            },
 
-        init() {
-            this.setupEventListeners();
-            this.loadResources();
-        },
+            init() {
+                console.log('CloudList app initializing...');
+                this.setupEventListeners();
+                this.loadResources();
+            },
 
-        setupEventListeners() {
-            this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
-            this.dom.regionFilter.addEventListener('change', () => this.render());
-            this.dom.refreshButton.addEventListener('click', () => {
-                this.loadResources(true);
-            });
-        },
-
-        debounce(func, delay) {
-            let timeout;
-            return function(...args) {
-                const context = this;
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(context, args), delay);
-            };
-        },
-
-        loadResources(forceRefresh = false) {
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                this.dom.loadingState.style.display = 'none';
-                this.dom.emptyState.classList.remove('hidden');
-                this.dom.updateStatus.textContent = 'Please select an account.';
-                return;
-            }
-
-            const cacheKey = `cloudlistData-${selectedAccountId}`;
-            const cachedData = sessionStorage.getItem(cacheKey);
-
-            if (cachedData && !forceRefresh) {
-                console.log("Cloudlist data loaded from cache.");
-                this.allGroups = JSON.parse(cachedData);
-                this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-                this.render();
-                return;
-            }
-
-            this.dom.loadingState.style.display = 'block';
-            this.dom.emptyState.classList.add('hidden');
-            this.dom.listContainer.innerHTML = ''; 
-            this.dom.listContainer.appendChild(this.dom.loadingState);
-            this.dom.updateStatus.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Updating...';
-            this.dom.refreshButton.disabled = true;
-            sessionStorage.removeItem(cacheKey); 
-            
-            fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
-                .then(res => {
-                    if (!res.ok) throw new Error(`API Error: ${res.status}`);
-                    return res.json();
-                })
-                .then(data => {
-                    this.allGroups = Array.isArray(data) ? data : [];
-                    sessionStorage.setItem(cacheKey, JSON.stringify(this.allGroups));
-                    this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-                    this.render();
-                })
-                .catch(error => {
-                    console.error('Error fetching resources:', error);
-                    this.allGroups = [];
-                    this.dom.updateStatus.textContent = 'Update failed - Please try again';
-                    this.render();
-                })
-                .finally(() => {
-                    this.dom.refreshButton.disabled = false;
+            setupEventListeners() {
+                this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
+                this.dom.regionFilter.addEventListener('change', () => this.render());
+                this.dom.refreshButton.addEventListener('click', () => {
+                    this.loadResources(true);
                 });
-        },
-
-        render() {
-            this.dom.loadingState.style.display = 'none';
-            this.dom.listContainer.innerHTML = '';
-
-            const filteredGroups = this.getFilteredData();
-
-            if (filteredGroups.length === 0 && this.allGroups.length > 0) {
-                this.dom.emptyState.classList.remove('hidden');
-            } else {
-                this.dom.emptyState.classList.add('hidden');
-            }
-
-            filteredGroups.forEach(group => {
-                const groupElement = this.createGroupElement(group);
-                this.dom.listContainer.appendChild(groupElement);
-            });
-            
-            this.addEventListenersForToggles();
-        },
-
-        getFilteredData() {
-            const searchTerm = this.dom.searchInput.value.toLowerCase();
-            const region = this.dom.regionFilter.value;
-
-            if (!searchTerm && !region) return this.allGroups;
-
-            return this.allGroups.map(group => {
-                const matchingResources = group.resources.filter(res => {
-                    const regionMatch = !region || (res.region && res.region === region) || (region === 'Global' && res.region === 'Global') || (region === 'Regional' && res.region === 'Regional');
-                    const searchMatch = !searchTerm ||
-                        (res.name && res.name.toLowerCase().includes(searchTerm)) ||
-                        (res.id && res.id.toLowerCase().includes(searchTerm));
-                    return regionMatch && searchMatch;
-                });
-                return { ...group, resources: matchingResources };
-            }).filter(group => group.resources.length > 0);
-        },
-        
-        createGroupElement(group) {
-            const container = document.createElement('div');
-            container.className = 'service-group rounded-2xl shadow-lg overflow-hidden border border-gray-200/50 transition-all';
-            const groupId = `group-content-${group.serviceType.replace(/[^a-zA-Z0-9]/g, '')}`;
-
-            container.innerHTML = `
-                <div class="flex items-center justify-between p-6 cursor-pointer toggle-button" data-target="#${groupId}">
-                    <div class="flex items-center space-x-4 flex-1">
-                        <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all duration-200"></i>
-                        <div class="service-icon w-12 h-12 flex items-center justify-center rounded-xl ${this.getServiceIconColor(group.serviceType, true)}">
-                            <i class="${this.getServiceIcon(group.serviceType)} text-2xl ${this.getServiceIconColor(group.serviceType)}"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h3 class="font-bold text-gray-800 text-lg">${group.serviceType}</h3>
-                            <p class="text-sm text-gray-600">AWS Service</p>
-                        </div>
-                        <div class="resource-counter text-sm font-bold px-4 py-2 rounded-full">
-                            ${group.resources.length}
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-3">
-                        <button class="btn-secondary px-4 py-2 text-sm font-semibold rounded-lg hover:bg-gray-100 transition-all">
-                            <i class="fas fa-eye mr-2"></i>View Details
-                        </button>
-                    </div>
-                </div>
-                <div id="${groupId}" class="resource-content hidden bg-gradient-to-r from-gray-50/30 to-gray-100/30 backdrop-blur-sm">
-                    ${group.resources.map(res => this.createResourceRow(res, group.serviceType)).join('')}
-                </div>
-            `;
-            return container;
-        },
-
-        createResourceRow(resource, serviceType) {
-            const detailsId = `details-${resource.id.replace(/[^a-zA-Z0-9]/g, '')}`;
-            const hasDetails = resource.details && Object.keys(resource.details).length > 0;
-
-            return `
-                <div class="resource-row border-t border-gray-200/50" data-service="${serviceType}" data-id="${resource.id}">
-                    <div class="grid grid-cols-12 items-center p-6 pl-16 text-sm hover:bg-white/50 transition-all duration-200">
-                        <div class="col-span-6 flex items-center space-x-4">
-                            <div class="flex-1">
-                                <div class="flex items-center space-x-2">
-                                    <p class="font-bold text-gray-800">${resource.name || 'N/A'}</p>
-                                    <div class="w-1 h-1 bg-gray-400 rounded-full"></div>
-                                    <p class="font-mono text-xs text-gray-500">${resource.id || 'N/A'}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-span-2 flex items-center space-x-2">
-                            <i class="fas fa-map-marker-alt text-gray-400 text-xs"></i>
-                            <span class="font-semibold text-gray-600">${resource.region || 'Global'}</span>
-                        </div>
-                        <div class="col-span-2">
-                            <span class="state-badge px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full capitalize ${this.getStateClass(resource.state)}">
-                                ${resource.state || 'Unknown'}
-                            </span>
-                        </div>
-                        <div class="col-span-2 text-right pr-4">
-                            <div class="flex items-center justify-end space-x-2">
-                                <i class="fas fa-external-link-alt text-gray-400 text-xs"></i>
-                                <span class="text-xs text-gray-500">View Details</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        },
-
-        addEventListenersForToggles() {
-            this.dom.listContainer.querySelectorAll('.toggle-button').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    if (e.target.matches('input, button')) return;
-                    const targetSelector = button.getAttribute('data-target');
-                    const content = this.dom.listContainer.querySelector(targetSelector);
-                    const icon = button.querySelector('.fa-chevron-right');
-                    
-                    if (content) {
-                        content.classList.toggle('hidden');
-                        icon.classList.toggle('rotate-90');
+                
+                // Listen for account changes from the sidebar
+                window.addEventListener('storage', (e) => {
+                    if (e.key === 'selectedAccountId') {
+                        console.log('Account changed, reloading resources...');
+                        this.loadResources(true);
                     }
                 });
-            });
+            },
 
-            this.dom.listContainer.querySelectorAll('.resource-row').forEach(row => {
-                row.addEventListener('click', (e) => {
-                    const service = row.dataset.service;
-                    const id = row.dataset.id;
-                    // Navigate to a new resourcedetail.html page
-                    window.location.href = `/resourcedetail?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`;
+            debounce(func, delay) {
+                let timeout;
+                return function(...args) {
+                    const context = this;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), delay);
+                };
+            },
+
+            loadResources(forceRefresh = false) {
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                console.log('Loading resources for account:', selectedAccountId);
+                
+                if (!selectedAccountId) {
+                    this.dom.loadingState.style.display = 'none';
+                    this.dom.emptyState.classList.remove('hidden');
+                    this.dom.updateStatus.textContent = 'Please select an account.';
+                    return;
+                }
+
+                const cacheKey = `cloudlistData-${selectedAccountId}`;
+                const cachedData = sessionStorage.getItem(cacheKey);
+
+                if (cachedData && !forceRefresh) {
+                    console.log("Cloudlist data loaded from cache.");
+                    this.allGroups = JSON.parse(cachedData);
+                    this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                    this.render();
+                    return;
+                }
+
+                this.dom.loadingState.style.display = 'block';
+                this.dom.emptyState.classList.add('hidden');
+                this.dom.listContainer.innerHTML = ''; 
+                this.dom.listContainer.appendChild(this.dom.loadingState);
+                this.dom.updateStatus.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Updating...';
+                this.dom.refreshButton.disabled = true;
+                sessionStorage.removeItem(cacheKey); 
+                
+                fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}`)
+                    .then(res => {
+                        if (!res.ok) throw new Error(`API Error: ${res.status}`);
+                        return res.json();
+                    })
+                    .then(data => {
+                        this.allGroups = Array.isArray(data) ? data : [];
+                        sessionStorage.setItem(cacheKey, JSON.stringify(this.allGroups));
+                        this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                        this.render();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching resources:', error);
+                        this.allGroups = [];
+                        this.dom.updateStatus.textContent = 'Update failed - Please try again';
+                        this.render();
+                    })
+                    .finally(() => {
+                        this.dom.refreshButton.disabled = false;
+                    });
+            },
+
+            render() {
+                this.dom.loadingState.style.display = 'none';
+                this.dom.listContainer.innerHTML = '';
+
+                const filteredGroups = this.getFilteredData();
+
+                if (filteredGroups.length === 0 && this.allGroups.length > 0) {
+                    this.dom.emptyState.classList.remove('hidden');
+                } else {
+                    this.dom.emptyState.classList.add('hidden');
+                }
+
+                filteredGroups.forEach(group => {
+                    const groupElement = this.createGroupElement(group);
+                    this.dom.listContainer.appendChild(groupElement);
                 });
-            });
-        },
+                
+                this.addEventListenersForToggles();
+            },
+
+            getFilteredData() {
+                const searchTerm = this.dom.searchInput.value.toLowerCase();
+                const region = this.dom.regionFilter.value;
+
+                if (!searchTerm && !region) return this.allGroups;
+
+                return this.allGroups.map(group => {
+                    const matchingResources = group.resources.filter(res => {
+                        const regionMatch = !region || (res.region && res.region === region) || (region === 'Global' && res.region === 'Global') || (region === 'Regional' && res.region === 'Regional');
+                        const searchMatch = !searchTerm ||
+                            (res.name && res.name.toLowerCase().includes(searchTerm)) ||
+                            (res.id && res.id.toLowerCase().includes(searchTerm));
+                        return regionMatch && searchMatch;
+                    });
+                    return { ...group, resources: matchingResources };
+                }).filter(group => group.resources.length > 0);
+            },
+            
+            createGroupElement(group) {
+                const container = document.createElement('div');
+                container.className = 'service-group rounded-2xl shadow-lg overflow-hidden border border-gray-200/50 transition-all';
+                const groupId = `group-content-${group.serviceType.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+                container.innerHTML = `
+                    <div class="flex items-center justify-between p-6 cursor-pointer toggle-button" data-target="#${groupId}">
+                        <div class="flex items-center space-x-4 flex-1">
+                            <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all duration-200"></i>
+                            <div class="service-icon w-12 h-12 flex items-center justify-center rounded-xl ${this.getServiceIconColor(group.serviceType, true)}">
+                                <i class="${this.getServiceIcon(group.serviceType)} text-2xl ${this.getServiceIconColor(group.serviceType)}"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-gray-800 text-lg">${group.serviceType}</h3>
+                                <p class="text-sm text-gray-600">AWS Service</p>
+                            </div>
+                            <div class="resource-counter text-sm font-bold px-4 py-2 rounded-full">
+                                ${group.resources.length}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <button class="btn-secondary px-4 py-2 text-sm font-semibold rounded-lg hover:bg-gray-100 transition-all">
+                                <i class="fas fa-eye mr-2"></i>View Details
+                            </button>
+                        </div>
+                    </div>
+                    <div id="${groupId}" class="resource-content hidden bg-gradient-to-r from-gray-50/30 to-gray-100/30 backdrop-blur-sm">
+                        ${group.resources.map(res => this.createResourceRow(res, group.serviceType)).join('')}
+                    </div>
+                `;
+                return container;
+            },
+
+            createResourceRow(resource, serviceType) {
+                const detailsId = `details-${resource.id.replace(/[^a-zA-Z0-9]/g, '')}`;
+                const hasDetails = resource.details && Object.keys(resource.details).length > 0;
+
+                let detailsHtml = '';
+                if (hasDetails) {
+                    detailsHtml = `
+                        <div id="${detailsId}" class="resource-details hidden p-6 pl-24 text-sm text-gray-700 bg-gray-50/50 border-t border-gray-200">
+                            <h4 class="font-semibold text-base mb-3">Resource Details:</h4>
+                            <div class="grid grid-cols-2 gap-2">
+                    `;
+                    for (const key in resource.details) {
+                        detailsHtml += `
+                                <div class="flex items-center">
+                                    <span class="font-medium text-gray-600 mr-2">${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</span>
+                                    <span>${resource.details[key] || 'N/A'}</span>
+                                </div>
+                        `;
+                    }
+                    detailsHtml += `
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="resource-row border-t border-gray-200/50" data-service="${serviceType}" data-id="${resource.id}">
+                        <div class="grid grid-cols-12 items-center p-6 pl-16 text-sm hover:bg-white/50 transition-all duration-200 toggle-resource-details" data-target="#${detailsId}" data-has-details="${hasDetails}">
+                            <div class="col-span-6 flex items-center space-x-4">
+                                <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all duration-200 ${hasDetails ? '' : 'invisible'}"></i>
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2">
+                                        <p class="font-bold text-gray-800">${resource.name || 'N/A'}</p>
+                                        <div class="w-1 h-1 bg-gray-400 rounded-full"></div>
+                                        <p class="font-mono text-xs text-gray-500">${resource.id || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-span-2 flex items-center space-x-2">
+                                <i class="fas fa-map-marker-alt text-gray-400 text-xs"></i>
+                                <span class="font-semibold text-gray-600">${resource.region || 'Global'}</span>
+                            </div>
+                            <div class="col-span-2">
+                                <span class="state-badge px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full capitalize ${this.getStateClass(resource.state)}">
+                                    ${resource.state || 'Unknown'}
+                                </span>
+                            </div>
+                            <div class="col-span-2 text-right pr-4">
+                                ${hasDetails ? `
+                                <button class="btn-secondary px-4 py-2 text-sm font-semibold rounded-lg hover:bg-gray-100 transition-all view-details-button">
+                                    <i class="fas fa-info-circle mr-2"></i>Details
+                                </button>
+                                ` : `
+                                <div class="flex items-center justify-end space-x-2">
+                                     <i class="fas fa-external-link-alt text-gray-400 text-xs"></i>
+                                     <span class="text-xs text-gray-500">No Extra Details</span>
+                                </div>
+                                `}
+                            </div>
+                        </div>
+                        ${detailsHtml}
+                    </div>
+                `;
+            },
+
+            addEventListenersForToggles() {
+                this.dom.listContainer.querySelectorAll('.toggle-button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        if (e.target.closest('.btn-secondary')) return; // Prevent collapse if "View Details" button is clicked
+                        const targetSelector = button.getAttribute('data-target');
+                        const content = this.dom.listContainer.querySelector(targetSelector);
+                        const icon = button.querySelector('.fa-chevron-right');
+                        
+                        if (content) {
+                            content.classList.toggle('hidden');
+                            icon.classList.toggle('rotate-90');
+                        }
+                    });
+                });
+
+                this.dom.listContainer.querySelectorAll('.toggle-resource-details').forEach(rowHeader => {
+                    rowHeader.addEventListener('click', (e) => {
+                        if (e.target.closest('.view-details-button') || e.target.closest('.fa-external-link-alt')) return; // Ignore clicks on the "Details" button or external link icon
+                        const hasDetails = rowHeader.getAttribute('data-has-details') === 'true';
+
+                        if (hasDetails) {
+                            const targetSelector = rowHeader.getAttribute('data-target');
+                            const content = this.dom.listContainer.querySelector(targetSelector);
+                            const icon = rowHeader.querySelector('.fa-chevron-right');
+
+                            if (content) {
+                                content.classList.toggle('hidden');
+                                icon.classList.toggle('rotate-90');
+                            }
+                        }
+                    });
+                });
+
+                this.dom.listContainer.querySelectorAll('.view-details-button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent the parent .resource-row click event from firing
+                        const rowHeader = button.closest('.toggle-resource-details');
+                        const targetSelector = rowHeader.getAttribute('data-target');
+                        const content = this.dom.listContainer.querySelector(targetSelector);
+                        const icon = rowHeader.querySelector('.fa-chevron-right');
+
+                        if (content) {
+                            content.classList.toggle('hidden');
+                            icon.classList.toggle('rotate-90');
+                        }
+                    });
+                });
+
+                // Original click listener for navigating to resourcedetail.html (now handled by the "Details" button)
+                // this.dom.listContainer.querySelectorAll('.resource-row').forEach(row => {
+                //     row.addEventListener('click', (e) => {
+                //         const service = row.dataset.service;
+                //         const id = row.dataset.id;
+                //         window.location.href = `/resourcedetail?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`;
+                //     });
+                // });
+            },
+            
+            getStateClass(state) {
+                const s = (state || '').toLowerCase();
+                if (['running', 'available', 'active', 'in-use', 'issued'].includes(s)) return 'bg-green-100 text-green-800 border-green-200';
+                if (['stopped', 'terminated', 'deleting', 'inactive', 'expired'].includes(s)) return 'bg-red-100 text-red-800 border-red-200';
+                if (['pending', 'stopping', 'pending_validation'].includes(s)) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                return 'bg-gray-100 text-gray-800 border-gray-200';
+            },
+
+            getServiceIcon(serviceType) {
+                const map = {
+                    'EC2 Instance': 'fas fa-server', 'EBS Volume': 'fas fa-hdd',
+                    'RDS Instance': 'fas fa-database', 'Lambda Function': 'fas fa-bolt',
+                    'S3 Bucket': 'fas fa-archive', 'Load Balancer': 'fas fa-network-wired',
+                    'Auto Scaling Group': 'fas fa-layer-group', 'VPC': 'fas fa-project-diagram',
+                    'Security Group': 'fas fa-shield-alt', 'Route 53 Zone': 'fas fa-route',
+                    'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
+                    'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
+                    'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left',
+                    'SNS Topic': 'fas fa-bell',
+                    'SQS Queue': 'fas fa-envelope-open-text'
+                };
+                return map[serviceType] || 'fas fa-cloud';
+            },
+
+            getServiceIconColor(serviceType, isBg = false) {
+                const map = {
+                    'EC2 Instance': { text: 'text-orange-500', bg: 'bg-orange-50' },
+                    'EBS Volume': { text: 'text-purple-500', bg: 'bg-purple-50' },
+                    'RDS Instance': { text: 'text-blue-500', bg: 'bg-blue-50' },
+                    'Lambda Function': { text: 'text-yellow-500', bg: 'bg-yellow-50' },
+                    'S3 Bucket': { text: 'text-red-500', bg: 'bg-red-50' },
+                    'Load Balancer': { text: 'text-teal-500', bg: 'bg-teal-50' },
+                    'VPC': { text: 'text-green-500', bg: 'bg-green-50' },
+                    'Security Group': { text: 'text-red-600', bg: 'bg-red-50' },
+                    'CloudTrail': { text: 'text-blue-600', bg: 'bg-blue-50' },
+                    'Certificate Manager': { text: 'text-green-600', bg: 'bg-green-50' },
+                    'CloudWatch Log Group': { text: 'text-indigo-500', bg: 'bg-indigo-50' },
+                    'SNS Topic': { text: 'text-pink-500', bg: 'bg-pink-50' },
+                    'SQS Queue': { text: 'text-cyan-500', bg: 'bg-cyan-50' }
+                };
+                const colors = map[serviceType] || { text: 'text-gray-500', bg: 'bg-gray-50' };
+                return isBg ? colors.bg : colors.text;
+            }
+        };
         
-        getStateClass(state) {
-            const s = (state || '').toLowerCase();
-            if (['running', 'available', 'active', 'in-use', 'issued'].includes(s)) return 'bg-green-100 text-green-800 border-green-200';
-            if (['stopped', 'terminated', 'deleting', 'inactive', 'expired'].includes(s)) return 'bg-red-100 text-red-800 border-red-200';
-            if (['pending', 'stopping', 'pending_validation'].includes(s)) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            return 'bg-gray-100 text-gray-800 border-gray-200';
-        },
-
-        getServiceIcon(serviceType) {
-            const map = {
-                'EC2 Instance': 'fas fa-server', 'EBS Volume': 'fas fa-hdd',
-                'RDS Instance': 'fas fa-database', 'Lambda Function': 'fas fa-bolt',
-                'S3 Bucket': 'fas fa-archive', 'Load Balancer': 'fas fa-network-wired',
-                'Auto Scaling Group': 'fas fa-layer-group', 'VPC': 'fas fa-project-diagram',
-                'Security Group': 'fas fa-shield-alt', 'Route 53 Zone': 'fas fa-route',
-                'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
-                'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
-                'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left',
-                'SNS Topic': 'fas fa-bell',
-                'SQS Queue': 'fas fa-envelope-open-text'
-            };
-            return map[serviceType] || 'fas fa-cloud';
-        },
-
-        getServiceIconColor(serviceType, isBg = false) {
-            const map = {
-                'EC2 Instance': { text: 'text-orange-500', bg: 'bg-orange-50' },
-                'EBS Volume': { text: 'text-purple-500', bg: 'bg-purple-50' },
-                'RDS Instance': { text: 'text-blue-500', bg: 'bg-blue-50' },
-                'Lambda Function': { text: 'text-yellow-500', bg: 'bg-yellow-50' },
-                'S3 Bucket': { text: 'text-red-500', bg: 'bg-red-50' },
-                'Load Balancer': { text: 'text-teal-500', bg: 'bg-teal-50' },
-                'VPC': { text: 'text-green-500', bg: 'bg-green-50' },
-                'Security Group': { text: 'text-red-600', bg: 'bg-red-50' },
-                'CloudTrail': { text: 'text-blue-600', bg: 'bg-blue-50' },
-                'Certificate Manager': { text: 'text-green-600', bg: 'bg-green-50' },
-                'CloudWatch Log Group': { text: 'text-indigo-500', bg: 'bg-indigo-50' },
-                'SNS Topic': { text: 'text-pink-500', bg: 'bg-pink-50' },
-                'SQS Queue': { text: 'text-cyan-500', bg: 'bg-cyan-50' }
-            };
-            const colors = map[serviceType] || { text: 'text-gray-500', bg: 'bg-gray-50' };
-            return isBg ? colors.bg : colors.text;
-        }
-    };
-    
-    app.init();
+        app.init();
+    }, 100); // Small delay to ensure AlpineJS is ready
 });
 </script>
 

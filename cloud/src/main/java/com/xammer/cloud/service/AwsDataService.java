@@ -365,6 +365,7 @@ public RdsClient getRdsClient(String accountId, String region) {
             ).thenApply(v -> {
                 logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {}, assembling DTO ---", accountId);
 
+                List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.join();
                 List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ec2RecsFuture.join();
                 List<DashboardData.OptimizationRecommendation> ebsRecs = ebsRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ebsRecsFuture.join();
                 List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : lambdaRecsFuture.join();
@@ -382,7 +383,7 @@ public RdsClient getRdsClient(String accountId, String region) {
                     )).collect(Collectors.toList());
 
                 DashboardData.OptimizationSummary optimizationSummary = getOptimizationSummary(
-                    ec2Recs, ebsRecs, lambdaRecs, anomalies
+                    wastedResources, ec2Recs, ebsRecs, lambdaRecs, anomalies
                 );
                 
                 int securityScore = calculateSecurityScore(securityFindings);
@@ -394,7 +395,7 @@ public RdsClient getRdsClient(String accountId, String region) {
                         costHistoryFuture.join(), billingFuture.join(), iamFuture.join(), savingsFuture.join(),
                         ec2Recs, anomalies, ebsRecs, lambdaRecs,
                         reservationFuture.join(), reservationPurchaseFuture.join(),
-                        optimizationSummary, wastedResourcesFuture.join(), serviceQuotasFuture.join(),
+                        optimizationSummary, wastedResources, serviceQuotasFuture.join(),
                         securityScore);
 
                 data.setSelectedAccount(mainAccount);
@@ -1597,7 +1598,26 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
     public String getTagName(List<Tag> tags, String defaultName) { return tags.stream().filter(t -> t.key().equalsIgnoreCase("Name")).findFirst().map(Tag::value).orElse(defaultName); }
     private double calculateEbsMonthlyCost(Volume volume, String region) { double gbMonthPrice = pricingService.getEbsGbMonthPrice(region, volume.volumeTypeAsString()); return volume.size() * gbMonthPrice; }
     private double calculateSnapshotMonthlyCost(Snapshot snapshot) { if (snapshot.volumeSize() != null) return snapshot.volumeSize() * 0.05; return 0.0; }
-    private DashboardData.OptimizationSummary getOptimizationSummary(List<DashboardData.OptimizationRecommendation> ec2Recs, List<DashboardData.OptimizationRecommendation> ebsRecs, List<DashboardData.OptimizationRecommendation> lambdaRecs, List<DashboardData.CostAnomaly> anomalies) { double totalSavings = Stream.of(ec2Recs, ebsRecs, lambdaRecs).flatMap(List::stream).mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).sum(); long criticalAlerts = anomalies.size() + ec2Recs.size() + ebsRecs.size() + lambdaRecs.size(); return new DashboardData.OptimizationSummary(totalSavings, criticalAlerts); }
+    private DashboardData.OptimizationSummary getOptimizationSummary(
+        List<DashboardData.WastedResource> wastedResources,
+        List<DashboardData.OptimizationRecommendation> ec2Recs,
+        List<DashboardData.OptimizationRecommendation> ebsRecs,
+        List<DashboardData.OptimizationRecommendation> lambdaRecs,
+        List<DashboardData.CostAnomaly> anomalies
+    ) {
+        double rightsizingSavings = Stream.of(ec2Recs, ebsRecs, lambdaRecs)
+            .flatMap(List::stream)
+            .mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings)
+            .sum();
+
+        double wasteSavings = wastedResources.stream()
+            .mapToDouble(DashboardData.WastedResource::getMonthlySavings)
+            .sum();
+
+        double totalSavings = rightsizingSavings + wasteSavings;
+        long criticalAlerts = anomalies.size() + ec2Recs.size() + ebsRecs.size() + lambdaRecs.size();
+        return new DashboardData.OptimizationSummary(totalSavings, criticalAlerts);
+    }
     private String getServiceNameFromAnomaly(Anomaly anomaly) { if (anomaly.rootCauses() != null && !anomaly.rootCauses().isEmpty()) { RootCause rootCause = anomaly.rootCauses().get(0); if (rootCause.service() != null) return rootCause.service(); } return "Unknown Service"; }
     private String getFieldValue(Object details, String methodName) { try { Method method = details.getClass().getMethod(methodName); Object result = method.invoke(details); return result != null ? result.toString() : "0"; } catch (Exception e) { logger.debug("Could not access method {}: {}", methodName, e.getMessage()); return "N/A"; } }
     private String getTermValue(ReservationPurchaseRecommendation rec) { try { return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year"; } catch (Exception e) { logger.debug("Could not determine term value", e); return "1 Year"; } }
