@@ -853,8 +853,8 @@ function dashboardApp() {
             
             container.innerHTML = resources.map(res => `
                 <a href="/cloudlist?service=${encodeURIComponent(res.type)}" class="resource-card flex items-center gap-4 p-4 rounded-xl hover:shadow-md transition-all group">
-                    <div class="resource-icon w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <img src="/icons/${res.icon}" alt="${res.name}" class="w-8 h-8">
+                    <div class="resource-icon w-10 h-10 flex-shrink-0">
+                        <img src="/icons/${res.icon}" alt="${res.name}" class="w-full h-full rounded-xl object-cover">
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="font-semibold text-gray-800 truncate">${res.name}</p>
