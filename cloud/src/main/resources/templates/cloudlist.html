@@ -548,8 +548,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="flex items-center justify-between p-6 cursor-pointer toggle-button" data-target="#${groupId}">
                         <div class="flex items-center space-x-4 flex-1">
                             <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all duration-200"></i>
-                            <div class="service-icon w-12 h-12 flex items-center justify-center rounded-xl ${this.getServiceIconColor(group.serviceType, true)}">
-                                <i class="${this.getServiceIcon(group.serviceType)} text-2xl ${this.getServiceIconColor(group.serviceType)}"></i>
+                            <div class="service-icon w-12 h-12 flex items-center justify-center rounded-xl">
+                                <img src="/icons/${this.getServiceIcon(group.serviceType)}" alt="${group.serviceType}" class="w-full h-full rounded-xl object-cover">
                             </div>
                             <div class="flex-1">
                                 <h3 class="font-bold text-gray-800 text-lg">${group.serviceType}</h3>
@@ -704,40 +704,22 @@ document.addEventListener('DOMContentLoaded', function() {
             },
 
             getServiceIcon(serviceType) {
-                const map = {
-                    'EC2 Instance': 'fas fa-server', 'EBS Volume': 'fas fa-hdd',
-                    'RDS Instance': 'fas fa-database', 'Lambda Function': 'fas fa-bolt',
-                    'S3 Bucket': 'fas fa-archive', 'Load Balancer': 'fas fa-network-wired',
-                    'Auto Scaling Group': 'fas fa-layer-group', 'VPC': 'fas fa-project-diagram',
-                    'Security Group': 'fas fa-shield-alt', 'Route 53 Zone': 'fas fa-route',
-                    'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
-                    'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
-                    'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left',
-                    'SNS Topic': 'fas fa-bell',
-                    'SQS Queue': 'fas fa-envelope-open-text'
+                const iconMap = {
+                    'EC2 Instance': 'ec2-instances.png',
+                    'EBS Volume': 'aws-ebs.png',
+                    'RDS Instance': 'rds-instance.png',
+                    'Lambda Function': 'aws-lambda.png',
+                    'S3 Bucket': 's3-bucket.png',
+                    'Load Balancer': 'load-balancer.png',
+                    'Auto Scaling Group': 'autoscaling.png',
+                    'VPC': 'vpc.png',
+                    'Security Group': 'security-group.png',
+                    'Route 53 Zone': 'aws-route53.png',
+                    'EKS Cluster': 'aws-eks.png',
+                    'ECS Cluster': 'aws-ecs.png'
                 };
-                return map[serviceType] || 'fas fa-cloud';
+                return iconMap[serviceType] || 'default-icon.png';
             },
-
-            getServiceIconColor(serviceType, isBg = false) {
-                const map = {
-                    'EC2 Instance': { text: 'text-orange-500', bg: 'bg-orange-50' },
-                    'EBS Volume': { text: 'text-purple-500', bg: 'bg-purple-50' },
-                    'RDS Instance': { text: 'text-blue-500', bg: 'bg-blue-50' },
-                    'Lambda Function': { text: 'text-yellow-500', bg: 'bg-yellow-50' },
-                    'S3 Bucket': { text: 'text-red-500', bg: 'bg-red-50' },
-                    'Load Balancer': { text: 'text-teal-500', bg: 'bg-teal-50' },
-                    'VPC': { text: 'text-green-500', bg: 'bg-green-50' },
-                    'Security Group': { text: 'text-red-600', bg: 'bg-red-50' },
-                    'CloudTrail': { text: 'text-blue-600', bg: 'bg-blue-50' },
-                    'Certificate Manager': { text: 'text-green-600', bg: 'bg-green-50' },
-                    'CloudWatch Log Group': { text: 'text-indigo-500', bg: 'bg-indigo-50' },
-                    'SNS Topic': { text: 'text-pink-500', bg: 'bg-pink-50' },
-                    'SQS Queue': { text: 'text-cyan-500', bg: 'bg-cyan-50' }
-                };
-                const colors = map[serviceType] || { text: 'text-gray-500', bg: 'bg-gray-50' };
-                return isBg ? colors.bg : colors.text;
-            }
         };
         
         app.init();
