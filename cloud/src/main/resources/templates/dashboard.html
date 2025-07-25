@@ -839,22 +839,22 @@ function dashboardApp() {
             if (!inv) return;
             const container = document.getElementById('resourceInventory');
             const resources = [
-                { name: 'EC2 Instances', count: inv.ec2, type: 'EC2 Instance', icon: 'ec2-instances.png', color: 'from-orange-500 to-orange-600' },
-                { name: 'S3 Buckets', count: inv.s3Buckets, type: 'S3 Bucket', icon: 's3-bucket.png', color: 'from-green-500 to-green-600' },
-                { name: 'RDS Instances', count: inv.rdsInstances, type: 'RDS Instance', icon: 'rds-instance.png', color: 'from-blue-500 to-blue-600' },
-                { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'vpc.png', color: 'from-purple-500 to-purple-600' },
-                { name: 'Lambda Functions', count: inv.lambdas, type: 'Lambda Function', icon: 'aws-lambda.png', color: 'from-yellow-500 to-yellow-600' },
-                { name: 'EBS Volumes', count: inv.ebsVolumes, type: 'EBS Volume', icon: 'aws-ebs.png', color: 'from-red-500 to-red-600' },
-                { name: 'Route 53 Zones', count: inv.route53Zones, type: 'Route 53 Zone', icon: 'aws-route53.png', color: 'from-indigo-500 to-indigo-600' },
-                { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'load-balancer.png', color: 'from-pink-500 to-pink-600' },
-                { name: 'ECS Clusters', count: inv.ecs, type: 'ECS', icon: 'aws-ecs.png', color: 'from-teal-500 to-teal-600' },
-                { name: 'EKS Clusters', count: inv.kubernetes, type: 'EKS', icon: 'aws-eks.png', color: 'from-cyan-500 to-cyan-600' },
+                { name: 'EC2 Instances', count: inv.ec2, type: 'EC2 Instance', icon: 'ec2-instances.png' },
+                { name: 'S3 Buckets', count: inv.s3Buckets, type: 'S3 Bucket', icon: 's3-bucket.png' },
+                { name: 'RDS Instances', count: inv.rdsInstances, type: 'RDS Instance', icon: 'rds-instance.png' },
+                { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'vpc.png' },
+                { name: 'Lambda Functions', count: inv.lambdas, type: 'Lambda Function', icon: 'aws-lambda.png' },
+                { name: 'EBS Volumes', count: inv.ebsVolumes, type: 'EBS Volume', icon: 'aws-ebs.png' },
+                { name: 'Route 53 Zones', count: inv.route53Zones, type: 'Route 53 Zone', icon: 'aws-route53.png' },
+                { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'load-balancer.png' },
+                { name: 'ECS Clusters', count: inv.ecs, type: 'ECS', icon: 'aws-ecs.png' },
+                { name: 'EKS Clusters', count: inv.kubernetes, type: 'EKS', icon: 'aws-eks.png' },
             ];
             
             container.innerHTML = resources.map(res => `
                 <a href="/cloudlist?service=${encodeURIComponent(res.type)}" class="resource-card flex items-center gap-4 p-4 rounded-xl hover:shadow-md transition-all group">
-                    <div class="resource-icon w-10 h-10 bg-gradient-to-br ${res.color} rounded-lg flex items-center justify-center flex-shrink-0">
-                        <img src="/icons/${res.icon}" alt="${res.name}" class="w-6 h-6 filter brightness-0 invert">
+                    <div class="resource-icon w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <img src="/icons/${res.icon}" alt="${res.name}" class="w-8 h-8">
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="font-semibold text-gray-800 truncate">${res.name}</p>
