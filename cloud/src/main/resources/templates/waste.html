@@ -9,284 +9,99 @@
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* --- Combined and Refined Styles from Both Files --- */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        
         :root {
             --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
             --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             --glass-bg: rgba(255, 255, 255, 0.95);
-            --glass-border: rgba(255, 255, 255, 0.2);
+            --glass-border: rgba(229, 231, 235, 0.8);
         }
-
         body {
             font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             min-height: 100vh;
         }
-        
         [x-cloak] { display: none !important; }
-        
-        .glass-card {
-            background: var(--glass-bg);
+        .hidden { display: none !important; }
+        .rotate-90 { transform: rotate(90deg); }
+        .transition-all { transition: all 0.3s ease-in-out; }
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
             backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-bottom: 1px solid var(--glass-border);
         }
-        
-        .glass-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-        
         .kpi-card {
-            position: relative;
-            overflow: hidden;
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden; background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 1rem;
         }
-        
         .kpi-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: var(--error-gradient);
-            transform: scaleX(0);
-            transition: transform 0.3s ease;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+            background: var(--error-gradient); transform: scaleX(0); transition: transform 0.3s ease;
         }
-        
-        .kpi-card:hover::before {
-            transform: scaleX(1);
-        }
-        
         .kpi-card:hover {
             transform: translateY(-4px) scale(1.02);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
-        
-        .skeleton {
-            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-            border-radius: 8px;
-        }
-        
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
-        
-        .header-gradient {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
-        }
-        
+        .kpi-card:hover::before { transform: scaleX(1); }
         .btn-primary {
-            background: var(--primary-gradient);
-            border: none;
-            color: white;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            background: var(--primary-gradient); border: none; color: white; transition: all 0.3s ease;
+            position: relative; overflow: hidden;
         }
-        
-        .btn-primary::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
-        }
-        
-        .btn-primary:hover::before {
-            left: 100%;
-        }
-        
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+            transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
         }
-        
         .btn-danger {
-            background: var(--error-gradient);
-            border: none;
-            color: white;
-            transition: all 0.3s ease;
+            background: var(--error-gradient); border: none; color: white; transition: all 0.3s ease;
         }
-        
         .btn-danger:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 10px -3px rgba(239, 68, 68, 0.4);
+            transform: translateY(-1px); box-shadow: 0 6px 10px -3px rgba(239, 68, 68, 0.4);
         }
-        
-        .filter-button {
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+        /* Styles for the new service group cards */
+        .service-group {
+            background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden; border-radius: 1rem;
         }
-        
-        .filter-button.active {
-            background: var(--primary-gradient);
-            color: white;
-            box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.4);
+        .service-group:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
-        
-        .filter-button:not(.active):hover {
-            background: rgba(102, 126, 234, 0.1);
-            transform: translateY(-1px);
-        }
-        
-        .table-enhanced {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid var(--glass-border);
-        }
-        
-        .table-enhanced thead {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        }
-        
-        .table-enhanced tr {
-            transition: all 0.2s ease;
-        }
-        
-        .table-enhanced tr:hover {
-            background: rgba(102, 126, 234, 0.05);
-            transform: translateX(2px);
-        }
-        
-        .table-enhanced .selected-row {
-            background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(102, 126, 234, 0.05) 100%);
-            border-left: 4px solid #667eea;
-        }
-        
-        /* CHANGE 1: The problematic .waste-row class is removed and replaced with a new class for the first cell. */
-        .waste-cell-indicator {
-            position: relative;
-        }
-        
-        .waste-cell-indicator::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--error-gradient);
-            transform: scaleY(0);
-            transition: transform 0.2s ease;
-        }
-        
-        tr:hover .waste-cell-indicator::before {
-            transform: scaleY(1);
-        }
-        
-        .empty-state {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 2px dashed rgba(16, 185, 129, 0.3);
-            transition: all 0.3s ease;
-        }
-        
-        .empty-state:hover {
-            border-color: rgba(16, 185, 129, 0.5);
-            background: rgba(255, 255, 255, 0.98);
-        }
-        
-        .pulse-dot {
-            animation: pulse-dot 2s infinite;
-        }
-        
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading-spinner {
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .chart-container {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid var(--glass-border);
-        }
-        
-        .action-button {
-            transition: all 0.2s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .action-button:hover {
-            transform: scale(1.05);
-        }
-        
-        .bulk-action-bar {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(102, 126, 234, 0.05) 100%);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(102, 126, 234, 0.2);
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        
-        .gradient-text {
-            background: var(--error-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .resource-type-badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            backdrop-filter: blur(10px);
+        .service-icon {
+            transition: all 0.3s ease; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
+        .service-icon:hover {
+            transform: scale(1.1) rotate(5deg); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .resource-counter {
+            background: var(--primary-gradient); color: white; border: 2px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+        }
+        .resource-row {
+            cursor: pointer; transition: all 0.2s ease; position: relative; overflow: hidden;
+        }
+        .resource-row:hover {
+            transform: translateX(4px);
+            background: linear-gradient(90deg, rgba(102, 126, 234, 0.03) 0%, rgba(102, 126, 234, 0.08) 100%);
+        }
+        .resource-row::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+            background: var(--error-gradient); transform: scaleY(0); transition: transform 0.2s ease;
+        }
+        .resource-row:hover::before { transform: scaleY(1); }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .skeleton {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%; animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .loading-spinner {
+            border: 3px solid #f3f4f6; border-top: 3px solid #667eea; border-radius: 50%;
+            width: 20px; height: 20px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -300,238 +115,136 @@
         <main class="flex-1 flex flex-col min-h-screen" x-data="wasteManagement()">
             <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
                 <div class="flex items-center space-x-4">
-                    <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-recycle text-white text-xl"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-800">Waste Management</h1>
-                        <p class="text-sm text-gray-600">Identify and eliminate unused cloud resources</p>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-red-500 rounded-full pulse-dot"></div>
-                        <span class="text-sm text-gray-600">Waste detected</span>
-                    </div>
-                    <button @click="loadWastedResources(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                        <span x-text="isLoading ? 'Scanning...' : 'Scan Resources'"></span>
-                    </button>
-                </div>
+                     <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
+                         <i class="fas fa-recycle text-white text-xl"></i>
+                     </div>
+                     <div>
+                         <h1 class="text-2xl font-bold text-gray-800">Waste Management</h1>
+                         <p class="text-sm text-gray-600">Identify and eliminate unused cloud resources</p>
+                     </div>
+                 </div>
+                 <div class="flex items-center space-x-4">
+                     <div class="flex items-center space-x-2">
+                         <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+                         <span class="text-sm text-gray-600">Waste detected</span>
+                     </div>
+                     <button @click="loadWastedResources(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
+                         <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                         <span x-text="isLoading ? 'Scanning...' : 'Scan Resources'"></span>
+                     </button>
+                 </div>
             </header>
 
             <div class="flex-1 p-8 space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div class="kpi-card rounded-2xl p-6 fade-in">
-                        <template x-if="isLoading">
-                            <div class="skeleton w-full h-32 rounded-lg"></div>
-                        </template>
-                        <template x-if="!isLoading">
-                            <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    <h3 class="text-gray-600 text-sm font-medium mb-2">Potential Savings</h3>
-                                    <p class="text-4xl font-bold gradient-text mb-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
-                                    <p class="text-xs text-gray-500">per month</p>
-                                </div>
-                                <div class="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-coins text-white text-xl"></i>
-                                </div>
-                            </div>
-                        </template>
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-gray-600 text-sm font-medium mb-2">Potential Savings</h3>
+                        <p class="text-4xl font-bold text-red-600 mb-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
+                        <p class="text-xs text-gray-500">per month</p>
                     </div>
-
-                    <div class="kpi-card rounded-2xl p-6 fade-in">
-                        <template x-if="isLoading">
-                            <div class="skeleton w-full h-32 rounded-lg"></div>
-                        </template>
-                        <template x-if="!isLoading">
-                            <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    <h3 class="text-gray-600 text-sm font-medium mb-2">Wasted Resources</h3>
-                                    <p class="text-4xl font-bold gradient-text mb-1" x-text="resourceCount"></p>
-                                    <p class="text-xs text-gray-500">items found</p>
-                                </div>
-                                <div class="w-14 h-14 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-trash-alt text-white text-xl"></i>
-                                </div>
-                            </div>
-                        </template>
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-gray-600 text-sm font-medium mb-2">Wasted Resources</h3>
+                        <p class="text-4xl font-bold text-red-600 mb-1" x-text="resourceCount"></p>
+                        <p class="text-xs text-gray-500">items found</p>
                     </div>
-
-                    <div class="glass-card rounded-2xl p-6 fade-in">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-bold text-gray-800">Savings by Category</h3>
-                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                                <i class="fas fa-chart-pie text-white text-sm"></i>
-                            </div>
-                        </div>
-                        <div class="h-48" x-show="isLoading">
-                            <div class="skeleton w-full h-full rounded-lg"></div>
-                        </div>
-                        <div class="h-48" x-show="!isLoading">
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Savings by Category</h3>
+                        <div class="h-48">
                             <canvas id="savingsChart"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <div class="glass-card rounded-2xl p-8 fade-in">
-                    <div class="flex flex-wrap justify-between items-center gap-6 mb-8">
-                        <div x-show="selectedResources.length === 0" class="flex flex-wrap items-center gap-4">
-                            <div class="flex items-center space-x-2">
-                                <i class="fas fa-filter text-gray-500"></i>
-                                <span class="text-sm font-semibold text-gray-700">Filter by category:</span>
+                <div class="space-y-6">
+                    <div x-show="isLoading" x-cloak class="w-full space-y-4">
+                        <template x-for="i in 3">
+                            <div class="service-group p-6">
+                                <div class="flex items-center justify-between animate-pulse">
+                                    <div class="flex items-center space-x-4 flex-1">
+                                        <div class="h-6 w-6 rounded bg-gray-300"></div>
+                                        <div class="h-12 w-12 rounded-xl bg-gray-300"></div>
+                                        <div class="h-6 w-40 rounded-lg bg-gray-300"></div>
+                                        <div class="h-6 w-16 rounded-full bg-gray-300"></div>
+                                    </div>
+                                    <div class="h-10 w-28 rounded-lg bg-gray-300"></div>
+                                </div>
                             </div>
-                            <div class="flex flex-wrap gap-2">
-                                <template x-for="cat in allPossibleCategories" :key="cat">
-                                    <button 
-                                        @click="filter = cat" 
-                                        :class="filter === cat ? 'active' : ''" 
-                                        class="filter-button px-4 py-2 text-sm font-semibold rounded-xl transition-all"
-                                        x-text="cat">
-                                    </button>
-                                </template>
-                            </div>
-                        </div>
-                        
-                        <div x-show="selectedResources.length > 0" x-cloak class="bulk-action-bar flex items-center gap-4 p-4 rounded-xl w-full">
-                            <div class="flex items-center space-x-2">
-                                <i class="fas fa-check-circle text-indigo-600"></i>
-                                <span class="text-sm font-bold text-indigo-800" x-text="`${selectedResources.length} resource${selectedResources.length > 1 ? 's' : ''} selected`"></span>
-                            </div>
-                            <div class="flex items-center gap-3 ml-auto">
-                                <button @click="handleBulkAction('delete')" class="btn-danger px-4 py-2 text-sm font-semibold rounded-lg hover:bg-red-700 transition-all">
-                                    <i class="fas fa-trash-alt mr-2"></i>Delete Selected
-                                </button>
-                                <button @click="handleBulkAction('archive')" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
-                                    <i class="fas fa-archive mr-2"></i>Archive Selected
-                                </button>
-                                <button @click="selectedResources = []" class="text-gray-400 hover:text-gray-600 transition-colors">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        </div>
+                        </template>
                     </div>
 
-                    <div x-show="isLoading" x-cloak class="table-enhanced">
-                        <table class="w-full text-sm">
-                            <thead class="text-xs text-gray-700 uppercase">
-                                <tr>
-                                    <th class="p-4"><div class="h-5 w-5 skeleton rounded"></div></th>
-                                    <th class="px-6 py-4"><div class="h-4 skeleton rounded w-32"></div></th>
-                                    <th class="px-6 py-4"><div class="h-4 skeleton rounded w-24"></div></th>
-                                    <th class="px-6 py-4"><div class="h-4 skeleton rounded w-20"></div></th>
-                                    <th class="px-6 py-4"><div class="h-4 skeleton rounded w-28"></div></th>
-                                    <th class="px-6 py-4"><div class="h-4 skeleton rounded w-32"></div></th>
-                                    <th class="px-6 py-4"><div class="h-4 skeleton rounded w-16 mx-auto"></div></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <template x-for="i in 5" :key="i">
-                                    <tr class="border-b border-gray-200">
-                                        <td class="p-4"><div class="h-5 w-5 skeleton rounded"></div></td>
-                                        <td class="px-6 py-4">
-                                            <div class="h-4 skeleton rounded w-full mb-2"></div>
-                                            <div class="h-3 skeleton rounded w-2/3"></div>
-                                        </td>
-                                        <td class="px-6 py-4"><div class="h-6 skeleton rounded-full w-24"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-3/4"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-20"></div></td>
-                                        <td class="px-6 py-4"><div class="h-4 skeleton rounded w-full"></div></td>
-                                        <td class="px-6 py-4"><div class="h-8 skeleton rounded w-20 mx-auto"></div></td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <div x-show="!isLoading && filteredResources.length === 0" x-cloak class="empty-state text-center py-20 px-8 rounded-2xl">
-                        <div class="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <i class="fas fa-leaf text-white text-3xl"></i>
-                        </div>
+                    <div x-show="!isLoading && groupedFilteredResources.length === 0" x-cloak class="text-center py-20 px-8 rounded-2xl bg-white/80">
+                         <div class="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                             <i class="fas fa-leaf text-white text-3xl"></i>
+                         </div>
                         <h3 class="text-2xl font-bold text-gray-800 mb-2">No Waste Found!</h3>
-                        <p class="text-gray-600 mb-6" x-text="filter === 'All' ? 'Your cloud environment is perfectly optimized.' : `No wasted resources found for category: ${filter}`"></p>
-                        <button @click="loadWastedResources(true)" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg">
-                            <i class="fas fa-sync-alt mr-2"></i>Scan Again
-                        </button>
+                        <p class="text-gray-600">Your cloud environment is perfectly optimized.</p>
                     </div>
 
-                    <div x-show="!isLoading && filteredResources.length > 0" x-cloak class="table-enhanced">
-                        <table class="w-full text-sm">
-                            <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
-                                <tr>
-                                    <th class="p-4">
-                                        <input type="checkbox" @change="toggleAll" :checked="isAllSelected" class="form-checkbox rounded text-indigo-600 focus:ring-indigo-500">
-                                    </th>
-                                    <th class="px-6 py-4 text-left font-bold">Resource</th>
-                                    <th class="px-6 py-4 text-left font-bold">Type</th>
-                                    <th class="px-6 py-4 text-left font-bold">Region</th>
-                                    <th class="px-6 py-4 text-left font-bold">Monthly Cost</th>
-                                    <th class="px-6 py-4 text-left font-bold">Reason</th>
-                                    <th class="px-6 py-4 text-center font-bold">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <template x-for="resource in filteredResources" :key="resource.resourceId">
-                                    <tr class="hover:bg-gray-50 transition-all" :class="selectedResources.includes(resource.resourceId) ? 'selected-row' : ''">
-                                        <td class="p-4 waste-cell-indicator">
-                                            <input type="checkbox" :value="resource.resourceId" x-model="selectedResources" class="form-checkbox rounded text-indigo-600 focus:ring-indigo-500">
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center space-x-3">
-                                                <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                    <i class="fas fa-exclamation-triangle text-white text-xs"></i>
-                                                </div>
-                                                <div>
-                                                    <p class="font-semibold text-gray-900" x-text="resource.resourceName || 'Untitled Resource'"></p>
-                                                    <p class="text-xs text-gray-500 font-mono" x-text="resource.resourceId"></p>
-                                                </div>
+                    <template x-for="group in groupedFilteredResources" :key="group.serviceType">
+                        <div class="service-group fade-in">
+                            <div @click="group.open = !group.open" class="flex items-center justify-between p-6 cursor-pointer">
+                                <div class="flex items-center space-x-4 flex-1">
+                                    <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all" :class="{'rotate-90': group.open}"></i>
+                                    <div class="service-icon w-12 h-12 flex items-center justify-center rounded-xl" :class="getServiceIconColor(group.serviceType, true)">
+                                        <i class="text-2xl" :class="[getServiceIcon(group.serviceType), getServiceIconColor(group.serviceType, false)]"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <h3 class="font-bold text-gray-800 text-lg" x-text="group.serviceType"></h3>
+                                        <p class="text-sm text-gray-600">Wasted Resource Category</p>
+                                    </div>
+                                    <div class="resource-counter text-sm font-bold px-4 py-2 rounded-full" x-text="group.resources.length"></div>
+                                </div>
+                            </div>
+                            <div x-show="group.open" x-cloak class="bg-gradient-to-r from-gray-50/30 to-gray-100/30">
+                                <template x-for="resource in group.resources" :key="resource.resourceId">
+                                    <div class="resource-row border-t border-gray-200/50">
+                                        <div @click="resource.detailsOpen = !resource.detailsOpen" class="grid grid-cols-12 items-center p-6 pl-16 text-sm">
+                                            <div class="col-span-5 flex items-center space-x-4">
+                                                 <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all" :class="{'rotate-90': resource.detailsOpen}"></i>
+                                                 <div class="flex-1">
+                                                     <p class="font-bold text-gray-800" x-text="resource.resourceName || 'Untitled'"></p>
+                                                     <p class="font-mono text-xs text-gray-500" x-text="resource.resourceId"></p>
+                                                 </div>
                                             </div>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <span class="resource-type-badge" :class="getResourceTypeColor(resource.resourceType)" x-text="resource.resourceType"></span>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center space-x-1">
+                                            <div class="col-span-2 flex items-center space-x-2">
                                                 <i class="fas fa-map-marker-alt text-gray-400 text-xs"></i>
-                                                <span class="font-medium text-gray-700" x-text="resource.region"></span>
+                                                <span class="font-semibold text-gray-600" x-text="resource.region"></span>
                                             </div>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center space-x-1">
+                                            <div class="col-span-2 flex items-center space-x-1">
                                                 <i class="fas fa-dollar-sign text-red-500 text-xs"></i>
                                                 <span class="font-bold text-red-600" x-text="resource.monthlySavings.toFixed(2)"></span>
                                             </div>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <p class="text-sm text-gray-700" x-text="resource.reason"></p>
-                                        </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex justify-center gap-2">
-                                                <button 
-                                                    @click="handleAction('delete', resource)"
-                                                    :disabled="!isActionable(resource, 'delete')"
-                                                    title="Delete this resource" 
-                                                    class="action-button px-3 py-2 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                </button>
-                                                <button 
-                                                    @click="handleAction('archive', resource)" 
-                                                    title="Archive this finding" 
-                                                    class="action-button px-3 py-2 text-xs font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-all">
-                                                    <i class="fas fa-archive"></i>
-                                                </button>
+                                            <td class="col-span-3 text-right pr-4">
+                                                <div class="flex justify-end gap-2">
+                                                     <button @click.stop="handleAction('delete', resource)" :disabled="!isActionable(resource, 'delete')" title="Delete" class="action-button px-3 py-2 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                         <i class="fas fa-trash-alt"></i>
+                                                     </button>
+                                                     <button @click.stop="handleAction('archive', resource)" title="Archive" class="action-button px-3 py-2 text-xs font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">
+                                                         <i class="fas fa-archive"></i>
+                                                     </button>
+                                                </div>
+                                            </td>
+                                        </div>
+                                        <div x-show="resource.detailsOpen" x-cloak class="resource-details p-6 pl-24 text-sm text-gray-700 bg-gray-50/50 border-t border-gray-200">
+                                            <h4 class="font-semibold text-base mb-3">Waste Details:</h4>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <div><strong class="text-gray-600">Reason:</strong> <span x-text="resource.reason"></span></div>
+                                                <div><strong class="text-gray-600">Monthly Cost:</strong> $<span x-text="resource.monthlySavings.toFixed(2)"></span></div>
+                                                <div><strong class="text-gray-600">Region:</strong> <span x-text="resource.region"></span></div>
                                             </div>
-                                        </td>
-                                    </tr>
+                                        </div>
+                                    </div>
                                 </template>
-                            </tbody>
-                        </table>
-                    </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
+
             </div>
         </main>
     </div>
 </div>
+
 
 <script>
 function wasteManagement() {
@@ -541,7 +254,6 @@ function wasteManagement() {
         wastedResources: [],
         selectedResources: [],
         savingsChart: null,
-        // --- MODIFIED: Static list of all possible categories ---
         allPossibleCategories: [
             'All', 'EBS Volume', 'Snapshot', 'AMI', 'Elastic IP', 
             'RDS Instance', 'Load Balancer', 'Security Group', 'EC2 Instance', 
@@ -587,9 +299,6 @@ function wasteManagement() {
                 })
                 .finally(() => this.isLoading = false);
         },
-
-        // --- REMOVED DYNAMIC CATEGORIES GETTER ---
-        // The `allPossibleCategories` property is now used directly in the HTML.
 
         get filteredResources() {
             if (this.filter === 'All') {
@@ -680,7 +389,7 @@ function wasteManagement() {
                 }
             });
         },
-
+        
         getResourceTypeColor(type) {
             const colors = {
                 'EBS Volume': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -703,7 +412,6 @@ function wasteManagement() {
 
         isActionable(resource, action) {
             if (action === 'delete') {
-                // --- MODIFIED: Added new deletable types ---
                 const deletableTypes = [
                     'EBS Volume', 'Elastic IP', 'Snapshot', 'AMI', 
                     'ENI', 'Log Group', 'DB Snapshot'
@@ -742,6 +450,72 @@ function wasteManagement() {
             // On success, remove from list
             this.wastedResources = this.wastedResources.filter(r => !this.selectedResources.includes(r.resourceId));
             this.selectedResources = [];
+        },
+
+        get groupedFilteredResources() {
+            if (!this.wastedResources) return [];
+            
+            const groups = this.wastedResources.reduce((acc, res) => {
+                const key = res.resourceType || 'Other';
+                if (!acc[key]) {
+                    acc[key] = {
+                        serviceType: key,
+                        resources: [],
+                        open: false, // Default to closed
+                    };
+                }
+                res.detailsOpen = false; // Add state for inner dropdown
+                acc[key].resources.push(res);
+                return acc;
+            }, {});
+            
+            // Sort groups alphabetically by serviceType
+            return Object.values(groups).sort((a, b) => a.serviceType.localeCompare(b.serviceType));
+        },
+
+        // ---------- ICON FUNCTIONS UPDATED AND MERGED ----------
+        getServiceIcon(serviceType) {
+            const map = {
+                // From cloud list
+                'EC2 Instance': 'fas fa-server', 'EBS Volume': 'fas fa-hdd',
+                'RDS Instance': 'fas fa-database', 'Lambda Function': 'fas fa-bolt',
+                'S3 Bucket': 'fas fa-archive', 'Load Balancer': 'fas fa-network-wired',
+                'Auto Scaling Group': 'fas fa-layer-group', 'VPC': 'fas fa-project-diagram',
+                'Security Group': 'fas fa-shield-alt', 'Route 53 Zone': 'fas fa-route',
+                'ElastiCache Cluster': 'fas fa-memory', 'DynamoDB Table': 'fas fa-table',
+                'ECR Repository': 'fab fa-docker', 'CloudTrail': 'fas fa-shoe-prints',
+                'Certificate Manager': 'fas fa-certificate', 'CloudWatch Log Group': 'fas fa-align-left',
+                'SNS Topic': 'fas fa-bell', 'SQS Queue': 'fas fa-envelope-open-text',
+                // From waste page
+                'Elastic IP': 'fas fa-map-pin', 'Snapshot': 'fas fa-camera-retro',
+                'AMI': 'fas fa-compact-disc', 'ENI': 'fas fa-ethernet',
+                'Log Group': 'fas fa-file-alt'
+            };
+            return map[serviceType] || 'fas fa-cloud';
+        },
+        getServiceIconColor(serviceType, isBg = false) {
+            const map = {
+                // Merged from both files
+                'EC2 Instance': { text: 'text-orange-500', bg: 'bg-orange-50' },
+                'EBS Volume': { text: 'text-purple-500', bg: 'bg-purple-50' },
+                'RDS Instance': { text: 'text-blue-500', bg: 'bg-blue-50' },
+                'Lambda Function': { text: 'text-yellow-500', bg: 'bg-yellow-50' },
+                'S3 Bucket': { text: 'text-red-500', bg: 'bg-red-50' },
+                'Load Balancer': { text: 'text-teal-500', bg: 'bg-teal-50' },
+                'VPC': { text: 'text-green-500', bg: 'bg-green-50' },
+                'Security Group': { text: 'text-red-600', bg: 'bg-red-50' },
+                'CloudTrail': { text: 'text-blue-600', bg: 'bg-blue-50' },
+                'Certificate Manager': { text: 'text-green-600', bg: 'bg-green-50' },
+                'CloudWatch Log Group': { text: 'text-indigo-500', bg: 'bg-indigo-50' },
+                'SNS Topic': { text: 'text-pink-500', bg: 'bg-pink-50' },
+                'SQS Queue': { text: 'text-cyan-500', bg: 'bg-cyan-50' },
+                'Elastic IP': { text: 'text-green-500', bg: 'bg-green-50' },
+                'Snapshot': { text: 'text-indigo-500', bg: 'bg-indigo-50' },
+                'AMI': { text: 'text-yellow-500', bg: 'bg-yellow-50' },
+                'Log Group': { text: 'text-gray-600', bg: 'bg-gray-100' }
+            };
+            const colors = map[serviceType] || { text: 'text-gray-500', bg: 'bg-gray-50' };
+            return isBg ? colors.bg : colors.text;
         }
     }
 }

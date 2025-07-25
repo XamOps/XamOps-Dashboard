@@ -306,7 +306,6 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="securityCenter()">
-            <!-- Enhanced Header -->
             <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-20">
                 <div class="flex items-center space-x-4">
                     <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
@@ -334,7 +333,6 @@
             </header>
 
             <div class="flex-1 p-8 space-y-8">
-                <!-- Enhanced Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <template x-if="isLoading">
                         <div class="skeleton h-36"></div>
@@ -398,7 +396,6 @@
                     </template>
                 </div>
 
-                <!-- Enhanced Findings Table grouped by Severity -->
                 <div class="space-y-6">
                     <div x-show="isLoading" class="skeleton h-96 rounded-2xl"></div>
                     
@@ -443,7 +440,7 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <template x-for="finding in getFindingsBySeverity(severity)" :key="finding.resourceId + finding.description">
+                                                    <template x-for="(finding, index) in getFindingsBySeverity(severity)" :key="finding.resourceId + '-' + index">
                                                         <tr>
                                                             <td>
                                                                 <div class="category-display" x-text="finding.category"></div>
@@ -478,7 +475,6 @@
                 </div>
             </div>
 
-            <!-- Enhanced Remediation Modal -->
             <div x-show="isModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isModalOpen = false">
                 <div class="modal-content rounded-2xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
                     <div class="flex justify-between items-start pb-6 border-b border-gray-200">
@@ -556,9 +552,18 @@ function securityCenter() {
         },
         
         processFindings(data) {
-            this.findings = data.sort((a, b) => {
+            // Filter out any null, undefined, or malformed entries before sorting
+            const validFindings = Array.isArray(data) ? data.filter(f => f && typeof f === 'object' && f.severity) : [];
+
+            this.findings = validFindings.sort((a, b) => {
                 const severityOrder = { 'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3 };
-                return (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4);
+                // Safely access severity after validation
+                const severityA = a.severity.trim();
+                const severityB = b.severity.trim();
+                const capitalizedA = severityA.charAt(0).toUpperCase() + severityA.slice(1).toLowerCase();
+                const capitalizedB = severityB.charAt(0).toUpperCase() + severityB.slice(1).toLowerCase();
+                
+                return (severityOrder[capitalizedA] || 4) - (severityOrder[capitalizedB] || 4);
             });
         },
         
@@ -573,13 +578,18 @@ function securityCenter() {
         
         get severityCounts() {
             return this.findings.reduce((acc, finding) => {
-                acc[finding.severity] = (acc[finding.severity] || 0) + 1;
+                if (finding.severity) {
+                    const severity = finding.severity.trim();
+                    const capitalizedSeverity = severity.charAt(0).toUpperCase() + severity.slice(1).toLowerCase();
+                    acc[capitalizedSeverity] = (acc[capitalizedSeverity] || 0) + 1;
+                }
                 return acc;
             }, {});
         },
         
         getFindingsBySeverity(severity) {
-            return this.findings.filter(f => f.severity === severity);
+            // Make the filtering case-insensitive to fix the display issue
+            return this.findings.filter(f => f.severity && f.severity.trim().toLowerCase() === severity.toLowerCase());
         },
         
         toggleSeverity(severity) {
