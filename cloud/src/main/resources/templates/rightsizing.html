@@ -422,8 +422,8 @@
                                     <tr class="hover:bg-gray-50 transition-all">
                                         <td class="px-6 py-4 first-cell-indicator">
                                             <div class="flex items-center space-x-3">
-                                                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                    <i class="fas fa-server text-white text-xs"></i>
+                                                <div class="w-8 h-8 rounded-lg flex-shrink-0">
+                                                    <img :src="'/icons/' + getServiceIcon(rec.service)" :alt="rec.service" class="w-full h-full rounded-lg object-cover">
                                                 </div>
                                                 <span class="font-mono text-gray-800 font-medium" x-text="rec.resourceId"></span>
                                             </div>
@@ -536,6 +536,15 @@ function rightsizing() {
             }, {});
             return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
         },
+
+        getServiceIcon(serviceType) {
+            const iconMap = {
+                'EC2': 'ec2-instances.png',
+                'EBS': 'aws-ebs.png',
+                'Lambda': 'aws-lambda.png'
+            };
+            return iconMap[serviceType] || 'default-icon.png';
+        }
     }
 }
 </script>
