@@ -38,7 +38,34 @@ public class DashboardData {
     @Data @AllArgsConstructor @NoArgsConstructor public static class TaggingCompliance { private double compliancePercentage; private int totalResourcesScanned; private int untaggedResourcesCount; private List<UntaggedResource> untaggedResources; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class UntaggedResource { private String resourceId; private String resourceType; private String region; private List<String> missingTags; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class Account { private String id; private String name; private List<RegionStatus> regionStatus; private ResourceInventory resourceInventory; private CloudWatchStatus cloudWatchStatus; private List<SecurityInsight> securityInsights; private CostHistory costHistory; private List<BillingSummary> billingSummary; private IamResources iamResources; private SavingsSummary savingsSummary; private List<OptimizationRecommendation> ec2Recommendations; private List<CostAnomaly> costAnomalies; private List<OptimizationRecommendation> ebsRecommendations; private List<OptimizationRecommendation> lambdaRecommendations; private ReservationAnalysis reservationAnalysis; private List<ReservationPurchaseRecommendation> reservationPurchaseRecommendations; private OptimizationSummary optimizationSummary; private List<WastedResource> wastedResources; private List<ServiceQuotaInfo> serviceQuotas; private int securityScore; }
-    @Data @NoArgsConstructor @AllArgsConstructor public static class RegionStatus { private String regionName; private String regionId; private String status; private double lat; private double lon; }
+    @Data 
+@NoArgsConstructor 
+public static class RegionStatus {
+    private String regionId;
+    private String regionName;
+    private String status;
+    private double latitude;
+    private double longitude;
+    private String activeServices;
+    
+    // Single manual constructor - remove @AllArgsConstructor to avoid conflicts
+    public RegionStatus(String regionId, String regionName, String status, 
+                       double latitude, double longitude, String activeServices) {
+        this.regionId = regionId;
+        this.regionName = regionName;
+        this.status = status;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.activeServices = activeServices;
+    }
+    
+    // Optional: Constructor without activeServices for backward compatibility
+    public RegionStatus(String regionId, String regionName, String status, 
+                       double latitude, double longitude) {
+        this(regionId, regionName, status, latitude, longitude, null);
+    }
+}
+
     @Data @NoArgsConstructor @AllArgsConstructor public static class CloudWatchStatus { private long ok; private long alarm; private long insufficient; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class IamResources { private int users; private int groups; private int customerManagedPolicies; private int roles; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class BillingSummary { private String serviceName; private double monthToDateCost; }
