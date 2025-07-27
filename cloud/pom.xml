@@ -69,6 +69,11 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <dependency>
+            <groupId>com.giffing.bucket4j.spring.boot.starter</groupId>
+            <artifactId>bucket4j-spring-boot-starter</artifactId>
+            <version>0.8.1</version>
+        </dependency>
 
         <!-- H2 Database (can be removed or scoped to test if no longer needed for main app) -->
         <dependency>
@@ -215,28 +220,28 @@
         </dependency>
 
         <dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-websocket</artifactId>
-</dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
 
-<!-- Add these to your pom.xml if not already present -->
-<dependency>
-    <groupId>software.amazon.awssdk</groupId>
-    <artifactId>lambda</artifactId>
-    <version>2.20.26</version>
-</dependency>
+        <!-- Add these to your pom.xml if not already present -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>lambda</artifactId>
+            <version>2.20.26</version>
+        </dependency>
 
-<dependency>
-    <groupId>software.amazon.awssdk</groupId>
-    <artifactId>cloudwatch</artifactId>
-    <version>2.20.26</version>
-</dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cloudwatch</artifactId>
+            <version>2.20.26</version>
+        </dependency>
 
-<dependency>
-    <groupId>software.amazon.awssdk</groupId>
-    <artifactId>rds</artifactId>
-    <version>2.20.26</version>
-</dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>rds</artifactId>
+            <version>2.20.26</version>
+        </dependency>
 
 
         <!-- Dependency for Excel Export -->
