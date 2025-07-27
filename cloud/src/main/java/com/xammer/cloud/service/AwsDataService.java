@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.domain.Client;
 import com.xammer.cloud.domain.CloudAccount;
@@ -120,28 +121,16 @@ public class AwsDataService {
     private final DashboardUpdateService dashboardUpdateService;
     private final AiAdvisorService aiAdvisorService;
 
+    // New map to store region coordinates
+    private final Map<String, double[]> regionCoordinates = new HashMap<>();
+
 
     @Value("${cloudformation.template.s3.url}")
     private String cloudFormationTemplateUrl;
 
-    private static final Map<String, double[]> REGION_GEO = Map.ofEntries(
-            Map.entry("us-east-1", new double[]{38.8951, -77.0364}),
-            Map.entry("us-east-2", new double[]{40.0, -83.0}),
-            Map.entry("us-west-1", new double[]{37.3541, -121.9552}),
-            Map.entry("us-west-2", new double[]{45.5231, -122.6765}),
-            Map.entry("ca-central-1", new double[]{45.4112, -75.6984}),
-            Map.entry("eu-west-1", new double[]{53.3498, -6.2603}),
-            Map.entry("eu-west-2", new double[]{51.5074, -0.1278}),
-            Map.entry("eu-west-3", new double[]{48.8566, 2.3522}),
-            Map.entry("eu-central-1", new double[]{50.1109, 8.6821}),
-            Map.entry("eu-north-1", new double[]{59.3293, 18.0686}),
-            Map.entry("ap-southeast-1", new double[]{1.3521, 103.8198}),
-            Map.entry("ap-southeast-2", new double[]{-33.8688, 151.2093}),
-            Map.entry("ap-northeast-1", new double[]{35.6895, 139.6917}),
-            Map.entry("ap-northeast-2", new double[]{37.5665, 126.9780}),
-            Map.entry("ap-northeast-3", new double[]{34.6937, 135.5023}),
-            Map.entry("ap-south-1", new double[]{19.0760, 72.8777}),
-            Map.entry("sa-east-1", new double[]{-23.5505, -46.6333}));
+    // REMOVED: private static final Map<String, double[]> REGION_GEO = ...
+
+    private static final Set<String> SUSTAINABLE_REGIONS = Set.of("eu-west-1", "eu-north-1", "ca-central-1", "us-west-2");
 
     @Autowired
     public AwsDataService(
@@ -166,6 +155,9 @@ public class AwsDataService {
         this.requiredTags = requiredTags;
         this.instanceSizeOrder = instanceSizeOrder;
         this.keyQuotas = keyQuotas;
+        
+        // Load coordinates when the service is initialized
+        loadRegionCoordinates();
 
         String tmpAccountId;
         try {
@@ -181,7 +173,29 @@ public class AwsDataService {
         return cloudAccountRepository.findByAwsAccountId(accountId)
             .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
     }
-
+    
+    private void loadRegionCoordinates() {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            URL url = new URL("https://raw.githubusercontent.com/sunshower-io/provider-lists/master/aws/output/regions.json");
+            JsonNode root = mapper.readTree(url);
+            JsonNode regionsNode = root.get("regions");
+            if (regionsNode != null && regionsNode.isArray()) {
+                for (JsonNode regionNode : regionsNode) {
+                    String regionKey = regionNode.path("key").asText();
+                    JsonNode coords = regionNode.path("coordinates");
+                    if (!regionKey.isEmpty() && coords.isObject()) {
+                        double latitude = coords.path("latitude").asDouble();
+                        double longitude = coords.path("longitude").asDouble();
+                        this.regionCoordinates.put(regionKey, new double[]{latitude, longitude});
+                    }
+                }
+                logger.info("Successfully loaded {} region coordinates from external source.", this.regionCoordinates.size());
+            }
+        } catch (IOException e) {
+            logger.error("Failed to load region coordinates from external source. The map will be empty, and regions may not display correctly.", e);
+        }
+    }
  public LambdaClient getLambdaClient(String accountId, String region) {
     return awsClientProvider.getLambdaClient(getAccount(accountId), region);
 }
@@ -215,7 +229,8 @@ public RdsClient getRdsClient(String accountId, String region) {
             CompletableFuture<List<Map<String, String>>> ec2Future = CompletableFuture.supplyAsync(() -> {
                 try {
                     List<Map<String, String>> ec2Instances = new ArrayList<>();
-                    Ec2Client ec2Client = awsClientProvider.getEc2Client(account, configuredRegion);
+                    // Using configuredRegion here, but ideally should iterate through active regions or infer from resource ARN
+                    Ec2Client ec2Client = awsClientProvider.getEc2Client(account, configuredRegion); 
                     DescribeInstancesResponse instancesResponse = ec2Client.describeInstances();
                     
                     instancesResponse.reservations().forEach(reservation -> {
@@ -240,6 +255,7 @@ public RdsClient getRdsClient(String accountId, String region) {
             CompletableFuture<List<Map<String, String>>> rdsFuture = CompletableFuture.supplyAsync(() -> {
                 try {
                     List<Map<String, String>> rdsInstances = new ArrayList<>();
+                    // Using configuredRegion here, but ideally should iterate through active regions or infer from resource ARN
                     RdsClient rdsClient = awsClientProvider.getRdsClient(account, configuredRegion);
                     var dbInstancesResponse = rdsClient.describeDBInstances();
                     
@@ -264,6 +280,7 @@ public RdsClient getRdsClient(String accountId, String region) {
             CompletableFuture<List<Map<String, String>>> lambdaFuture = CompletableFuture.supplyAsync(() -> {
                 try {
                     List<Map<String, String>> lambdaFunctions = new ArrayList<>();
+                    // Using configuredRegion here, but ideally should iterate through active regions or infer from resource ARN
                     LambdaClient lambdaClient = awsClientProvider.getLambdaClient(account, configuredRegion);
                     var functionsResponse = lambdaClient.listFunctions();
                     
@@ -273,7 +290,8 @@ public RdsClient getRdsClient(String accountId, String region) {
                         functionInfo.put("id", function.functionName());
                         functionInfo.put("runtime", function.runtime().toString());
                         functionInfo.put("state", function.state().toString());
-                        functionInfo.put("region", getCurrentRegion(accountId));
+                        // Corrected: Use ARN to get region for Lambda functions
+                        functionInfo.put("region", getRegionFromArn(function.functionArn())); 
                         lambdaFunctions.add(functionInfo);
                     });
                     return lambdaFunctions;
@@ -287,7 +305,7 @@ public RdsClient getRdsClient(String accountId, String region) {
             CompletableFuture<List<Map<String, String>>> s3Future = CompletableFuture.supplyAsync(() -> {
                 try {
                     List<Map<String, String>> s3Buckets = new ArrayList<>();
-                    S3Client s3Client = awsClientProvider.getS3Client(account, "us-east-1");
+                    S3Client s3Client = awsClientProvider.getS3Client(account, "us-east-1"); // S3 listBuckets is global
                     var bucketsResponse = s3Client.listBuckets();
                     
                     bucketsResponse.buckets().forEach(bucket -> {
@@ -295,7 +313,20 @@ public RdsClient getRdsClient(String accountId, String region) {
                         bucketInfo.put("name", bucket.name());
                         bucketInfo.put("id", bucket.name());
                         bucketInfo.put("created", bucket.creationDate().toString());
-                        bucketInfo.put("region", getCurrentRegion(accountId));
+                        // Corrected: Fetch actual bucket region
+                        String bucketRegion = "us-east-1"; // Default for S3
+                        try {
+                            bucketRegion = s3Client.getBucketLocation(req -> req.bucket(bucket.name())).locationConstraintAsString();
+                            if (bucketRegion == null || bucketRegion.isEmpty()) bucketRegion = "us-east-1";
+                        } catch (S3Exception e) {
+                            String correctRegion = e.awsErrorDetails().sdkHttpResponse().firstMatchingHeader("x-amz-bucket-region").orElse(null);
+                            if (correctRegion != null) {
+                                bucketRegion = correctRegion;
+                            } else {
+                                logger.warn("Could not determine region for bucket {} from S3Exception. Sticking with default. Error: {}", bucket.name(), e.getMessage());
+                            }
+                        }
+                        bucketInfo.put("region", bucketRegion);
                         s3Buckets.add(bucketInfo);
                     });
                     return s3Buckets;
@@ -437,13 +468,7 @@ public RdsClient getRdsClient(String accountId, String region) {
 
             List<DashboardData.RegionStatus> regionStatuses = allRegions.parallelStream()
                 .filter(region -> !"not-opted-in".equals(region.optInStatus()))
-                .filter(region -> {
-                    if (!REGION_GEO.containsKey(region.regionName())) {
-                        logger.warn("Region {} is available but has no geographic coordinates defined. It will be excluded from the map.", region.regionName());
-                        return false;
-                    }
-                    return true;
-                })
+                // REMOVED: filter(region -> !REGION_GEO.containsKey(region.regionName()))
                 .map(region -> {
                     software.amazon.awssdk.regions.Region sdkRegion = software.amazon.awssdk.regions.Region.of(region.regionName());
                     Ec2Client regionEc2 = awsClientProvider.getEc2Client(account, sdkRegion.id());
@@ -520,7 +545,13 @@ public RdsClient getRdsClient(String accountId, String region) {
             try {
                 S3Client s3 = awsClientProvider.getS3Client(account, "us-east-1");
                 return s3.listBuckets().buckets().size();
-            } catch (Exception e) {
+            }
+            catch (AwsServiceException e) {
+                // Log S3-specific errors which can be common (e.g., bucket not found)
+                logger.warn("Inventory check failed for S3 for account {}. AWS Error: {}", account.getAwsAccountId(), e.awsErrorDetails().errorMessage());
+                return 0;
+            }
+            catch (Exception e) {
                 logger.error("Inventory check failed for S3 for account {}", account.getAwsAccountId(), e);
                 return 0;
             }
@@ -564,9 +595,17 @@ public RdsClient getRdsClient(String accountId, String region) {
         });
     }
     
-
-    private static final Set<String> SUSTAINABLE_REGIONS = Set.of("eu-west-1", "eu-north-1", "ca-central-1", "us-west-2");
-    private DashboardData.RegionStatus mapRegionToStatus(Region region) { double[] coords = REGION_GEO.get(region.regionName()); String status = "ACTIVE"; if (SUSTAINABLE_REGIONS.contains(region.regionName())) { status = "SUSTAINABLE"; } return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, coords[0], coords[1]); }
+    // MODIFIED: mapRegionToStatus to provide default coordinates as REGION_GEO is removed
+    private DashboardData.RegionStatus mapRegionToStatus(Region region) { 
+        double[] geo = this.regionCoordinates.getOrDefault(region.regionName(), new double[]{0.0, 0.0});
+        double lat = geo[0]; 
+        double lon = geo[1]; 
+        String status = "ACTIVE"; 
+        if (SUSTAINABLE_REGIONS.contains(region.regionName())) { 
+            status = "SUSTAINABLE"; 
+        } 
+        return new DashboardData.RegionStatus(region.regionName(), region.regionName(), status, lat, lon); 
+    }
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "allRecommendations", key = "#accountId")
@@ -643,7 +682,13 @@ public RdsClient getRdsClient(String accountId, String region) {
             .map(regionStatus -> CompletableFuture.supplyAsync(() -> {
                 try {
                     return fetchFunction.apply(regionStatus.getRegionId());
-                } catch (Exception e) {
+                }
+                catch (AwsServiceException e) {
+                    // Log AWS specific errors differently to avoid unnecessary stack traces for expected errors like region not enabled for service
+                    logger.warn("Cloudlist sub-task failed for account {}: {} in region {}. AWS Error: {}", account.getAwsAccountId(), serviceName, regionStatus.getRegionId(), e.awsErrorDetails().errorMessage());
+                    return Collections.<T>emptyList();
+                } 
+                catch (Exception e) {
                     logger.error("Cloudlist sub-task failed for account {}: {} in region {}.", account.getAwsAccountId(), serviceName, regionStatus.getRegionId(), e);
                     return Collections.<T>emptyList();
                 }
@@ -806,39 +851,54 @@ public RdsClient getRdsClient(String accountId, String region) {
                     .collect(Collectors.toList());
         }, "CloudTrails");
     }
-    
-    private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist(CloudAccount account) {
-        return CompletableFuture.supplyAsync(() -> {
-            logger.debug("Fetching S3 buckets for account {}", account.getAwsAccountId());
-            S3Client s3Lister = awsClientProvider.getS3Client(account, "us-east-1");
-            try {
-                List<Bucket> buckets = s3Lister.listBuckets().buckets();
-                logger.debug("Found {} S3 buckets to process for account {}", buckets.size(), account.getAwsAccountId());
-                List<ResourceDto> resources = buckets.parallelStream().map(b -> {
-                    String bucketRegion = "us-east-1";
-                    try {
-                        bucketRegion = s3Lister.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
-                        if (bucketRegion == null || bucketRegion.isEmpty()) bucketRegion = "us-east-1";
-                    } catch (S3Exception e) {
-                        String correctRegion = e.awsErrorDetails().sdkHttpResponse()
-                                                .firstMatchingHeader("x-amz-bucket-region")
-                                                .orElse(null);
-                        if (correctRegion != null) {
-                            bucketRegion = correctRegion;
-                        } else {
-                            logger.warn("Could not determine region for bucket {} from S3Exception. Sticking with default. Error: {}", b.name(), e.getMessage());
+private CompletableFuture<List<ResourceDto>> fetchS3BucketsForCloudlist(CloudAccount account) {
+    return CompletableFuture.supplyAsync(() -> {
+        logger.debug("Fetching S3 buckets for account {}", account.getAwsAccountId());
+        S3Client s3GlobalClient = awsClientProvider.getS3Client(account, "us-east-1");
+        try {
+            List<Bucket> buckets = s3GlobalClient.listBuckets().buckets();
+            logger.debug("Found {} S3 buckets to process for account {}", buckets.size(), account.getAwsAccountId());
+            List<ResourceDto> resources = buckets.parallelStream().map(b -> {
+                String bucketRegion = null;
+                try {
+                    String locationConstraint = s3GlobalClient.getBucketLocation(req -> req.bucket(b.name())).locationConstraintAsString();
+                    bucketRegion = (locationConstraint == null || locationConstraint.isEmpty()) ? "us-east-1" : locationConstraint;
+                } catch (S3Exception e) {
+                    bucketRegion = e.awsErrorDetails().sdkHttpResponse()
+                                    .firstMatchingHeader("x-amz-bucket-region")
+                                    .orElse(null);
+                    
+                    if (bucketRegion == null) {
+                        String message = e.awsErrorDetails().errorMessage();
+                        if (message != null && message.contains("expecting")) {
+                            String[] parts = message.split("'");
+                            if (parts.length >= 4) {
+                                bucketRegion = parts[3];
+                            }
                         }
                     }
-                    return new ResourceDto(b.name(), b.name(), "S3 Bucket", bucketRegion, "Available", b.creationDate(), Collections.emptyMap());
-                }).collect(Collectors.toList());
-                logger.debug("Successfully processed {} S3 buckets for account {}", resources.size(), account.getAwsAccountId());
-                return resources;
-            } catch (Exception e) {
-                logger.error("Cloudlist sub-task failed for account {}: S3 Buckets.", account.getAwsAccountId(), e);
-                return Collections.emptyList();
-            }
-        });
-    }
+
+                    if (bucketRegion == null) {
+                        logger.warn("Could not determine region for bucket {}. Skipping. Error: {}", b.name(), e.getMessage());
+                        return null;
+                    }
+                } catch (Exception e) {
+                    logger.warn("General error getting location for bucket {}. Skipping. Error: {}", b.name(), e.getMessage());
+                    return null;
+                }
+
+                return new ResourceDto(b.name(), b.name(), "S3 Bucket", bucketRegion, "Available", b.creationDate(), Collections.emptyMap());
+            })
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+            logger.debug("Successfully processed {} S3 buckets for account {}", resources.size(), account.getAwsAccountId());
+            return resources;
+        } catch (Exception e) {
+            logger.error("Cloudlist sub-task failed for account {}: S3 Buckets.", account.getAwsAccountId(), e);
+            return Collections.emptyList();
+        }
+    });
+}
 
     private CompletableFuture<List<ResourceDto>> fetchRoute53HostedZonesForCloudlist(CloudAccount account) {
         return CompletableFuture.supplyAsync(() -> {
@@ -978,7 +1038,7 @@ public RdsClient getRdsClient(String accountId, String region) {
     private GetMetricDataRequest buildMetricDataRequest(String resourceId, String metricName, String namespace, String dimensionName) { 
         Metric metric = Metric.builder().namespace(namespace).metricName(metricName).dimensions(Dimension.builder().name(dimensionName).value(resourceId).build()).build(); 
         MetricStat metricStat = MetricStat.builder().metric(metric).period(300).stat("Average").build(); 
-        MetricDataQuery metricDataQuery = MetricDataQuery.builder().id(metricName.toLowerCase().replace(" ", "")).metricStat(metricStat).returnData(true).build(); 
+        MetricDataQuery metricDataQuery = MetricDataQuery.builder().id(metricName.toLowerCase().replace(" ", "").replace("/", "")).metricStat(metricStat).returnData(true).build(); 
         return GetMetricDataRequest.builder().startTime(Instant.now().minus(1, ChronoUnit.DAYS)).endTime(Instant.now()).metricDataQueries(metricDataQuery).scanBy(ScanBy.TIMESTAMP_DESCENDING).build(); 
     }
 
@@ -1286,7 +1346,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 return results.get(0).values().stream().mapToDouble(Double::doubleValue).average().orElse(100.0) < 3.0;
             }
         } catch (Exception e) {
-            logger.error("Could not get metrics for EC2 instance {} in account {}: {}", instance.instanceId(), account.getAwsAccountId(), e.getMessage());
+            logger.error("Could not get metrics for EC2 instance {} in account {}: {}", e.getMessage());
         }
         return false;
     }
@@ -1370,7 +1430,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     ))
                     .collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Could not fetch Cost Anomalies for account {}. This might be a permissions issue or the service is not enabled.", account.getAwsAccountId(), e);
+            logger.error("Could not fetch Cost Anomalies for account {}. This might be a permissions issue or the service is not enabled.", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -1430,7 +1490,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                         .collect(Collectors.toList());
             }, "Lambda Recommendations");
         } catch (Exception e) {
-            logger.error("Could not fetch Lambda Recommendations for account {}. This might be a permissions issue or Compute Optimizer is not enabled.", account.getAwsAccountId(), e);
+            logger.error("Could not fetch Lambda Recommendations for account {}. This might be a permissions issue or Compute Optimizer is not enabled.", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -1452,7 +1512,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
             double coveragePercentage = coverages.isEmpty() || coverages.get(0).total() == null ? 0.0 : Double.parseDouble(coverages.get(0).total().coverageHours().coverageHoursPercentage());
             return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(utilizationPercentage, coveragePercentage));
         } catch (Exception e) {
-            logger.error("Could not fetch reservation analysis data for account {}", account.getAwsAccountId(), e);
+            logger.error("Could not fetch reservation analysis data for account {}", e);
             return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(0.0, 0.0));
         }
     }
@@ -1505,7 +1565,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     .map(g -> new DashboardData.BillingSummary(g.keys().get(0), Double.parseDouble(g.metrics().get("UnblendedCost").amount())))
                     .filter(s -> s.getMonthToDateCost() > 0.01).collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Could not fetch billing summary for account {}", account.getAwsAccountId(), e);
+            logger.error("Could not fetch billing summary for account {}", e);
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
     }
@@ -1516,10 +1576,10 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
         IamClient iam = awsClientProvider.getIamClient(account);
         logger.info("Fetching IAM resources for account {}...", account.getAwsAccountId());
         int users = 0, groups = 0, policies = 0, roles = 0;
-        try { users = iam.listUsers().users().size(); } catch (Exception e) { logger.error("IAM check failed for Users on account {}", account.getAwsAccountId(), e); }
-        try { groups = iam.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Groups on account {}", account.getAwsAccountId(), e); }
-        try { policies = iam.listPolicies(r -> r.scope(PolicyScopeType.LOCAL)).policies().size(); } catch (Exception e) { logger.error("IAM check failed for Policies on account {}", account.getAwsAccountId(), e); }
-        try { roles = iam.listRoles().roles().size(); } catch (Exception e) { logger.error("IAM check failed for Roles on account {}", account.getAwsAccountId(), e); }
+        try { users = iam.listUsers().users().size(); } catch (Exception e) { logger.error("IAM check failed for Users on account {}", e); }
+        try { groups = iam.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Groups on account {}", e); }
+        try { policies = iam.listPolicies(r -> r.scope(PolicyScopeType.LOCAL)).policies().size(); } catch (Exception e) { logger.error("IAM check failed for Policies on account {}", e); }
+        try { roles = iam.listRoles().roles().size(); } catch (Exception e) { logger.error("IAM check failed for Roles on account {}", e); }
         return CompletableFuture.completedFuture(new DashboardData.IamResources(users, groups, policies, roles));
     }
 
@@ -1554,7 +1614,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 anomalies.add(isAnomaly);
             }
         } catch (Exception e) {
-            logger.error("Could not fetch cost history for account {}", account.getAwsAccountId(), e);
+            logger.error("Could not fetch cost history for account {}", e);
         }
         
         return CompletableFuture.completedFuture(new DashboardData.CostHistory(labels, costs, anomalies));
@@ -1874,74 +1934,88 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
         });
     }
 
-    private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Buckets(CloudAccount account) {
-        return CompletableFuture.supplyAsync(() -> {
-            logger.info("Security Scan for account {}: Checking for public S3 buckets...", account.getAwsAccountId());
-            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
-            S3Client s3Lister = awsClientProvider.getS3Client(account, "us-east-1");
-            try {
-                List<Bucket> buckets = s3Lister.listBuckets().buckets();
-                buckets.parallelStream().forEach(bucket -> {
+private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Buckets(CloudAccount account) {
+    return CompletableFuture.supplyAsync(() -> {
+        logger.info("Security Scan for account {}: Checking for public S3 buckets...", account.getAwsAccountId());
+        List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+        S3Client s3GlobalClient = awsClientProvider.getS3Client(account, "us-east-1");
+        try {
+            List<Bucket> buckets = s3GlobalClient.listBuckets().buckets();
+            buckets.parallelStream().forEach(bucket -> {
+                String bucketName = bucket.name();
+                String bucketRegion = null;
+
+                try {
+                    String locationConstraint = s3GlobalClient.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
+                    bucketRegion = (locationConstraint == null || locationConstraint.isEmpty()) ? "us-east-1" : locationConstraint;
+                } catch (S3Exception e) {
+                    // First attempt: Get region from response header
+                    bucketRegion = e.awsErrorDetails().sdkHttpResponse()
+                                    .firstMatchingHeader("x-amz-bucket-region")
+                                    .orElse(null);
+
+                    // Fallback: Parse region from error message
+                    if (bucketRegion == null) {
+                        String message = e.awsErrorDetails().errorMessage();
+                        if (message != null && message.contains("expecting")) {
+                            String[] parts = message.split("'");
+                            if (parts.length >= 4) {
+                                bucketRegion = parts[3];
+                            }
+                        }
+                    }
+
+                    if (bucketRegion == null) {
+                        logger.warn("Could not determine region for bucket {} from S3Exception. Skipping. Error: {}", bucketName, e.getMessage());
+                        return;
+                    }
+                } catch (Exception e) {
+                    logger.warn("General error getting location for bucket {} for public access check. Skipping. Error: {}", bucketName, e.getMessage());
+                    return;
+                }
+
+                S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
+                boolean isPublic = false;
+                String reason = "";
+
+                try {
+                    PublicAccessBlockConfiguration pab = regionalS3Client.getPublicAccessBlock(r -> r.bucket(bucketName)).publicAccessBlockConfiguration();
+                    if (!pab.blockPublicAcls() || !pab.ignorePublicAcls() || !pab.blockPublicPolicy() || !pab.restrictPublicBuckets()) {
+                        isPublic = true;
+                        reason = "Public Access Block is not fully enabled.";
+                    }
+                } catch (Exception e) {
+                    logger.debug("Could not get Public Access Block for bucket {}. Checking ACLs. Error: {}", bucketName, e.getMessage());
+                }
+
+                if (!isPublic) {
                     try {
-                        String bucketName = bucket.name();
-                        String bucketRegion = "us-east-1";
-                        try {
-                            bucketRegion = s3Lister.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
-                            if (bucketRegion == null || bucketRegion.isEmpty()) {
-                                bucketRegion = "us-east-1";
-                            }
-                        } catch (S3Exception e) {
-                            bucketRegion = e.awsErrorDetails().sdkHttpResponse()
-                                            .firstMatchingHeader("x-amz-bucket-region")
-                                            .orElse("us-east-1");
-                            logger.warn("Could not directly get location for bucket {}, falling back to region '{}' from exception.", bucketName, bucketRegion);
-                        }
-        
-                        S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
-                        boolean isPublic = false;
-                        String reason = "";
-        
-                        try {
-                            GetPublicAccessBlockRequest pabRequest = GetPublicAccessBlockRequest.builder().bucket(bucketName).build();
-                            PublicAccessBlockConfiguration pab = regionalS3Client.getPublicAccessBlock(pabRequest).publicAccessBlockConfiguration();
-                            if (!pab.blockPublicAcls() || !pab.ignorePublicAcls() || !pab.blockPublicPolicy() || !pab.restrictPublicBuckets()) {
-                                isPublic = true;
-                                reason = "Public Access Block is not fully enabled.";
-                            }
-                        } catch (Exception e) {
-                            logger.debug("Could not get Public Access Block for bucket {}. It might not be set. Checking ACLs. Error: {}", bucketName, e.getMessage());
-                        }
-        
-                        if (!isPublic) {
-                            try {
-                                boolean hasPublicAcl = regionalS3Client.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
-                                    .anyMatch(grant -> {
-                                        String granteeUri = grant.grantee().uri();
-                                        return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
-                                            && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
-                                    });
-                                if (hasPublicAcl) {
-                                    isPublic = true;
-                                    reason = "Bucket ACL grants public access.";
-                                }
-                            } catch (Exception e) {
-                                 logger.warn("Could not check ACL for bucket {}: {}", bucketName, e.getMessage());
-                            }
-                        }
-        
-                        if (isPublic) {
-                            findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "Critical", reason, "CIS AWS Foundations", "2.1.2"));
+                        boolean hasPublicAcl = regionalS3Client.getBucketAcl(r -> r.bucket(bucketName)).grants().stream()
+                            .anyMatch(grant -> {
+                                String granteeUri = grant.grantee().uri();
+                                return (granteeUri != null && (granteeUri.endsWith("AllUsers") || granteeUri.endsWith("AuthenticatedUsers")))
+                                    && (grant.permission() == Permission.READ || grant.permission() == Permission.WRITE || grant.permission() == Permission.FULL_CONTROL);
+                            });
+                        if (hasPublicAcl) {
+                            isPublic = true;
+                            reason = "Bucket ACL grants public access.";
                         }
                     } catch (Exception e) {
-                        logger.error("Failed to process S3 bucket security check for bucket: {}", bucket.name(), e);
+                         logger.warn("Could not check ACL for bucket {}: {}", bucketName, e.getMessage());
                     }
-                });
-            } catch (Exception e) {
-                logger.error("Security Scan failed for account {}: Could not list S3 buckets.", account.getAwsAccountId(), e);
-            }
-            return findings;
-        });
-    }
+                }
+
+                if (isPublic) {
+                    findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "Critical", reason, "CIS AWS Foundations", "2.1.2"));
+                }
+            });
+        } catch (Exception e) {
+            logger.error("Security Scan failed for account {}: Could not list S3 buckets.", account.getAwsAccountId(), e);
+        }
+        return findings;
+    });
+}
+
 
     private CompletableFuture<List<DashboardData.SecurityFinding>> findUnrestrictedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
@@ -1992,7 +2066,8 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 return findings;
             }
             try {
-                CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, activeRegions.get(0).getRegionId());
+                // Use the configured region for CloudTrail client, as CloudTrail itself is regional but trails can be multi-region.
+                CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, configuredRegion);
                 List<Trail> trails = cloudTrail.describeTrails().trailList();
                 if (trails.isEmpty()) {
                     findings.add(new DashboardData.SecurityFinding("Account", "Global", "CloudTrail", "Critical", "No CloudTrail trails are configured for the account.", "CIS AWS Foundations", "2.1"));
@@ -2000,7 +2075,10 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 }
                 boolean hasActiveMultiRegionTrail = trails.stream().anyMatch(t -> {
                     try {
-                        boolean isLogging = cloudTrail.getTrailStatus(r -> r.name(t.name())).isLogging();
+                        // Ensure we use the home region of the trail for getTrailStatus if it's different from configuredRegion
+                        // or ensure the client is built for the correct region when checking status.
+                        CloudTrailClient regionalTrailClient = awsClientProvider.getCloudTrailClient(account, t.homeRegion());
+                        boolean isLogging = regionalTrailClient.getTrailStatus(r -> r.name(t.name())).isLogging();
                         return t.isMultiRegionTrail() && isLogging;
                     } catch (Exception e) {
                         logger.warn("Could not get status for trail {}, assuming not logging.", t.name());
@@ -2184,7 +2262,8 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
         if (tagKey == null || tagKey.isBlank()) return CompletableFuture.completedFuture(Collections.emptyList());
         try {
             GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
-                    .timePeriod(DateInterval.builder().start(LocalDate.now().withDayOfMonth(1).toString()).end(LocalDate.now().plusDays(1).toString()).build())
+                    .timePeriod(DateInterval.builder().start(LocalDate.now().withDayOfMonth(1).toString())
+                            .end(LocalDate.now().plusDays(1).toString()).build())
                     .granularity(software.amazon.awssdk.services.costexplorer.model.Granularity.MONTHLY).metrics("UnblendedCost")
                     .groupBy(GroupDefinition.builder().type(GroupDefinitionType.TAG).key(tagKey).build()).build();
 
@@ -2198,7 +2277,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 .filter(map -> (double) map.get("cost") > 0.01)
                 .collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Could not fetch cost by tag key '{}' for account {}. This tag may not be activated in the billing console.", tagKey, accountId, e);
+            logger.error("Could not fetch cost by tag key '{}' for account {}. This tag may not be activated in the billing console.", tagKey, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2224,7 +2303,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 .collect(Collectors.toList());
             return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
-            logger.error("Could not fetch cost by region for account {}", account.getAwsAccountId(), e);
+            logger.error("Could not fetch cost by region for account {}", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2280,7 +2359,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                         }
                     }
                 } catch (Exception e) {
-                    logger.error("Could not fetch service quotas for {} in account {}.", serviceCode, account.getAwsAccountId(), e);
+                    logger.error("Could not fetch service quotas for {} in account {}.", serviceCode, e);
                 }
             }
             return CompletableFuture.completedFuture(quotaInfos);
@@ -2316,7 +2395,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     return ec2.describeInstances(r -> r.filters(f -> f.name("instance-state-name").values("running")))
                               .reservations().stream().mapToInt(r -> r.instances().size()).sum();
                 } catch (Exception e) {
-                    logger.error("Failed to count EC2 instances in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    logger.error("Failed to count EC2 instances in region {} for account {}", region.getRegionId(), e);
                     return 0;
                 }
             }))
@@ -2336,7 +2415,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     Ec2Client ec2 = awsClientProvider.getEc2Client(account, region.getRegionId());
                     return ec2.describeVpcs().vpcs().size();
                 } catch (Exception e) {
-                    logger.error("Failed to count VPCs in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    logger.error("Failed to count VPCs in region {} for account {}", region.getRegionId(), e);
                     return 0;
                 }
             }))
@@ -2356,7 +2435,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     RdsClient rds = awsClientProvider.getRdsClient(account, region.getRegionId());
                     return rds.describeDBInstances().dbInstances().size();
                 } catch (Exception e) {
-                    logger.error("Failed to count RDS instances in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    logger.error("Failed to count RDS instances in region {} for account {}", region.getRegionId(), e);
                     return 0;
                 }
             }))
@@ -2378,7 +2457,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                         .filter(lb -> "application".equalsIgnoreCase(lb.typeAsString()))
                         .count();
                 } catch (Exception e) {
-                    logger.error("Failed to count ALBs in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                    logger.error("Failed to count ALBs in region {} for account {}", region.getRegionId(), e);
                     return 0;
                 }
             }))
@@ -2482,7 +2561,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
             return CompletableFuture.completedFuture(new HistoricalReservationDataDto(labels, utilPercentages, covPercentages));
 
         } catch (Exception e) {
-            logger.error("Could not fetch historical reservation data for account {}", account.getAwsAccountId(), e);
+            logger.error("Could not fetch historical reservation data for account {}", e);
             return CompletableFuture.completedFuture(new HistoricalReservationDataDto(Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
         }
     }
@@ -2543,7 +2622,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 logger.info("Generated {} RI modification recommendations for account {}.", recommendations.size(), account.getAwsAccountId());
                 return CompletableFuture.completedFuture(recommendations);
             } catch (Exception e) {
-                logger.error("Could not generate reservation modification recommendations for account {}", account.getAwsAccountId(), e);
+                logger.error("Could not generate reservation modification recommendations for account {}", e);
                 return CompletableFuture.completedFuture(Collections.emptyList());
             }
         });
@@ -2616,7 +2695,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
 
             return modifyResponse.reservedInstancesModificationId();
         } catch (Exception e) {
-            logger.error("Failed to execute RI modification for ID {}: {}", request.getReservationId(), e.getMessage());
+            logger.error("Failed to execute RI modification for ID {}: {}", e.getMessage());
             throw new RuntimeException("AWS API call to modify reservation failed.", e);
         }
     }
@@ -2662,7 +2741,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     .collect(Collectors.toList())
             );
         } catch (Exception e) {
-            logger.error("Could not fetch reservation cost by tag key '{}' for account {}", tagKey, accountId, e);
+            logger.error("Could not fetch reservation cost by tag key '{}' for account {}", tagKey, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2687,7 +2766,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
             }).filter(Objects::nonNull).collect(Collectors.toList());
             return CompletableFuture.completedFuture(clusters);
         } catch (Exception e) {
-            logger.error("Could not list EKS clusters for account {}", accountId, e);
+            logger.error("Could not list EKS clusters for account {}", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2728,7 +2807,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
             logger.error("Kubernetes API error while fetching nodes for cluster {}: {} - {}", clusterName, e.getCode(), e.getResponseBody(), e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         } catch (Exception e) {
-            logger.error("Failed to get nodes for cluster {} in account {}", clusterName, accountId, e);
+            logger.error("Failed to get nodes for cluster {} in account {}", clusterName, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2802,7 +2881,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     .map(ns -> ns.getMetadata().getName())
                     .collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Failed to get namespaces for cluster {} in account {}", clusterName, accountId, e);
+            logger.error("Failed to get namespaces for cluster {} in account {}", clusterName, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2828,7 +2907,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 );
             }).collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Failed to get deployments for cluster {} in account {}", clusterName, accountId, e);
+            logger.error("Failed to get deployments for cluster {} in account {}", clusterName, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -2873,7 +2952,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                 );
             }).collect(Collectors.toList()));
         } catch (Exception e) {
-            logger.error("Failed to get pods for cluster {} in account {}", clusterName, accountId, e);
+            logger.error("Failed to get pods for cluster {} in account {}", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
@@ -3154,13 +3233,16 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
             }
         }
         logger.warn("Could not find {} resource {} in any active region.", serviceType, resourceId);
-        return configuredRegion;
+        // MODIFIED: Return null instead of configuredRegion if region not found
+        return null; 
     }
 
     private String findInstanceRegion(CloudAccount account, String instanceId) {
         logger.debug("Attempting to find region for instance {}", instanceId);
         
-        Ec2Client baseEc2Client = awsClientProvider.getEc2Client(account, "us-east-1");
+        // This is a base client to describe regions; it needs a region to be built.
+        // It's acceptable to use us-east-1 for this global operation.
+        Ec2Client baseEc2Client = awsClientProvider.getEc2Client(account, "us-east-1"); 
         List<Region> allPossibleRegions = baseEc2Client.describeRegions().regions();
 
         for (Region region : allPossibleRegions) {
@@ -3182,7 +3264,8 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
         }
         
         logger.warn("Could not find instance {} in any region.", instanceId);
-        return configuredRegion; 
+        // MODIFIED: Return null instead of configuredRegion if region not found
+        return null; 
     }
 
     public Map<String, List<MetricDto>> getEc2InstanceMetrics(String accountId, String instanceId, String region) {
@@ -3200,7 +3283,7 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
 
             return Map.of("CPUUtilization", cpuDatapoints, "NetworkIn", networkInDatapoints);
         } catch (Exception e) {
-            logger.error("Failed to fetch metrics for instance {} in account {}", instanceId, accountId, e);
+            logger.error("Failed to fetch metrics for instance {} in account {}", instanceId, e);
             return Collections.emptyMap();
         }
     }

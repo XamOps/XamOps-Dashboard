@@ -22,6 +22,7 @@ import software.amazon.awssdk.services.elasticache.ElastiCacheClient;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.iam.IamClient;
 import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.pricing.PricingClient;
 import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -45,6 +46,7 @@ public class AwsClientProvider {
 
     private AwsCredentialsProvider getCredentialsProvider(CloudAccount account) {
         if (account == null || account.getRoleArn() == null || account.getRoleArn().isBlank()) {
+            // Fallback to the host's default credentials if no role is specified.
             return DefaultCredentialsProvider.create();
         }
 
@@ -174,5 +176,12 @@ public class AwsClientProvider {
 
     public SqsClient getSqsClient(CloudAccount account, String region) {
         return SqsClient.builder().credentialsProvider(getCredentialsProvider(account)).region(Region.of(region)).build();
+    }
+
+    public PricingClient getPricingClient() { 
+        return PricingClient.builder()
+            .credentialsProvider(DefaultCredentialsProvider.create()) // Use default credentials for Pricing service
+            .region(Region.US_EAST_1) // Pricing service is a global service accessible via us-east-1
+            .build();
     }
 }
