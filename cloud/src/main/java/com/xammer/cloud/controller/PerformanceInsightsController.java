@@ -2,6 +2,11 @@ package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.PerformanceInsightDto;
 import com.xammer.cloud.service.PerformanceInsightsService;
+
+import ch.qos.logback.classic.Logger;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -52,4 +57,20 @@ public class PerformanceInsightsController {
             HttpServletResponse response) {
         performanceInsightsService.exportInsightsToExcel(accountId, severity, response);
     }
+
+    @GetMapping("/alb-performance")
+    public ResponseEntity<Map<String, Object>> getALBPerformanceMetrics(
+            @RequestParam String accountId,
+            @RequestParam(required = false) String region) {
+        
+        try {
+            Map<String, Object> performanceData = performanceInsightsService.getALBPerformanceMetrics(accountId, region);
+            return ResponseEntity.ok(performanceData);
+        } catch (Exception e) {
+            Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(PerformanceInsightsController.class);
+            logger.error("Failed to fetch ALB performance metrics for account: {} in region: {}", accountId, region, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Failed to fetch ALB performance metrics"));
+        }
+    }
+    
 }
