@@ -38,7 +38,13 @@ public class SecurityConfig {
                 .successHandler(authenticationSuccessHandler)
                 .permitAll()
             )
-            .logout((logout) -> logout.permitAll());
+            .logout((logout) -> logout
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/login?logout")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
+                .permitAll()
+            );
 
         http.csrf().disable();
 
