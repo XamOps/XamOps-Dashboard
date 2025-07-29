@@ -10,7 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        
+
         :root {
             --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
@@ -20,26 +20,32 @@
             --glass-border: rgba(255, 255, 255, 0.2);
         }
 
-        body { 
-            font-family: 'Inter', sans-serif; 
+        body {
+            font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             min-height: 100vh;
         }
-        
-        [x-cloak] { display: none !important; }
-        
-        .skeleton { 
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        .skeleton {
             background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
             background-size: 200% 100%;
             animation: shimmer 1.5s infinite;
             border-radius: 12px;
         }
-        
+
         @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
+            0% {
+                background-position: -200% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
         }
-        
+
         .glass-card {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -47,18 +53,18 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
+
         .glass-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
-        
+
         .header-gradient {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(229, 231, 235, 0.8);
         }
-        
+
         .btn-primary {
             background: var(--primary-gradient);
             border: none;
@@ -67,7 +73,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .btn-primary::before {
             content: '';
             position: absolute;
@@ -78,30 +84,32 @@
             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
             transition: left 0.5s ease;
         }
-        
+
         .btn-primary:hover::before {
             left: 100%;
         }
-        
+
         .btn-primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
         }
-        
-        .form-input, .form-select {
+
+        .form-input,
+        .form-select {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             transition: all 0.3s ease;
         }
-        
-        .form-input:focus, .form-select:focus {
+
+        .form-input:focus,
+        .form-select:focus {
             background: rgba(255, 255, 255, 1);
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
             transform: translateY(-1px);
         }
-        
+
         .chart-container {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -110,7 +118,7 @@
             border: 1px solid var(--glass-border);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        
+
         .table-enhanced {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -118,45 +126,50 @@
             overflow: hidden;
             border: 1px solid var(--glass-border);
         }
-        
+
         .table-enhanced thead {
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
         }
-        
+
         .table-enhanced tr {
             transition: all 0.2s ease;
         }
-        
+
         .table-enhanced tr:hover {
             background: rgba(102, 126, 234, 0.05);
             transform: translateX(2px);
         }
-        
+
         .table-enhanced tr:hover td {
             color: #1f2937;
         }
-        
+
         .empty-state {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
             border: 2px dashed rgba(156, 163, 175, 0.3);
             transition: all 0.3s ease;
         }
-        
+
         .empty-state:hover {
             border-color: rgba(102, 126, 234, 0.3);
             background: rgba(255, 255, 255, 0.98);
         }
-        
+
         .pulse-dot {
             animation: pulse-dot 2s infinite;
         }
-        
+
         @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
         }
-        
+
         .loading-spinner {
             border: 3px solid #f3f4f6;
             border-top: 3px solid #667eea;
@@ -165,21 +178,31 @@
             height: 20px;
             animation: spin 1s linear infinite;
         }
-        
+
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
         }
-        
+
         .fade-in {
             animation: fadeIn 0.5s ease-in-out;
         }
-        
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        
+
         .metric-card {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -188,7 +211,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .metric-card::before {
             content: '';
             position: absolute;
@@ -200,21 +223,21 @@
             transform: scaleX(0);
             transition: transform 0.3s ease;
         }
-        
+
         .metric-card:hover::before {
             transform: scaleX(1);
         }
-        
+
         .metric-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
-        
+
         /* CHANGE 1: The problematic .cost-row class is removed and replaced with a new class for the first cell. */
         .cost-cell-indicator {
             position: relative;
         }
-        
+
         .cost-cell-indicator::before {
             content: '';
             position: absolute;
@@ -226,22 +249,22 @@
             transform: scaleY(0);
             transition: transform 0.2s ease;
         }
-        
+
         tr:hover .cost-cell-indicator::before {
             transform: scaleY(1);
         }
-        
+
         .gradient-text {
             background: var(--primary-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .chart-hover-effect {
             transition: all 0.3s ease;
         }
-        
+
         .chart-hover-effect:hover {
             transform: scale(1.02);
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
@@ -250,439 +273,652 @@
 </head>
 <body class="bg-gray-50">
 
-<div class="flex">
-    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
-        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
-    </aside>
+    <div class="flex">
+        <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+            <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+        </aside>
 
-    <div class="ml-64 flex-1">
-        <main class="flex-1 flex flex-col min-h-screen" x-data="costManagement()">
-            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
-                <div class="flex items-center space-x-4">
-                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-dollar-sign text-white text-xl"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-800">Cost Management</h1>
-                        <p class="text-sm text-gray-600">Analyze and optimize your cloud spending</p>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
-                        <span class="text-sm text-gray-600">Live data</span>
-                    </div>
-                    <button @click="loadCostData(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                        <span x-text="isLoading ? 'Refreshing...' : 'Refresh Data'"></span>
-                    </button>
-                </div>
-            </header>
-
-            <div class="flex-1 p-8 space-y-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="metric-card rounded-2xl p-6 fade-in">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-chart-line text-white text-xl"></i>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-600">Total MTD</p>
-                                <p class="text-2xl font-bold gradient-text" x-text="'$' + costData.reduce((sum, item) => sum + item.amount, 0).toFixed(2)"></p>
-                            </div>
+        <div class="ml-64 flex-1">
+            <main class="flex-1 flex flex-col min-h-screen" x-data="costManagement()">
+                <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-dollar-sign text-white text-xl"></i>
                         </div>
-                        <div class="text-sm text-gray-500">Month to Date Spending</div>
-                    </div>
-                    
-                    <div class="metric-card rounded-2xl p-6 fade-in">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-layer-group text-white text-xl"></i>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-600">Categories</p>
-                                <p class="text-2xl font-bold gradient-text" x-text="costData.length"></p>
-                            </div>
-                        </div>
-                        <div class="text-sm text-gray-500" x-text="'Grouped by ' + groupBy.toLowerCase()"></div>
-                    </div>
-                    
-                    <div class="metric-card rounded-2xl p-6 fade-in">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-crown text-white text-xl"></i>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-600">Top Spender</p>
-                                <p class="text-2xl font-bold gradient-text" x-text="sortedCostData.length > 0 ? '$' + sortedCostData[0].amount.toFixed(2) : '$0.00'"></p>
-                            </div>
-                        </div>
-                        <div class="text-sm text-gray-500" x-text="sortedCostData.length > 0 ? sortedCostData[0].name : 'No data'"></div>
-                    </div>
-                </div>
-
-                <div class="glass-card rounded-2xl p-8 fade-in">
-                    <div class="flex flex-wrap items-center justify-between gap-6 mb-8">
-                        <div class="flex items-center space-x-4">
-                            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-chart-pie text-white"></i>
-                            </div>
-                            <div>
-                                <h2 class="text-xl font-bold text-gray-800">Cost Breakdown</h2>
-                                <p class="text-sm text-gray-600">Month to date spending analysis</p>
-                            </div>
-                        </div>
-                        
-                        <div class="flex items-center space-x-4 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
-                            <div class="flex items-center space-x-2">
-                                <i class="fas fa-layer-group text-gray-500"></i>
-                                <span class="text-sm font-medium text-gray-700">Group by:</span>
-                            </div>
-                            <select x-model="groupBy" @change="loadCostData(true)" class="form-select text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                                <option value="SERVICE">Service</option>
-                                <option value="REGION">Region</option>
-                                <option value="TAG">Tag</option>
-                            </select>
-                            <div x-show="groupBy === 'TAG'" class="relative">
-                                <i class="fas fa-tag absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
-                                <input type="text" x-model="tagKey" @input.debounce.500ms="loadCostData(true)" placeholder="Enter Tag Key" class="form-input pl-8 pr-4 py-2 text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                            </div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">Cost Management</h1>
+                            <p class="text-sm text-gray-600">Analyze and optimize your cloud spending</p>
                         </div>
                     </div>
-                    
-                    <div x-show="isLoading" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div class="skeleton h-80"></div>
-                        <div class="lg:col-span-2 skeleton h-96"></div>
-                    </div>
-
-                    <div x-show="!isLoading && costData.length === 0" x-cloak class="empty-state text-center py-16 px-8 rounded-2xl">
-                        <div class="w-20 h-20 bg-gradient-to-br from-gray-400 to-gray-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <i class="fas fa-dollar-sign text-white text-2xl"></i>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                            <span class="text-sm text-gray-600">Live data</span>
                         </div>
-                        <h3 class="text-xl font-bold text-gray-800 mb-2">No Cost Data Available</h3>
-                        <p class="text-gray-600 mb-6">There is no cost data for the selected criteria, or the tag key is invalid.</p>
-                        <button @click="loadCostData(true)" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg">
-                            <i class="fas fa-sync-alt mr-2"></i>Refresh Data
+                        <button @click="loadCostData(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
+                            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                            <span x-text="isLoading ? 'Refreshing...' : 'Refresh Data'"></span>
                         </button>
                     </div>
+                </header>
 
-                    <div x-show="!isLoading && costData.length > 0" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-                        <div class="lg:col-span-1">
-                            <div class="chart-container chart-hover-effect h-96">
-                                <h3 class="text-lg font-semibold text-gray-800 mb-4">Cost Distribution</h3>
-                                <div class="h-80">
-                                    <canvas id="costChart"></canvas>
+                <div class="flex-1 p-8 space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="metric-card rounded-2xl p-6 fade-in">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-chart-line text-white text-xl"></i>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm text-gray-600">Total MTD</p>
+                                    <p class="text-2xl font-bold gradient-text" x-text="'$' + costData.reduce((sum, item) => sum + item.amount, 0).toFixed(2)"></p>
+                                </div>
+                            </div>
+                            <div class="text-sm text-gray-500">Month to Date Spending</div>
+                        </div>
+
+                        <div class="metric-card rounded-2xl p-6 fade-in">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-layer-group text-white text-xl"></i>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm text-gray-600">Categories</p>
+                                    <p class="text-2xl font-bold gradient-text" x-text="costData.length"></p>
+                                </div>
+                            </div>
+                            <div class="text-sm text-gray-500" x-text="'Grouped by ' + groupBy.toLowerCase()"></div>
+                        </div>
+
+                        <div class="metric-card rounded-2xl p-6 fade-in">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-crown text-white text-xl"></i>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm text-gray-600">Top Spender</p>
+                                    <p class="text-2xl font-bold gradient-text" x-text="sortedCostData.length > 0 ? '$' + sortedCostData[0].amount.toFixed(2) : '$0.00'"></p>
+                                </div>
+                            </div>
+                            <div class="text-sm text-gray-500" x-text="sortedCostData.length > 0 ? sortedCostData[0].name : 'No data'"></div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex flex-wrap items-center justify-between gap-6 mb-8">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-chart-pie text-white"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Cost Breakdown</h2>
+                                    <p class="text-sm text-gray-600">Month to date spending analysis</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center space-x-4 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fas fa-layer-group text-gray-500"></i>
+                                    <span class="text-sm font-medium text-gray-700">Group by:</span>
+                                </div>
+                                <select x-model="groupBy" @change="loadCostData(true)" class="form-select text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                                    <option value="SERVICE">Service</option>
+                                    <option value="REGION">Region</option>
+                                    <option value="TAG">Tag</option>
+                                </select>
+                                <div x-show="groupBy === 'TAG'" class="relative">
+                                    <i class="fas fa-tag absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                                    <input type="text" x-model="tagKey" @input.debounce.500ms="loadCostData(true)" placeholder="Enter Tag Key" class="form-input pl-8 pr-4 py-2 text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="lg:col-span-2">
-                            <div class="table-enhanced">
-                                <div class="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b">
-                                    <h3 class="text-lg font-semibold text-gray-800 flex items-center">
-                                        <i class="fas fa-table mr-2 text-indigo-600"></i>
-                                        Detailed Breakdown
-                                    </h3>
+
+                        <div x-show="isLoading" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div class="skeleton h-80"></div>
+                            <div class="lg:col-span-2 skeleton h-96"></div>
+                        </div>
+
+                        <div x-show="!isLoading && costData.length === 0" x-cloak class="empty-state text-center py-16 px-8 rounded-2xl">
+                            <div class="w-20 h-20 bg-gradient-to-br from-gray-400 to-gray-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i class="fas fa-dollar-sign text-white text-2xl"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">No Cost Data Available</h3>
+                            <p class="text-gray-600 mb-6">There is no cost data for the selected criteria, or the tag key is invalid.</p>
+                            <button @click="loadCostData(true)" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg">
+                                <i class="fas fa-sync-alt mr-2"></i>Refresh Data
+                            </button>
+                        </div>
+
+                        <div x-show="!isLoading && costData.length > 0" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                            <div class="lg:col-span-1">
+                                <div class="chart-container chart-hover-effect h-96">
+                                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Cost Distribution</h3>
+                                    <div class="h-80">
+                                        <canvas id="costChart"></canvas>
+                                    </div>
                                 </div>
-                                <div class="overflow-x-auto max-h-96">
-                                    <table class="w-full text-sm">
-                                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
-                                            <tr>
-                                                <th class="px-6 py-4 text-left font-bold" x-text="groupBy === 'TAG' ? 'Tag: ' + tagKey : groupBy.charAt(0).toUpperCase() + groupBy.slice(1).toLowerCase()"></th>
-                                                <th class="px-6 py-4 text-right font-bold">Cost (USD)</th>
-                                                <th class="px-6 py-4 text-right font-bold">%</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200">
-                                            <template x-for="(item, index) in sortedCostData" :key="item.name">
-                                                <tr class="hover:bg-gray-50 cursor-pointer transition-all" @click="fetchHistoricalData(item.name)">
-                                                    <td class="px-6 py-4 cost-cell-indicator">
-                                                        <div class="flex items-center space-x-3">
-                                                            <div class="w-3 h-3 rounded-full" :style="`background-color: ${['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c'][index % 11]}`"></div>
-                                                            <span class="font-medium text-gray-800" x-text="item.name || '(No Value)'"></span>
-                                                        </div>
-                                                    </td>
-                                                    <td class="px-6 py-4 text-right">
-                                                        <span class="font-bold text-gray-900" x-text="'$' + item.amount.toFixed(2)"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4 text-right">
-                                                        <span class="text-sm text-gray-600" x-text="((item.amount / costData.reduce((sum, i) => sum + i.amount, 0)) * 100).toFixed(1) + '%'"></span>
-                                                    </td>
+                            </div>
+
+                            <div class="lg:col-span-2">
+                                <div class="table-enhanced">
+                                    <div class="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b">
+                                        <h3 class="text-lg font-semibold text-gray-800 flex items-center">
+                                            <i class="fas fa-table mr-2 text-indigo-600"></i>
+                                            Detailed Breakdown
+                                        </h3>
+                                    </div>
+                                    <div class="overflow-x-auto max-h-96">
+                                        <table class="w-full text-sm">
+                                            <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                                                <tr>
+                                                    <th class="px-6 py-4 text-left font-bold" x-text="groupBy === 'TAG' ? 'Tag: ' + tagKey : groupBy.charAt(0).toUpperCase() + groupBy.slice(1).toLowerCase()"></th>
+                                                    <th class="px-6 py-4 text-right font-bold">Cost (USD)</th>
+                                                    <th class="px-6 py-4 text-right font-bold">%</th>
                                                 </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200">
+                                                <template x-for="(item, index) in sortedCostData" :key="item.name">
+                                                    <tr class="hover:bg-gray-50 cursor-pointer transition-all" @click="fetchHistoricalData(item.name)">
+                                                        <td class="px-6 py-4 cost-cell-indicator">
+                                                            <div class="flex items-center space-x-3">
+                                                                <div class="w-3 h-3 rounded-full" :style="`background-color: ${['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c'][index % 11]}`"></div>
+                                                                <span class="font-medium text-gray-800" x-text="item.name || '(No Value)'"></span>
+                                                            </div>
+                                                        </td>
+                                                        <td class="px-6 py-4 text-right">
+                                                            <span class="font-bold text-gray-900" x-text="'$' + item.amount.toFixed(2)"></span>
+                                                        </td>
+                                                        <td class="px-6 py-4 text-right">
+                                                            <span class="text-sm text-gray-600" x-text="((item.amount / costData.reduce((sum, i) => sum + i.amount, 0)) * 100).toFixed(1) + '%'"></span>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div x-show="historical.dimension" x-cloak class="glass-card rounded-2xl p-8 fade-in">
-                    <div class="flex items-center justify-between mb-8">
-                        <div class="flex items-center space-x-4">
-                            <div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-chart-line text-white"></i>
+                    <div x-show="historical.dimension" x-cloak class="glass-card rounded-2xl p-8 fade-in">
+                        <div class="flex items-center justify-between mb-8">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+                                    <i class="fas fa-chart-line text-white"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">
+                                        6-Month Cost Trend
+                                    </h2>
+                                    <p class="text-sm text-gray-600">
+                                        Historical data for: <span class="gradient-text font-semibold" x-text="historical.dimension"></span>
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 class="text-xl font-bold text-gray-800">
-                                    6-Month Cost Trend
-                                </h2>
-                                <p class="text-sm text-gray-600">
-                                    Historical data for: <span class="gradient-text font-semibold" x-text="historical.dimension"></span>
-                                </p>
-                            </div>
+                            <button @click="historical.dimension = null" class="text-gray-400 hover:text-gray-600 transition-colors">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
                         </div>
-                        <button @click="historical.dimension = null" class="text-gray-400 hover:text-gray-600 transition-colors">
-                            <i class="fas fa-times text-xl"></i>
-                        </button>
+
+                        <div x-show="historical.isLoading" class="skeleton h-80"></div>
+                        <div x-show="!historical.isLoading" class="chart-container chart-hover-effect h-80">
+                            <canvas id="historicalCostChart"></canvas>
+                        </div>
                     </div>
-                    
-                    <div x-show="historical.isLoading" class="skeleton h-80"></div>
-                    <div x-show="!historical.isLoading" class="chart-container chart-hover-effect h-80">
-                        <canvas id="historicalCostChart"></canvas>
+
+                    <div class="glass-card rounded-2xl p-8 fade-in">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4">
+                            <i class="fas fa-magic mr-2 text-purple-500"></i>30-Day Cost Forecast
+                        </h2>
+                        <div class="chart-container" style="height: 450px;" id="costForecastContainer">
+                            <canvas id="costForecastChart"></canvas>
+                        </div>
                     </div>
+
                 </div>
-            </div>
-        </main>
+            </main>
+        </div>
     </div>
-</div>
 
-<script>
-function costManagement() {
-    return {
-        isLoading: true,
-        costData: [],
-        groupBy: 'SERVICE',
-        tagKey: 'Name',
-        costChart: null,
-        historical: {
-            isLoading: false,
-            dimension: null,
-            data: null,
-            chart: null
-        },
-
-        init() {
-            this.loadCostData(false);
-            this.$watch('costData', () => this.renderChart());
-        },
-
-        loadCostData(forceRefresh = false) {
-            this.historical.dimension = null; // Reset historical view
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                this.isLoading = false;
-                this.costData = [];
-                return;
-            }
-            
-            const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
-            
-            if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
-                this.costData = JSON.parse(sessionStorage.getItem(cacheKey));
-                this.isLoading = false;
-                return;
-            }
-
-            this.isLoading = true;
-            sessionStorage.removeItem(cacheKey);
-
-            let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}`;
-            if (this.groupBy === 'TAG') {
-                if(this.tagKey) {
-                    url += `&tag=${this.tagKey}`;
-                } else {
-                    this.costData = [];
-                    this.isLoading = false;
-                    return;
-                }
-            }
-            
-            fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    this.costData = data;
-                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
-                })
-                .catch(err => {
-                    console.error('Failed to load cost data:', err);
-                    this.costData = [];
-                })
-                .finally(() => this.isLoading = false);
-        },
-        
-        get sortedCostData() {
-            return [...this.costData].sort((a, b) => b.amount - a.amount);
-        },
-
-        renderChart() {
-            const ctx = document.getElementById('costChart');
-            if (!ctx) return;
-            
-            if (this.costChart) {
-                this.costChart.destroy();
-            }
-
-            const topN = 10;
-            const sortedData = this.sortedCostData;
-            const chartData = sortedData.slice(0, topN);
-            const otherData = sortedData.slice(topN);
-
-            const labels = chartData.map(d => d.name);
-            const data = chartData.map(d => d.amount);
-
-            if (otherData.length > 0) {
-                labels.push('Other');
-                data.push(otherData.reduce((sum, item) => sum + item.amount, 0));
-            }
-            
-            this.costChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Cost',
-                        data: data,
-                        backgroundColor: [
-                            '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe',
-                            '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c'
-                        ],
-                        borderWidth: 0,
-                        hoverOffset: 6
-                    }]
+    <script>
+        function costManagement() {
+            return {
+                isLoading: true,
+                costData: [],
+                groupBy: 'SERVICE',
+                tagKey: 'Name',
+                costChart: null,
+                historical: {
+                    isLoading: false,
+                    dimension: null,
+                    data: null,
+                    chart: null
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                boxWidth: 12,
-                                font: { size: 12 },
-                                usePointStyle: true,
-                                padding: 15
-                            }
+                costForecastChart: null, // Initialize forecast chart variable
+
+                init() {
+                    this.loadCostData(false);
+                    this.$watch('costData', () => this.renderChart());
+                    this.renderCostForecastChart(); // Call forecast on init
+                },
+
+                loadCostData(forceRefresh = false) {
+                    this.historical.dimension = null; // Reset historical view
+                    const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                    if (!selectedAccountId) {
+                        this.isLoading = false;
+                        this.costData = [];
+                        return;
+                    }
+
+                    const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
+
+                    if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
+                        this.costData = JSON.parse(sessionStorage.getItem(cacheKey));
+                        this.isLoading = false;
+                        return;
+                    }
+
+                    this.isLoading = true;
+                    sessionStorage.removeItem(cacheKey);
+
+                    let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}`;
+                    if (this.groupBy === 'TAG') {
+                        if (this.tagKey) {
+                            url += `&tag=${this.tagKey}`;
+                        } else {
+                            this.costData = [];
+                            this.isLoading = false;
+                            return;
+                        }
+                    }
+
+                    fetch(url)
+                        .then(res => res.json())
+                        .then(data => {
+                            this.costData = data;
+                            sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                        })
+                        .catch(err => {
+                            console.error('Failed to load cost data:', err);
+                            this.costData = [];
+                        })
+                        .finally(() => this.isLoading = false);
+                },
+
+                get sortedCostData() {
+                    return [...this.costData].sort((a, b) => b.amount - a.amount);
+                },
+
+                renderChart() {
+                    const ctx = document.getElementById('costChart');
+                    if (!ctx) return;
+
+                    if (this.costChart) {
+                        this.costChart.destroy();
+                    }
+
+                    const topN = 10;
+                    const sortedData = this.sortedCostData;
+                    const chartData = sortedData.slice(0, topN);
+                    const otherData = sortedData.slice(topN);
+
+                    const labels = chartData.map(d => d.name);
+                    const data = chartData.map(d => d.amount);
+
+                    if (otherData.length > 0) {
+                        labels.push('Other');
+                        data.push(otherData.reduce((sum, item) => sum + item.amount, 0));
+                    }
+
+                    this.costChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Cost',
+                                data: data,
+                                backgroundColor: [
+                                    '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe',
+                                    '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c'
+                                ],
+                                borderWidth: 0,
+                                hoverOffset: 6
+                            }]
                         },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            titleColor: 'white',
-                            bodyColor: 'white',
-                            borderColor: 'rgba(102, 126, 234, 0.8)',
-                            borderWidth: 1,
-                            cornerRadius: 8,
-                            callbacks: {
-                                label: function(context) {
-                                    const percentage = ((context.parsed / data.reduce((a, b) => a + b, 0)) * 100).toFixed(1);
-                                    return `${context.label}: $${context.parsed.toFixed(2)} (${percentage}%)`;
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        boxWidth: 12,
+                                        font: { size: 12 },
+                                        usePointStyle: true,
+                                        padding: 15
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    titleColor: 'white',
+                                    bodyColor: 'white',
+                                    borderColor: 'rgba(102, 126, 234, 0.8)',
+                                    borderWidth: 1,
+                                    cornerRadius: 8,
+                                    callbacks: {
+                                        label: function(context) {
+                                            const percentage = ((context.parsed / data.reduce((a, b) => a + b, 0)) * 100).toFixed(1);
+                                            return `${context.label}: $${context.parsed.toFixed(2)} (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            },
+                            onClick: (evt, elements) => {
+                                if (elements.length > 0) {
+                                    const clickedLabel = this.costChart.data.labels[elements[0].index];
+                                    if (clickedLabel !== 'Other') {
+                                        this.fetchHistoricalData(clickedLabel);
+                                    }
                                 }
                             }
                         }
-                    },
-                    onClick: (evt, elements) => {
-                        if (elements.length > 0) {
-                            const clickedLabel = this.costChart.data.labels[elements[0].index];
-                            if (clickedLabel !== 'Other') {
-                                this.fetchHistoricalData(clickedLabel);
-                            }
-                        }
-                    }
-                }
-            });
-        },
-
-        fetchHistoricalData(dimensionValue) {
-            this.historical.isLoading = true;
-            this.historical.dimension = dimensionValue;
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            
-            let url = `/api/costs/historical?accountId=${selectedAccountId}&groupBy=${this.groupBy}&dimensionValue=${encodeURIComponent(dimensionValue)}`;
-            if (this.groupBy === 'TAG') {
-                url += `&tagKey=${encodeURIComponent(this.tagKey)}`;
-            }
-
-            fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    this.historical.data = data;
-                    this.renderHistoricalChart();
-                })
-                .catch(err => {
-                    console.error('Failed to fetch historical cost data:', err);
-                })
-                .finally(() => {
-                    this.historical.isLoading = false;
-                });
-        },
-
-        renderHistoricalChart() {
-            const ctx = document.getElementById('historicalCostChart');
-            if (!ctx || !this.historical.data) return;
-
-            if (this.historical.chart) {
-                this.historical.chart.destroy();
-            }
-
-            this.historical.chart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: this.historical.data.labels,
-                    datasets: [{
-                        label: `Monthly Cost for ${this.historical.dimension}`,
-                        data: this.historical.data.costs,
-                        backgroundColor: 'rgba(79, 70, 229, 0.8)',
-                        borderColor: 'rgba(79, 70, 229, 1)',
-                        borderWidth: 2,
-                        borderRadius: 8,
-                        borderSkipped: false
-                    }]
+                    });
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            titleColor: 'white',
-                            bodyColor: 'white',
-                            borderColor: 'rgba(79, 70, 229, 0.8)',
-                            borderWidth: 1,
-                            cornerRadius: 8,
-                            callbacks: {
-                                label: function(context) {
-                                    return `Cost: $${context.parsed.y.toLocaleString()}`;
+
+                fetchHistoricalData(dimensionValue) {
+                    this.historical.isLoading = true;
+                    this.historical.dimension = dimensionValue;
+                    const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+
+                    let url = `/api/costs/historical?accountId=${selectedAccountId}&groupBy=${this.groupBy}&dimensionValue=${encodeURIComponent(dimensionValue)}`;
+                    if (this.groupBy === 'TAG') {
+                        url += `&tagKey=${encodeURIComponent(this.tagKey)}`;
+                    }
+
+                    fetch(url)
+                        .then(res => res.json())
+                        .then(data => {
+                            this.historical.data = data;
+                            this.renderHistoricalChart();
+                        })
+                        .catch(err => {
+                            console.error('Failed to fetch historical cost data:', err);
+                        })
+                        .finally(() => {
+                            this.historical.isLoading = false;
+                        });
+                },
+
+                renderHistoricalChart() {
+                    const ctx = document.getElementById('historicalCostChart');
+                    if (!ctx || !this.historical.data) return;
+
+                    if (this.historical.chart) {
+                        this.historical.chart.destroy();
+                    }
+
+                    this.historical.chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: this.historical.data.labels,
+                            datasets: [{
+                                label: `Monthly Cost for ${this.historical.dimension}`,
+                                data: this.historical.data.costs,
+                                backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                                borderColor: 'rgba(79, 70, 229, 1)',
+                                borderWidth: 2,
+                                borderRadius: 8,
+                                borderSkipped: false
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    titleColor: 'white',
+                                    bodyColor: 'white',
+                                    borderColor: 'rgba(79, 70, 229, 0.8)',
+                                    borderWidth: 1,
+                                    cornerRadius: 8,
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `Cost: $${context.parsed.y.toLocaleString()}`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: (value) => '$' + value.toLocaleString(),
+                                        color: '#6b7280'
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)'
+                                    }
+                                },
+                                x: {
+                                    ticks: {
+                                        color: '#6b7280'
+                                    },
+                                    grid: {
+                                        display: false
+                                    }
                                 }
                             }
                         }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: (value) => '$' + value.toLocaleString(),
-                                color: '#6b7280'
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                color: '#6b7280'
-                            },
-                            grid: {
-                                display: false
-                            }
+                    });
+                },
+
+                async renderCostForecastChart() {
+                    const container = document.getElementById('costForecastContainer');
+                    // Remove any existing error messages before rendering the chart
+                    const existingErrorMessage = container.querySelector('.text-center.text-red-500, .text-center.text-gray-500');
+                    if (existingErrorMessage) {
+                        existingErrorMessage.remove();
+                    }
+                    
+                    try {
+                        const selectedAccountId = sessionStorage.getItem('selectedAccountId') || '605134457560'; // Default if not set
+                        const response = await fetch(`/api/forecast/cost?accountId=${selectedAccountId}&periods=30`);
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error('Failed to fetch forecast data:', response.status, errorText);
+                            throw new Error(`Network response was not ok: ${response.statusText}`);
                         }
+                        
+                        const forecastData = await response.json();
+
+                        if (!forecastData || forecastData.length === 0) {
+                            console.warn("No historical data available to generate a cost forecast for this account.");
+                            if (this.costForecastChart) {
+                                this.costForecastChart.destroy();
+                                this.costForecastChart = null;
+                            }
+                            container.innerHTML = `<div class="flex items-center justify-center h-full text-center text-gray-500">
+                                <div>
+                                    <i class="fas fa-chart-line text-4xl mb-4 text-gray-300"></i>
+                                    <p class="font-semibold">Not enough data to create a forecast.</p>
+                                    <p class="text-sm">More historical cost data is needed for an accurate prediction.</p>
+                                </div>
+                            </div>`;
+                            return;
+                        }
+
+                        const labels = forecastData.map(d => new Date(d.ds).toLocaleDateString());
+                        const historicalCutoff = new Date();
+                        // Adjust cutoff to be just before today, so today's historical data (if any) is included in historicalPoints.
+                        historicalCutoff.setDate(historicalCutoff.getDate()); // Keeps it as today's date
+
+                        const historicalPoints = forecastData.map(d => new Date(d.ds) < historicalCutoff ? d.yhat : null);
+                        const forecastPoints = forecastData.map(d => new Date(d.ds) >= historicalCutoff ? d.yhat : null);
+                        
+                        // To connect the historical line to the forecast line, ensure the last historical point
+                        // is also the first forecast point, if it falls on the cutoff.
+                        const lastHistoricalIndex = historicalPoints.lastIndexOf(historicalPoints.findLast(p => p !== null));
+                        if (lastHistoricalIndex !== -1 && (lastHistoricalIndex + 1) < forecastData.length && historicalPoints[lastHistoricalIndex + 1] === null && forecastPoints[lastHistoricalIndex + 1] !== null) {
+                            historicalPoints[lastHistoricalIndex + 1] = forecastData[lastHistoricalIndex + 1].yhat;
+                        }
+
+                        const forecastLower = forecastData.map(d => new Date(d.ds) >= historicalCutoff ? d.yhat_lower : null);
+                        const forecastUpper = forecastData.map(d => new Date(d.ds) >= historicalCutoff ? d.yhat_upper : null);
+
+                        const canvasElement = document.getElementById('costForecastChart');
+                        if (!canvasElement) {
+                             console.error("Canvas element 'costForecastChart' not found.");
+                             container.innerHTML = `<div class="text-center text-red-500 font-semibold p-4">Chart rendering error: Canvas element missing.</div>`;
+                             return;
+                        }
+                        const ctx = canvasElement.getContext('2d');
+                        
+                        if (this.costForecastChart) {
+                            this.costForecastChart.destroy();
+                        }
+                        
+                        this.costForecastChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    {
+                                        label: 'Historical Trend',
+                                        data: historicalPoints,
+                                        borderColor: 'rgb(54, 162, 235)',
+                                        tension: 0.1,
+                                        pointRadius: 1,
+                                        segment: {
+                                            borderColor: ctx => {
+                                                const index = ctx.p0DataIndex;
+                                                const nextIndex = ctx.p1DataIndex;
+                                                // Check if the current segment connects a historical point to a forecast point
+                                                if (historicalPoints[index] !== null && historicalPoints[nextIndex] === null && forecastPoints[nextIndex] !== null) {
+                                                    return 'rgb(54, 162, 235)'; // Keep historical color for the transition point
+                                                }
+                                                return 'rgb(54, 162, 235)';
+                                            },
+                                            borderDash: ctx => {
+                                                const index = ctx.p0DataIndex;
+                                                const nextIndex = ctx.p1DataIndex;
+                                                if (historicalPoints[index] !== null && historicalPoints[nextIndex] === null && forecastPoints[nextIndex] !== null) {
+                                                    return [0, 0]; // Solid line for the transition
+                                                }
+                                                return [0, 0];
+                                            }
+                                        }
+                                    },
+                                    {
+                                        label: 'Forecasted Cost',
+                                        data: forecastPoints,
+                                        borderColor: 'rgb(255, 99, 132)',
+                                        borderDash: [5, 5],
+                                        tension: 0.1,
+                                        pointRadius: 1
+                                    },
+                                    {
+                                        label: 'Uncertainty Range (Upper)',
+                                        data: forecastUpper,
+                                        fill: '+1',
+                                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                                        borderColor: 'transparent',
+                                        pointRadius: 0,
+                                        showInLegend: false
+                                    },
+                                    {
+                                        label: 'Uncertainty Range (Lower)',
+                                        data: forecastLower,
+                                        fill: false,
+                                        backgroundColor: 'transparent',
+                                        borderColor: 'transparent',
+                                        pointRadius: 0,
+                                        showInLegend: false
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: {
+                                    mode: 'index',
+                                    intersect: false,
+                                },
+                                plugins: {
+                                    legend: {
+                                        position: 'top',
+                                        labels: {
+                                            filter: function(item, chart) {
+                                                return item.text === 'Historical Trend' || item.text === 'Forecasted Cost';
+                                            }
+                                        }
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'AWS Cost Forecast (USD)'
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        ticks: {
+                                            callback: function(value) { return '$' + value.toFixed(2); }
+                                        }
+                                    },
+                                    x: {
+                                        ticks: {
+                                            autoSkip: true,
+                                            maxTicksLimit: 10
+                                        }
+                                    }
+                                },
+                                elements: {
+                                    line: {
+                                        borderJoinStyle: 'round'
+                                    },
+                                    point: {
+                                        hitRadius: 5
+                                    }
+                                },
+                                hover: {
+                                    mode: 'nearest',
+                                    intersect: true
+                                },
+                                tooltip: {
+                                    mode: 'index',
+                                    intersect: false,
+                                    callbacks: {
+                                        label: function(context) {
+                                            let label = context.dataset.label || '';
+                                            if (label) {
+                                                label += ': ';
+                                            }
+                                            if (context.parsed.y !== null) {
+                                                label += '$' + context.parsed.y.toFixed(2);
+                                            }
+                                            return label;
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Failed to render cost forecast chart:', error);
+                        // Display an error message to the user or a fallback UI
+                        container.innerHTML = `<div class="flex items-center justify-center h-full text-center text-red-500 font-semibold p-4">
+                            <div>
+                                <i class="fas fa-exclamation-circle text-4xl mb-4 text-red-400"></i>
+                                <p>Failed to load forecast data.</p>
+                                <p class="text-sm">Please check the application logs for more details.</p>
+                            </div>
+                        </div>`;
                     }
                 }
-            });
+            }
         }
-    }
-}
-</script>
+    </script>
 
 </body>
 </html>

@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.costexplorer.model.Granularity;
 import software.amazon.awssdk.services.costexplorer.model.Expression;
 import software.amazon.awssdk.services.costexplorer.model.Dimension;
 import software.amazon.awssdk.services.costexplorer.model.DimensionValues;
+import software.amazon.awssdk.services.costexplorer.model.ResultByTime;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -40,10 +41,10 @@ public class CostService {
     @Async("awsTaskExecutor")
     public CompletableFuture<List<CostDto>> getCostBreakdown(String accountId, String groupBy, String tagKey) {
         logger.info("Fetching cost breakdown for account {}, grouped by: {}", accountId, groupBy);
-        
+
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-        
+
         CostExplorerClient costExplorerClient = awsClientProvider.getCostExplorerClient(account);
 
         try {
@@ -74,6 +75,89 @@ public class CostService {
         }
     }
 
+    /**
+     * Fetches historical cost data for a specific service and region over a given number of days.
+     *
+     * @param accountId The AWS Account ID.
+     * @param serviceName The AWS service name (e.g., "AmazonEC2", "Amazon S3").
+     * @param regionName The AWS region name (e.g., "us-east-1"). Can be null or empty for all regions.
+     * @param days The number of past days to fetch data for.
+     * @return A CompletableFuture containing a HistoricalCostDto with labels (dates) and costs.
+     */
+    @Async("awsTaskExecutor")
+    public CompletableFuture<HistoricalCostDto> getHistoricalCost(
+            String accountId, String serviceName, String regionName, int days) {
+
+        logger.info("Fetching historical cost for account {}, service: {}, region: {}, days: {}",
+                accountId, serviceName, regionName, days);
+
+        CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
+                .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
+
+        CostExplorerClient ceClient = awsClientProvider.getCostExplorerClient(account);
+
+        List<String> labels = new ArrayList<>();
+        List<Double> costs = new ArrayList<>();
+
+        try {
+            LocalDate endDate = LocalDate.now();
+            LocalDate startDate = endDate.minusDays(days);
+
+            // Build filters
+            Expression.Builder filterBuilder = Expression.builder();
+            List<Expression> andExpressions = new ArrayList<>();
+
+            // Filter by Service
+            if (serviceName != null && !serviceName.isBlank()) {
+                andExpressions.add(Expression.builder()
+                        .dimensions(DimensionValues.builder().key(Dimension.SERVICE).values(serviceName).build())
+                        .build());
+            }
+
+            // Filter by Region
+            if (regionName != null && !regionName.isBlank()) {
+                andExpressions.add(Expression.builder()
+                        .dimensions(DimensionValues.builder().key(Dimension.REGION).values(regionName).build())
+                        .build());
+            }
+
+            Expression finalFilter = null;
+            if (!andExpressions.isEmpty()) {
+                if (andExpressions.size() == 1) {
+                    finalFilter = andExpressions.get(0);
+                } else {
+                    finalFilter = Expression.builder().and(andExpressions).build();
+                }
+            }
+
+            GetCostAndUsageRequest.Builder requestBuilder = GetCostAndUsageRequest.builder()
+                    .timePeriod(DateInterval.builder().start(startDate.toString()).end(endDate.plusDays(1).toString()).build())
+                    .granularity(Granularity.DAILY) // Daily granularity as per the 'days' parameter
+                    .metrics("UnblendedCost");
+
+            if (finalFilter != null) {
+                requestBuilder.filter(finalFilter);
+            }
+
+            GetCostAndUsageRequest request = requestBuilder.build();
+
+            // Iterate through results to populate labels and costs
+            for (ResultByTime result : ceClient.getCostAndUsage(request).resultsByTime()) {
+                // *** IMPORTANT CHANGE HERE: Format date to YYYY-MM-DD ***
+                labels.add(LocalDate.parse(result.timePeriod().start()).format(DateTimeFormatter.ISO_LOCAL_DATE)); // Use ISO_LOCAL_DATE
+                double cost = Double.parseDouble(result.total().get("UnblendedCost").amount());
+                costs.add(cost);
+            }
+
+        } catch (Exception e) {
+            logger.error("Could not fetch historical cost for account {}. Service: {}, Region: {}, Days: {}",
+                    accountId, serviceName, regionName, days, e);
+        }
+
+        return CompletableFuture.completedFuture(new HistoricalCostDto(labels, costs));
+    }
+
+
     @Async("awsTaskExecutor")
     public CompletableFuture<HistoricalCostDto> getHistoricalCostForDimension(String accountId, String groupBy, String dimensionValue, String tagKey) {
         logger.info("Fetching historical cost for account {}, dimension: {}, value: {}", accountId, groupBy, dimensionValue);
@@ -83,24 +167,24 @@ public class CostService {
 
         List<String> labels = new ArrayList<>();
         List<Double> costs = new ArrayList<>();
-        
+
         try {
             LocalDate today = LocalDate.now();
             LocalDate sixMonthsAgo = today.minusMonths(6).withDayOfMonth(1);
 
             DimensionValues dimension = DimensionValues.builder()
-                .key("TAG".equalsIgnoreCase(groupBy) ? tagKey : groupBy)
-                .values(dimensionValue)
-                .build();
+                    .key("TAG".equalsIgnoreCase(groupBy) ? tagKey : groupBy)
+                    .values(dimensionValue)
+                    .build();
 
             Expression filter = Expression.builder().dimensions(dimension).build();
 
             GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
-                .timePeriod(DateInterval.builder().start(sixMonthsAgo.toString()).end(today.plusDays(1).toString()).build())
-                .granularity(Granularity.MONTHLY)
-                .metrics("UnblendedCost")
-                .filter(filter)
-                .build();
+                    .timePeriod(DateInterval.builder().start(sixMonthsAgo.toString()).end(today.plusDays(1).toString()).build())
+                    .granularity(Granularity.MONTHLY)
+                    .metrics("UnblendedCost")
+                    .filter(filter)
+                    .build();
 
             ce.getCostAndUsage(request).resultsByTime().forEach(result -> {
                 labels.add(LocalDate.parse(result.timePeriod().start()).format(DateTimeFormatter.ofPattern("MMM yyyy")));

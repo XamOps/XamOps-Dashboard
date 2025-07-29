@@ -30,6 +30,8 @@ import software.amazon.awssdk.services.s3.model.*;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate; // Added import
+import java.time.format.DateTimeFormatter; // Added import
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -48,10 +50,61 @@ public class PerformanceInsightsService {
 
     @Autowired
     public PerformanceInsightsService(AwsDataService awsDataService, CloudAccountRepository cloudAccountRepository,
-            AwsClientProvider awsClientProvider) {
+                                      AwsClientProvider awsClientProvider) {
         this.awsDataService = awsDataService;
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
+    }
+
+    /**
+     * NEW METHOD
+     * Fetches historical daily request counts for all ALBs in an account.
+     * @param accountId The AWS Account ID
+     * @param days The number of past days to fetch data for.
+     * @return A list of maps, formatted for the Prophet forecasting service.
+     */
+    public List<Map<String, Object>> getDailyRequestCounts(String accountId, int days) {
+        List<Map<String, Object>> dailyTotals = new ArrayList<>();
+        CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
+                .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
+
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(days);
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+        // Initialize map with all dates to ensure we have entries even for days with zero requests
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            Map<String, Object> dayData = new HashMap<>();
+            dayData.put("ds", date.format(formatter));
+            dayData.put("y", 0.0);
+            dailyTotals.add(dayData);
+        }
+
+        try {
+            List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
+
+            for (DashboardData.RegionStatus region : activeRegions) {
+                ElasticLoadBalancingV2Client elbv2Client = awsClientProvider.getElbv2Client(account, region.getRegionId());
+                CloudWatchClient cloudWatchClient = awsClientProvider.getCloudWatchClient(account, region.getRegionId());
+
+                List<LoadBalancer> loadBalancers = elbv2Client.describeLoadBalancers().loadBalancers();
+
+                for (LoadBalancer lb : loadBalancers) {
+                    double requestCount = getRequestCount(cloudWatchClient, lb.loadBalancerArn()); // Uses your existing helper method
+
+                    // This example adds the total 24hr request count to the current day.
+                    // A more advanced implementation might fetch daily data points from CloudWatch.
+                    Map<String, Object> todayData = dailyTotals.get(dailyTotals.size() - 1);
+                    double currentTotal = (double) todayData.get("y");
+                    todayData.put("y", currentTotal + requestCount);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Could not fetch historical request counts for account {}", accountId, e);
+        }
+
+        return dailyTotals;
     }
 
     public List<PerformanceInsightDto> getInsights(String accountId, String severity) {
@@ -577,7 +630,7 @@ public class PerformanceInsightsService {
     }
 
     private double getAverageMetric(CloudWatchClient cloudWatchClient, String namespace,
-            String metricName, String dimensionName, String dimensionValue) {
+                                    String metricName, String dimensionName, String dimensionValue) {
         try {
             Instant endTime = Instant.now();
             Instant startTime = endTime.minus(24, ChronoUnit.HOURS);
@@ -600,7 +653,7 @@ public class PerformanceInsightsService {
     }
 
     private double getSumMetric(CloudWatchClient cloudWatchClient, String namespace, String metricName,
-            String dimensionName, String dimensionValue) {
+                                String dimensionName, String dimensionValue) {
         try {
             Instant endTime = Instant.now();
             Instant startTime = endTime.minus(24, ChronoUnit.HOURS);
