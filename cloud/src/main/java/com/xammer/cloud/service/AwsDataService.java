@@ -3274,7 +3274,7 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         });
     }
 
-    private String findResourceRegion(CloudAccount account, String serviceType, String resourceId) {
+    public String findResourceRegion(CloudAccount account, String serviceType, String resourceId) {
         logger.debug("Attempting to find region for {} resource {}", serviceType, resourceId);
         List<DashboardData.RegionStatus> activeRegions = getRegionStatusForAccount(account).join();
 
@@ -3305,7 +3305,7 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         return null; 
     }
 
-    private String findInstanceRegion(CloudAccount account, String instanceId) {
+    public String findInstanceRegion(CloudAccount account, String instanceId) {
         logger.debug("Attempting to find region for instance {}", instanceId);
         
         // This is a base client to describe regions; it needs a region to be built.

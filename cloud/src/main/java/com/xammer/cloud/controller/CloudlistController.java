@@ -38,4 +38,6 @@ public class CloudlistController {
         ResourceDetailDto resourceDetails = awsDataService.getResourceDetails(accountId, service, resourceId).get();
         return ResponseEntity.ok(resourceDetails);
     }
+
+    
 }

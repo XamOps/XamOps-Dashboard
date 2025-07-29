@@ -88,19 +88,4 @@ public class ForecastingController {
             return "[]";
         }
     }
-
-    @GetMapping("/performance")
-    public String getPerformanceForecastData(@RequestParam String accountId, @RequestParam(defaultValue = "7") int periods) {
-        List<Map<String, Object>> historicalMetrics = performanceInsightsService.getDailyRequestCounts(accountId, 30);
-        
-        if (historicalMetrics == null || historicalMetrics.isEmpty()) {
-            return "[]";
-        }
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("periods", periods);
-        requestBody.put("data", historicalMetrics);
-
-        return forecastingService.getPerformanceForecast(requestBody);
-    }
 }

@@ -78,6 +78,12 @@
             color: white;
             box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.4);
         }
+        
+        .tab-button.active {
+            background: white;
+            color: #4f46e5;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
 
         .action-button {
             transition: all 0.2s ease;
@@ -181,7 +187,18 @@
             </header>
 
             <div class="flex-1 p-8 space-y-8">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6" x-show="!isLoading">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" x-show="!isLoading">
+                    <div class="glass-card metric-card rounded-2xl p-6 lg:col-span-1">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-gray-600 text-sm font-medium">Performance Score</h3>
+                                <p class="text-3xl font-bold text-gray-800 mt-1" x-text="summary.performanceScore || 0"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-tachometer-alt text-blue-600"></i>
+                            </div>
+                        </div>
+                    </div>
                     <div class="glass-card metric-card rounded-2xl p-6">
                         <div class="flex items-center justify-between">
                             <div>
@@ -217,36 +234,10 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="glass-card metric-card rounded-2xl p-6">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="text-gray-600 text-sm font-medium">Avg P95 Latency</h3>
-                                <p class="text-3xl font-bold text-purple-600 mt-1" x-text="(albMetrics.avgP95Latency || 0) + 'ms'"></p>
-                                <p class="text-xs text-gray-500 mt-1" x-text="`Max: ${(albMetrics.maxP95Latency || 0)}ms`"></p>
-                            </div>
-                            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-tachometer-alt text-purple-600"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="glass-card metric-card rounded-2xl p-6">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="text-gray-600 text-sm font-medium">ALB Requests</h3>
-                                <p class="text-3xl font-bold text-green-600 mt-1" x-text="formatNumber(albMetrics.totalRequests || 0)"></p>
-                                <p class="text-xs text-gray-500 mt-1" x-text="`${albMetrics.albCount || 0} Load Balancers`"></p>
-                            </div>
-                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                                <i class="fas fa-network-wired text-green-600"></i>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6" x-show="isLoading" x-cloak>
-                    <template x-for="i in 5" :key="i">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" x-show="isLoading" x-cloak>
+                    <template x-for="i in 4" :key="i">
                         <div class="glass-card rounded-2xl p-6">
                             <div class="flex items-center justify-between">
                                 <div class="flex-1">
@@ -260,138 +251,200 @@
                 </div>
 
                 <div class="glass-card rounded-2xl p-8">
-                    <div class="flex flex-wrap justify-between items-center gap-6 mb-8">
-                        <div x-show="selectedInsights.length === 0" class="flex flex-wrap items-center gap-4">
-                            <h2 class="text-xl font-bold text-gray-800">Insights</h2>
-                            <div class="flex gap-2">
-                                <template x-for="severity in severityFilters" :key="severity.value">
-                                    <button
-                                            @click="currentSeverity = severity.value"
-                                            :class="currentSeverity === severity.value ? 'active' : ''"
-                                            class="filter-button px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2"
-                                            x-html="severity.label">
-                                    </button>
-                                </template>
-                            </div>
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">"What-If" Scenario Modeling</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label for="whatif-resource" class="text-sm font-medium text-gray-700 block mb-1">Resource ID</label>
+                            <input type="text" id="whatif-resource" x-model="whatIf.resourceId" placeholder="i-0123456789abcdef" class="w-full border-gray-300 rounded-md shadow-sm">
                         </div>
-
-                        <div x-show="selectedInsights.length > 0" x-cloak class="bulk-action-bar flex items-center gap-4 p-4 rounded-xl w-full">
-                            <div class="flex items-center space-x-2">
-                                <i class="fas fa-check-circle text-blue-600"></i>
-                                <span class="text-sm font-bold text-blue-800" x-text="`${selectedInsights.length} insight${selectedInsights.length > 1 ? 's' : ''} selected`"></span>
-                            </div>
-                            <div class="flex items-center gap-3 ml-auto">
-                                <button @click="bulkArchive()" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
-                                    <i class="fas fa-archive mr-2"></i>Archive Selected
-                                </button>
-                                <button @click="selectedInsights = []" class="text-gray-400 hover:text-gray-600 transition-colors">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
+                        <div>
+                            <label for="whatif-target" class="text-sm font-medium text-gray-700 block mb-1">Target Instance Type</label>
+                            <input type="text" id="whatif-target" x-model="whatIf.targetInstanceType" placeholder="m5.large" class="w-full border-gray-300 rounded-md shadow-sm">
                         </div>
-                    </div>
-
-                    <div x-show="isLoading" x-cloak class="space-y-4">
-                        <template x-for="i in 5" :key="i">
-                            <div class="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg">
-                                <div class="skeleton w-6 h-6 rounded"></div>
-                                <div class="flex-1 space-y-2">
-                                    <div class="skeleton h-4 w-3/4 rounded"></div>
-                                    <div class="skeleton h-3 w-1/2 rounded"></div>
-                                </div>
-                                <div class="skeleton h-6 w-16 rounded-full"></div>
-                                <div class="skeleton h-8 w-24 rounded"></div>
-                            </div>
-                        </template>
-                    </div>
-
-                    <div x-show="!isLoading && filteredInsights.length > 0" x-cloak class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="p-4 w-8">
-                                    <input type="checkbox" @change="toggleAllInsights" :checked="isAllSelected" class="rounded">
-                                </th>
-                                <th class="px-6 py-4 text-left font-bold">Insight</th>
-                                <th class="px-6 py-4 text-center font-bold">Qty</th>
-                                <th class="px-6 py-4 text-left font-bold">Account</th>
-                                <th class="px-6 py-4 text-center font-bold">Actions</th>
-                            </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                            <template x-for="insight in filteredInsights" :key="insight.id">
-                                <tr class="insight-row" :class="selectedInsights.includes(insight.id) ? 'bg-blue-50 border-l-blue-500' : ''">
-                                    <td class="p-4">
-                                        <input type="checkbox" :value="insight.id" x-model="selectedInsights" class="rounded">
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="flex items-start space-x-3">
-                                            <div class="flex-shrink-0 mt-1">
-                                                <i class="fas" :class="{
-                                                    'fa-exclamation-triangle text-red-500': insight.severity === 'CRITICAL',
-                                                    'fa-exclamation-circle text-orange-500': insight.severity === 'WARNING',
-                                                    'fa-info-circle text-yellow-500': insight.severity === 'WEAK_WARNING'
-                                                }"></i>
-                                            </div>
-                                            <div class="flex-1">
-                                                <p class="font-medium text-gray-900 leading-relaxed" x-text="insight.insight"></p>
-                                                <p class="text-xs text-gray-500 mt-1" x-text="insight.description" x-show="insight.description"></p>
-                                                <div x-show="insight.resourceType === 'ALB'" class="mt-2 text-xs text-gray-600">
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-800 mr-2">
-                                                        <i class="fas fa-tachometer-alt mr-1"></i>
-                                                        Performance Impact
-                                                    </span>
-                                                    <span x-show="insight.insight.includes('latency')" class="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-800">
-                                                        <i class="fas fa-clock mr-1"></i>
-                                                        High Latency
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-red-500 rounded-full"
-                                              x-text="insight.quantity"></span>
-                                        <span class="text-xs text-gray-500 ml-1">Insight</span>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <span class="font-medium text-gray-900" x-text="insight.account"></span>
-                                        <p class="text-xs text-gray-500" x-text="insight.region" x-show="insight.region"></p>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="flex justify-center gap-2">
-                                            <button class="action-button px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">
-                                                Read Docs
-                                            </button>
-                                            <button @click="archiveInsight(insight.id)" class="action-button px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">
-                                                Archive
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </template>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div x-show="!isLoading && filteredInsights.length === 0" x-cloak class="text-center py-16">
-                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <i class="fas fa-search text-gray-400 text-xl"></i>
-                        </div>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-2">No insights found</h3>
-                        <p class="text-gray-600 mb-4" x-text="currentSeverity === 'ALL' ? 'No performance insights available.' : `No ${currentSeverity.toLowerCase()} insights found.`"></p>
-                        <button @click="loadInsights(true)" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all">
-                            <i class="fas fa-sync-alt mr-2"></i>Refresh Insights
+                        <button @click="runWhatIfScenario()" :disabled="whatIf.isLoading" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                            <span x-show="!whatIf.isLoading">Analyze</span>
+                            <span x-show="whatIf.isLoading">Analyzing...</span>
                         </button>
+                    </div>
+                    <div x-show="whatIf.result" x-cloak class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h3 class="font-semibold text-blue-800">Scenario Result:</h3>
+                        <p class="text-sm text-blue-700" x-text="whatIf.result.performanceChangeSummary"></p>
+                        <p class="text-sm" :class="whatIf.result.costDifference > 0 ? 'text-red-700' : 'text-green-700'">
+                            Cost difference: <span x-text="whatIf.result.costDifference.toFixed(2)"></span> USD/month
+                        </p>
                     </div>
                 </div>
 
                 <div class="glass-card rounded-2xl p-8">
-                    <h2 class="text-lg font-semibold text-gray-700 mb-4">
-                        <i class="fas fa-magic mr-2 text-teal-500"></i>7-Day P95 Latency Forecast
-                    </h2>
-                    <div style="height: 400px;" id="forecastContainer">
-                        <canvas id="performanceForecastChart"></canvas>
+                    <div class="mb-6 border-b border-gray-200">
+                        <nav class="flex -mb-px" aria-label="Tabs">
+                            <button @click="activeTab = 'insights'" :class="{ 'border-blue-500 text-blue-600': activeTab === 'insights', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': activeTab !== 'insights' }" class="w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm">
+                                Critical Insights
+                            </button>
+                            <button @click="activeTab = 'best_practices'" :class="{ 'border-blue-500 text-blue-600': activeTab === 'best_practices', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': activeTab !== 'best_practices' }" class="w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm">
+                                Best Practice Audits
+                            </button>
+                        </nav>
+                    </div>
+
+                    <div x-show="activeTab === 'insights'">
+                        <div class="flex flex-wrap justify-between items-center gap-6 mb-8">
+                            <div x-show="selectedInsights.length === 0" class="flex flex-wrap items-center gap-4">
+                                <h2 class="text-xl font-bold text-gray-800">Insights</h2>
+                                <div class="flex gap-2">
+                                    <template x-for="severity in severityFilters" :key="severity.value">
+                                        <button
+                                                @click="currentSeverity = severity.value"
+                                                :class="currentSeverity === severity.value ? 'active' : ''"
+                                                class="filter-button px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2"
+                                                x-html="severity.label">
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div x-show="selectedInsights.length > 0" x-cloak class="bulk-action-bar flex items-center gap-4 p-4 rounded-xl w-full">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fas fa-check-circle text-blue-600"></i>
+                                    <span class="text-sm font-bold text-blue-800" x-text="`${selectedInsights.length} insight${selectedInsights.length > 1 ? 's' : ''} selected`"></span>
+                                </div>
+                                <div class="flex items-center gap-3 ml-auto">
+                                    <button @click="bulkArchive()" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
+                                        <i class="fas fa-archive mr-2"></i>Archive Selected
+                                    </button>
+                                    <button @click="selectedInsights = []" class="text-gray-400 hover:text-gray-600 transition-colors">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div x-show="isLoading" x-cloak class="space-y-4">
+                            <template x-for="i in 5" :key="i">
+                                <div class="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg">
+                                    <div class="skeleton w-6 h-6 rounded"></div>
+                                    <div class="flex-1 space-y-2">
+                                        <div class="skeleton h-4 w-3/4 rounded"></div>
+                                        <div class="skeleton h-3 w-1/2 rounded"></div>
+                                    </div>
+                                    <div class="skeleton h-6 w-16 rounded-full"></div>
+                                    <div class="skeleton h-8 w-24 rounded"></div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <div x-show="!isLoading && filteredInsights.length > 0" x-cloak class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="p-4 w-8">
+                                        <input type="checkbox" @change="toggleAllInsights" :checked="isAllSelected" class="rounded">
+                                    </th>
+                                    <th class="px-6 py-4 text-left font-bold">Insight</th>
+                                    <th class="px-6 py-4 text-center font-bold">Qty</th>
+                                    <th class="px-6 py-4 text-left font-bold">Account</th>
+                                    <th class="px-6 py-4 text-center font-bold">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                <template x-for="insight in filteredInsights" :key="insight.id">
+                                    <tr class="insight-row" :class="selectedInsights.includes(insight.id) ? 'bg-blue-50 border-l-blue-500' : ''">
+                                        <td class="p-4">
+                                            <input type="checkbox" :value="insight.id" x-model="selectedInsights" class="rounded">
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-start space-x-3">
+                                                <div class="flex-shrink-0 mt-1">
+                                                    <i class="fas" :class="{
+                                                        'fa-exclamation-triangle text-red-500': insight.severity === 'CRITICAL',
+                                                        'fa-exclamation-circle text-orange-500': insight.severity === 'WARNING',
+                                                        'fa-info-circle text-yellow-500': insight.severity === 'WEAK_WARNING'
+                                                    }"></i>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <p class="font-medium text-gray-900 leading-relaxed" x-text="insight.insight"></p>
+                                                    <p class="text-xs text-gray-500 mt-1" x-text="insight.description" x-show="insight.description"></p>
+                                                    <div x-show="insight.resourceType === 'ALB'" class="mt-2 text-xs text-gray-600">
+                                                        <span class="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-800 mr-2">
+                                                            <i class="fas fa-tachometer-alt mr-1"></i>
+                                                            Performance Impact
+                                                        </span>
+                                                        <span x-show="insight.insight.includes('latency')" class="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-800">
+                                                            <i class="fas fa-clock mr-1"></i>
+                                                            High Latency
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-red-500 rounded-full"
+                                                  x-text="insight.quantity"></span>
+                                            <span class="text-xs text-gray-500 ml-1">Insight</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="font-medium text-gray-900" x-text="insight.account"></span>
+                                            <p class="text-xs text-gray-500" x-text="insight.region" x-show="insight.region"></p>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex justify-center gap-2">
+                                                <button class="action-button px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                                                    Read Docs
+                                                </button>
+                                                <button @click="archiveInsight(insight.id)" class="action-button px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">
+                                                    Archive
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div x-show="!isLoading && filteredInsights.length === 0" x-cloak class="text-center py-16">
+                            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-search text-gray-400 text-xl"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2">No insights found</h3>
+                            <p class="text-gray-600 mb-4" x-text="currentSeverity === 'ALL' ? 'No performance insights available.' : `No ${currentSeverity.toLowerCase()} insights found.`"></p>
+                            <button @click="loadInsights(true)" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all">
+                                <i class="fas fa-sync-alt mr-2"></i>Refresh Insights
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div x-show="activeTab === 'best_practices'" x-cloak>
+                         <div x-show="!isLoading && bestPracticeInsights.length > 0" class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-4 text-left font-bold">Recommendation</th>
+                                    <th class="px-6 py-4 text-left font-bold">Resource</th>
+                                    <th class="px-6 py-4 text-center font-bold">Savings</th>
+                                </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                <template x-for="insight in bestPracticeInsights" :key="insight.id">
+                                    <tr class="insight-row">
+                                        <td class="px-6 py-4">
+                                            <p class="font-medium text-gray-900" x-text="insight.insight"></p>
+                                            <p class="text-xs text-gray-500" x-text="insight.description"></p>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <p class="font-mono text-xs text-gray-700" x-text="insight.resourceId"></p>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="text-green-600 font-semibold" x-text="'$' + insight.potentialSavings.toFixed(2)"></span>
+                                        </td>
+                                    </tr>
+                                </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div x-show="!isLoading && bestPracticeInsights.length === 0" class="text-center py-16">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2">No Best Practice violations found!</h3>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -407,8 +460,13 @@
             selectedInsights: [],
             currentSeverity: 'ALL',
             summary: {},
-            albMetrics: {}, // New property for ALB metrics
-            performanceForecastChart: null, // Add chart instance for forecast chart
+            activeTab: 'insights',
+            whatIf: {
+                resourceId: '',
+                targetInstanceType: '',
+                isLoading: false,
+                result: null
+            },
 
             severityFilters: [
                 { value: 'ALL', label: 'All Insights' },
@@ -420,32 +478,9 @@
             init() {
                 this.loadInsights();
                 this.loadSummary();
-                this.loadALBMetrics(); // Load ALB metrics on init
-                this.renderPerformanceForecastChart(); // Render forecast chart on init
                 this.$watch('currentSeverity', () => {
                     this.loadInsights();
                 });
-            },
-
-            // New method to load ALB performance metrics
-            loadALBMetrics() {
-                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-                if (!selectedAccountId) return;
-
-                fetch(`/api/metrics/alb-performance?accountId=${selectedAccountId}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        this.albMetrics = data;
-                    })
-                    .catch(err => {
-                        console.error('Failed to load ALB metrics', err);
-                        this.albMetrics = {
-                            avgP95Latency: 0,
-                            maxP95Latency: 0,
-                            totalRequests: 0,
-                            albCount: 0
-                        };
-                    });
             },
 
             loadInsights(forceRefresh = false) {
@@ -462,11 +497,6 @@
                     .then(res => res.json())
                     .then(data => {
                         this.insights = data;
-                        // Refresh ALB metrics when insights are refreshed
-                        if (forceRefresh) {
-                            this.loadALBMetrics();
-                            this.renderPerformanceForecastChart(); // Also refresh the forecast chart
-                        }
                     })
                     .catch(err => {
                         console.error('Failed to load insights', err);
@@ -490,8 +520,7 @@
                         console.error('Failed to load summary', err);
                     });
             },
-
-            // Utility method for number formatting
+            
             formatNumber(num) {
                 if (num >= 1000000) {
                     return (num / 1000000).toFixed(1) + 'M';
@@ -502,7 +531,11 @@
             },
 
             get filteredInsights() {
-                return this.insights;
+                return this.insights.filter(i => i.category !== 'BEST_PRACTICE');
+            },
+
+            get bestPracticeInsights() {
+                return this.insights.filter(i => i.category === 'BEST_PRACTICE');
             },
 
             get isAllSelected() {
@@ -528,8 +561,6 @@
                         if (res.ok) {
                             this.insights = this.insights.filter(i => i.id !== insightId);
                             this.loadSummary();
-                            this.loadALBMetrics(); // Refresh ALB metrics after archiving
-                            this.renderPerformanceForecastChart(); // Refresh forecast chart
                         }
                     })
                     .catch(err => {
@@ -553,8 +584,6 @@
                             this.insights = this.insights.filter(i => !this.selectedInsights.includes(i.id));
                             this.selectedInsights = [];
                             this.loadSummary();
-                            this.loadALBMetrics(); // Refresh ALB metrics after bulk archive
-                            this.renderPerformanceForecastChart(); // Refresh forecast chart
                         }
                     })
                     .catch(err => {
@@ -569,183 +598,26 @@
                 window.open(`/api/metrics/insights/export?accountId=${selectedAccountId}&severity=${severity}`, '_blank');
             },
 
-            async renderPerformanceForecastChart() {
-                const container = document.getElementById('forecastContainer');
-                try {
-                    const selectedAccountId = sessionStorage.getItem('selectedAccountId') || '605134457560';
-                    const response = await fetch(`/api/forecast/performance?accountId=${selectedAccountId}&periods=7`);
-
-                    if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
-
-                    const forecastData = await response.json();
-
-                    if (!forecastData || forecastData.length === 0 || forecastData.error) {
-                        const errorMessage = forecastData.error || "No data returned from forecast service.";
-                        container.innerHTML = `<div class="text-center text-red-500 font-semibold p-4">Failed to load forecast data. Please check the Python service logs.</div>`;
-                        return;
-                    }
-
-                    // Remove any existing error messages before rendering the chart
-                    const existingErrorMessage = container.querySelector('.text-center.text-red-500');
-                    if (existingErrorMessage) {
-                        existingErrorMessage.remove();
-                    }
-
-                    const labels = forecastData.map(d => new Date(d.ds).toLocaleDateString());
-                    const historicalCutoff = new Date();
-                    historicalCutoff.setDate(historicalCutoff.getDate()); // Today's date is the cutoff for historical vs. forecast
-
-                    const historicalPoints = forecastData.map(d => new Date(d.ds) < historicalCutoff ? d.yhat : null);
-                    const forecastPoints = forecastData.map(d => new Date(d.ds) >= historicalCutoff ? d.yhat : null);
-
-                    // Connect the historical line to the forecast line by adding the first forecast point to historicalPoints
-                    const firstForecastPointIndex = forecastData.findIndex(d => new Date(d.ds) >= historicalCutoff);
-                    if (firstForecastPointIndex > 0 && historicalPoints[firstForecastPointIndex -1] !== null) {
-                        historicalPoints[firstForecastPointIndex] = forecastData[firstForecastPointIndex].yhat;
-                    }
-
-
-                    const forecastLower = forecastData.map(d => new Date(d.ds) >= historicalCutoff ? d.yhat_lower : null);
-                    const forecastUpper = forecastData.map(d => new Date(d.ds) >= historicalCutoff ? d.yhat_upper : null);
-
-                    const ctx = document.getElementById('performanceForecastChart').getContext('2d');
-
-                    // If chart exists, destroy it before creating a new one
-                    if (this.performanceForecastChart) {
-                        this.performanceForecastChart.destroy();
-                    }
-
-                    // Ensure canvas is visible if it was hidden by a previous error message
-                    ctx.style.display = 'block';
-
-                    this.performanceForecastChart = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Historical Daily Requests', // Changed label
-                                    data: historicalPoints,
-                                    borderColor: 'rgb(20, 184, 166)', // Tailwind 'teal-500'
-                                    tension: 0.1,
-                                    pointRadius: 1,
-                                    segment: {
-                                        borderColor: ctx => {
-                                            const index = ctx.p0DataIndex;
-                                            const nextIndex = ctx.p1DataIndex;
-                                            // Check if the current segment connects a historical point to a forecast point
-                                            if (historicalPoints[index] !== null && historicalPoints[nextIndex] === null && forecastPoints[nextIndex] !== null) {
-                                                return 'rgb(20, 184, 166)'; // Keep historical color for the transition point
-                                            }
-                                            return 'rgb(20, 184, 166)'; // Otherwise, solid teal for historical
-                                        },
-                                        borderDash: ctx => {
-                                            const index = ctx.p0DataIndex;
-                                            const nextIndex = ctx.p1DataIndex;
-                                            if (historicalPoints[index] !== null && historicalPoints[nextIndex] === null && forecastPoints[nextIndex] !== null) {
-                                                return [0, 0]; // Solid line for the transition
-                                            }
-                                            return [0, 0]; // Otherwise, solid line for historical
-                                        }
-                                    }
-                                },
-                                {
-                                    label: 'Forecasted Daily Requests', // Changed label
-                                    data: forecastPoints,
-                                    borderColor: 'rgb(249, 115, 22)', // Tailwind 'orange-500'
-                                    borderDash: [5, 5],
-                                    tension: 0.1,
-                                    pointRadius: 1
-                                },
-                                {
-                                    label: 'Uncertainty Range (Upper)',
-                                    data: forecastUpper,
-                                    fill: '+1',
-                                    backgroundColor: 'rgba(249, 115, 22, 0.1)', // Light orange for fill
-                                    borderColor: 'transparent',
-                                    pointRadius: 0,
-                                    showInLegend: false // Hide this specific label in the legend
-                                },
-                                {
-                                    label: 'Uncertainty Range (Lower)',
-                                    data: forecastLower,
-                                    fill: false,
-                                    backgroundColor: 'transparent',
-                                    borderColor: 'transparent',
-                                    pointRadius: 0,
-                                    showInLegend: false // Hide this specific label in the legend
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: {
-                                mode: 'index',
-                                intersect: false,
-                            },
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                    labels: {
-                                        filter: function(item, chart) {
-                                            // Only show labels for 'Historical Daily Requests' and 'Forecasted Daily Requests'
-                                            return item.text === 'Historical Daily Requests' || item.text === 'Forecasted Daily Requests';
-                                        }
-                                    }
-                                },
-                                title: {
-                                    display: true,
-                                    text: 'Total Daily ALB Requests Forecast' // Changed title
-                                }
-                            },
-                            scales: {
-                                y: {
-                                    ticks: {
-                                        callback: function(value) { return value.toLocaleString(); } // Changed callback for request counts
-                                    }
-                                },
-                                x: {
-                                    ticks: {
-                                        autoSkip: true,
-                                        maxTicksLimit: 7 // Limit x-axis labels for readability
-                                    }
-                                }
-                            },
-                            elements: {
-                                line: {
-                                    borderJoinStyle: 'round'
-                                },
-                                point: {
-                                    hitRadius: 5
-                                }
-                            },
-                            hover: {
-                                mode: 'nearest',
-                                intersect: true
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false,
-                                callbacks: {
-                                    label: function(context) {
-                                        let label = context.dataset.label || '';
-                                        if (label) {
-                                            label += ': ';
-                                        }
-                                        if (context.parsed.y !== null) {
-                                            label += context.parsed.y.toLocaleString(); // Changed tooltip format for request counts
-                                        }
-                                        return label;
-                                    }
-                                }
-                            }
-                        }
-                    });
-                } catch (error) {
-                    console.error("Detailed error in renderPerformanceForecastChart:", error);
-                    container.innerHTML = `<div class="text-center text-red-500 font-semibold p-4">Failed to load forecast data. Is the Python service running?</div>`;
+            runWhatIfScenario() {
+                if (!this.whatIf.resourceId || !this.whatIf.targetInstanceType) {
+                    alert('Please provide a resource ID and a target instance type.');
+                    return;
                 }
+                this.whatIf.isLoading = true;
+                this.whatIf.result = null;
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                fetch(`/api/metrics/insights/what-if?accountId=${selectedAccountId}&resourceId=${this.whatIf.resourceId}&targetInstanceType=${this.whatIf.targetInstanceType}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.whatIf.result = data;
+                    })
+                    .catch(err => {
+                        console.error('Failed to run What-If scenario', err);
+                        alert('Failed to run scenario. Please check the resource ID and instance type.');
+                    })
+                    .finally(() => {
+                        this.whatIf.isLoading = false;
+                    });
             }
         }
     }
