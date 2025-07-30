@@ -3061,7 +3061,7 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
 
     private String formatAge(OffsetDateTime creationTimestamp) { if (creationTimestamp == null) return "N/A"; Duration duration = Duration.between(creationTimestamp, OffsetDateTime.now()); long days = duration.toDays(); if (days > 0) return days + "d"; long hours = duration.toHours(); if (hours > 0) return hours + "h"; long minutes = duration.toMinutes(); if (minutes > 0) return minutes + "m"; return duration.toSeconds() + "s"; }
 
-    public URL generateCloudFormationUrl(String accountName, String accessType, Long clientId) throws Exception {
+    public Map<String, String> generateCloudFormationUrl(String accountName, String accessType, Long clientId) throws Exception {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new RuntimeException("Client not found with id: " + clientId));
 
@@ -3071,10 +3071,14 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         String stackName = "XamOps-Connection-" + accountName.replaceAll("[^a-zA-Z0-9-]", "");
         String xamopsAccountId = this.hostAccountId;
         String urlString = String.format("https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=%s&stackName=%s&param_XamOpsAccountId=%s&param_ExternalId=%s", cloudFormationTemplateUrl, stackName, xamopsAccountId, externalId);
-        return new URL(urlString);
+        
+        return Map.of(
+            "url", new URL(urlString).toString(),
+            "externalId", externalId
+        );
     }
     
-    public CloudAccount verifyAccount(VerifyAccountRequest request) {
+   public CloudAccount verifyAccount(VerifyAccountRequest request) {
         CloudAccount account = cloudAccountRepository.findByExternalId(request.getExternalId()).orElseThrow(() -> new RuntimeException("No pending account found for the given external ID."));
         if (!"PENDING".equals(account.getStatus())) {
             throw new RuntimeException("Account is not in a PENDING state.");
