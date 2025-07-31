@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+
 @RestController
 @RequestMapping("/api/account-manager")
 public class AccountManagerController {
@@ -39,8 +40,8 @@ public class AccountManagerController {
         ClientUserDetails userDetails = (ClientUserDetails) authentication.getPrincipal();
         Long clientId = userDetails.getClientId();
         try {
-            URL stackUrl = awsDataService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType(), clientId);
-            return ResponseEntity.ok(Map.of("url", stackUrl.toString()));
+            Map<String, String> stackDetails = awsDataService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType(), clientId);
+            return ResponseEntity.ok(stackDetails);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Could not generate CloudFormation URL", "message", e.getMessage()));
         }
