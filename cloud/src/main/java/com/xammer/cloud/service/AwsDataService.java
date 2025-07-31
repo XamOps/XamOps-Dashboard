@@ -1600,11 +1600,17 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
                     .flatMap(rec -> rec.recommendationDetails().stream()
                             .map(details -> {
                                 try {
+                                    // *** THIS LOGIC IS REVERTED TO USE THE HELPER METHOD TO AVOID COMPILATION ERRORS ***
                                     return new DashboardData.ReservationPurchaseRecommendation(
-                                            getFieldValue(details, "instanceDetails"), getFieldValue(details, "recommendedNumberOfInstancesToPurchase"),
-                                            getFieldValue(details, "recommendedNormalizedUnitsToPurchase"), getFieldValue(details, "minimumNormalizedUnitsToPurchase"),
-                                            getFieldValue(details, "estimatedMonthlySavingsAmount"), getFieldValue(details, "estimatedMonthlyOnDemandCost"),
-                                            getFieldValue(details, "estimatedMonthlyCost"), getTermValue(rec));
+                                            getFieldValue(details, "instanceDetails"),
+                                            getFieldValue(details, "recommendedNumberOfInstancesToPurchase"),
+                                            getFieldValue(details, "recommendedNormalizedUnitsToPurchase"),
+                                            getFieldValue(details, "minimumNormalizedUnitsToPurchase"),
+                                            getFieldValue(details, "estimatedMonthlySavingsAmount"),
+                                            getFieldValue(details, "estimatedMonthlyOnDemandCost"),
+                                            getFieldValue(details, "estimatedMonthlyCost"),
+                                            getTermValue(rec)
+                                    );
                                 } catch (Exception e) {
                                     logger.warn("Failed to process recommendation detail: {}", e.getMessage());
                                     return null;
@@ -1617,6 +1623,8 @@ private CompletableFuture<List<DashboardData.WastedResource>> findUnusedCloudWat
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
+
+
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "billingSummary", key = "#account.awsAccountId")
@@ -3061,7 +3069,7 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
 
     private String formatAge(OffsetDateTime creationTimestamp) { if (creationTimestamp == null) return "N/A"; Duration duration = Duration.between(creationTimestamp, OffsetDateTime.now()); long days = duration.toDays(); if (days > 0) return days + "d"; long hours = duration.toHours(); if (hours > 0) return hours + "h"; long minutes = duration.toMinutes(); if (minutes > 0) return minutes + "m"; return duration.toSeconds() + "s"; }
 
-    public Map<String, String> generateCloudFormationUrl(String accountName, String accessType, Long clientId) throws Exception {
+    public URL generateCloudFormationUrl(String accountName, String accessType, Long clientId) throws Exception {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new RuntimeException("Client not found with id: " + clientId));
 
@@ -3071,14 +3079,10 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         String stackName = "XamOps-Connection-" + accountName.replaceAll("[^a-zA-Z0-9-]", "");
         String xamopsAccountId = this.hostAccountId;
         String urlString = String.format("https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=%s&stackName=%s&param_XamOpsAccountId=%s&param_ExternalId=%s", cloudFormationTemplateUrl, stackName, xamopsAccountId, externalId);
-        
-        return Map.of(
-            "url", new URL(urlString).toString(),
-            "externalId", externalId
-        );
+        return new URL(urlString);
     }
     
-   public CloudAccount verifyAccount(VerifyAccountRequest request) {
+    public CloudAccount verifyAccount(VerifyAccountRequest request) {
         CloudAccount account = cloudAccountRepository.findByExternalId(request.getExternalId()).orElseThrow(() -> new RuntimeException("No pending account found for the given external ID."));
         if (!"PENDING".equals(account.getStatus())) {
             throw new RuntimeException("Account is not in a PENDING state.");

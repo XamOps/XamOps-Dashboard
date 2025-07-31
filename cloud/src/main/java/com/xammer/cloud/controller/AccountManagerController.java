@@ -40,7 +40,8 @@ public class AccountManagerController {
         ClientUserDetails userDetails = (ClientUserDetails) authentication.getPrincipal();
         Long clientId = userDetails.getClientId();
         try {
-            Map<String, String> stackDetails = awsDataService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType(), clientId);
+            URL stackUrl = awsDataService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType(), clientId);
+            Map<String, String> stackDetails = Map.of("url", stackUrl.toString());
             return ResponseEntity.ok(stackDetails);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Could not generate CloudFormation URL", "message", e.getMessage()));

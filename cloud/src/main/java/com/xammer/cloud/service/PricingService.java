@@ -2,11 +2,16 @@ package com.xammer.cloud.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xammer.cloud.domain.CloudAccount; // ADDED
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.DescribeSpotPriceHistoryRequest;
+import software.amazon.awssdk.services.ec2.model.SpotPrice;
+import software.amazon.awssdk.services.ec2.model.InstanceType; // ADDED
 import software.amazon.awssdk.services.pricing.PricingClient;
 import software.amazon.awssdk.services.pricing.model.Filter;
 import software.amazon.awssdk.services.pricing.model.GetProductsRequest;
@@ -14,8 +19,12 @@ import software.amazon.awssdk.services.pricing.model.GetProductsResponse;
 import software.amazon.awssdk.services.rds.model.DBInstance;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Comparator; // ADDED
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class PricingService {
@@ -23,17 +32,47 @@ public class PricingService {
     private static final Logger logger = LoggerFactory.getLogger(PricingService.class);
     private final PricingClient pricingClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AwsClientProvider awsClientProvider; // CHANGED
 
     @Value("${pricing.ebs.fallback-price:0.10}")
     private double ebsFallbackPrice;
 
-    public PricingService(PricingClient pricingClient) {
+    // CHANGED: Injected AwsClientProvider instead of a generic Ec2Client
+    public PricingService(PricingClient pricingClient, AwsClientProvider awsClientProvider) {
         this.pricingClient = pricingClient;
+        this.awsClientProvider = awsClientProvider;
     }
+
+    @Cacheable(value = "spotPrice", key = "#account.awsAccountId + '-' + #region + '-' + #instanceType")
+public double getSpotInstancePrice(String instanceType, String region, CloudAccount account) {
+    logger.info("Fetching spot price for instance type: {} in region: {}", instanceType, region);
+    try {
+        // Use the provider to get a correctly configured, region-specific client
+        Ec2Client ec2Client = awsClientProvider.getEc2Client(account, region);
+
+        DescribeSpotPriceHistoryRequest request = DescribeSpotPriceHistoryRequest.builder()
+            .instanceTypes(InstanceType.fromValue(instanceType))
+            .productDescriptions("Linux/UNIX")
+            .startTime(Instant.now().minusSeconds(3600))
+            .endTime(Instant.now())
+            .build();
+
+        // Find the most recent spot price from the history
+        Optional<SpotPrice> spotPrice = ec2Client.describeSpotPriceHistory(request).spotPriceHistory().stream()
+            .max(Comparator.comparing(SpotPrice::timestamp));
+
+        if (spotPrice.isPresent()) {
+            return Double.parseDouble(spotPrice.get().spotPrice());
+        }
+    } catch (Exception e) {
+        logger.error("Failed to fetch spot price for instance type {} in region {}", instanceType, region, e);
+    }
+    return 0.0;
+}
+
 
     @Cacheable(value = "ebsPrice", key = "#region + '-' + #volumeType")
     public double getEbsGbMonthPrice(String region, String volumeType) {
-        // ... (existing method)
         logger.info("Fetching live EBS price for region: {}, type: {}", region, volumeType);
         Filter regionFilter = Filter.builder().field("regionCode").value(region).type("TERM_MATCH").build();
         Filter volumeApiNameFilter = Filter.builder().field("volumeApiName").value(volumeType).type("TERM_MATCH").build();
@@ -53,12 +92,12 @@ public class PricingService {
             JsonNode priceList = objectMapper.readTree(response.priceList().get(0));
             JsonNode terms = priceList.path("terms").path("OnDemand");
             if (terms.isMissingNode() || terms.isEmpty()) {
-                 return ebsFallbackPrice;
+                return ebsFallbackPrice;
             }
 
             JsonNode priceDimensions = terms.elements().next().path("priceDimensions");
-             if (priceDimensions.isMissingNode() || priceDimensions.isEmpty()) {
-                 return ebsFallbackPrice;
+            if (priceDimensions.isMissingNode() || priceDimensions.isEmpty()) {
+                return ebsFallbackPrice;
             }
 
             JsonNode pricePerUnit = priceDimensions.elements().next().path("pricePerUnit").path("USD");
@@ -75,7 +114,6 @@ public class PricingService {
 
     @Cacheable(value = "ec2Price", key = "#region + '-' + #instanceType")
     public double getEc2InstanceMonthlyPrice(String instanceType, String region) {
-        // ... (existing method)
         logger.info("Fetching live EC2 price for region: {}, type: {}", region, instanceType);
         Filter regionFilter = Filter.builder().field("location").value(getRegionDescription(region)).type("TERM_MATCH").build();
         Filter instanceTypeFilter = Filter.builder().field("instanceType").value(instanceType).type("TERM_MATCH").build();
@@ -89,7 +127,7 @@ public class PricingService {
                 .serviceCode("AmazonEC2")
                 .filters(regionFilter, instanceTypeFilter, tenancyFilter, osFilter, capacityFilter, preinstalledSwFilter)
                 .build();
-        
+
         try {
             GetProductsResponse response = pricingClient.getProducts(request);
             if (response.priceList().isEmpty()) {
@@ -121,14 +159,14 @@ public class PricingService {
         logger.info("Fetching live Elastic IP price for region: {}", region);
         Filter regionFilter = Filter.builder().field("location").value(getRegionDescription(region)).type("TERM_MATCH").build();
         Filter groupFilter = Filter.builder().field("group").value("Elastic IP Address").type("TERM_MATCH").build();
-        
+
         GetProductsRequest request = GetProductsRequest.builder()
                 .serviceCode("AmazonEC2")
                 .filters(regionFilter, groupFilter)
                 .build();
         try {
             GetProductsResponse response = pricingClient.getProducts(request);
-             if (response.priceList().isEmpty()) {
+            if (response.priceList().isEmpty()) {
                 logger.warn("No price list found for Elastic IP in region {}", region);
                 return 5.0; // Fallback
             }
@@ -150,7 +188,7 @@ public class PricingService {
         Filter regionFilter = Filter.builder().field("location").value(getRegionDescription(region)).type("TERM_MATCH").build();
         Filter instanceClassFilter = Filter.builder().field("instanceType").value(dbInstance.dbInstanceClass()).type("TERM_MATCH").build();
         Filter engineFilter = Filter.builder().field("databaseEngine").value(dbInstance.engine()).type("TERM_MATCH").build();
-        
+
         GetProductsRequest request = GetProductsRequest.builder()
                 .serviceCode("AmazonRDS")
                 .filters(regionFilter, instanceClassFilter, engineFilter)
@@ -174,7 +212,6 @@ public class PricingService {
     }
 
     private String getRegionDescription(String regionCode) {
-        // ... (existing method)
         Map<String, String> regionMap = Map.ofEntries(
             Map.entry("us-east-1", "US East (N. Virginia)"),
             Map.entry("us-east-2", "US East (Ohio)"),
