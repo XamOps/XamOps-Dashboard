@@ -40,16 +40,20 @@ public class ForecastingController {
     private static final DateTimeFormatter PROPHET_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @GetMapping("/cost")
-    public String getCostForecastData(@RequestParam String accountId, @RequestParam(defaultValue = "30") int periods) {
-        
+    public String getCostForecastData(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "30") int periods,
+            @RequestParam(required = false) String serviceName) {
+
         try {
-            // IMPORTANT CHANGE: We now fetch the total daily cost trend for the entire account
-            // This provides a much better time series for forecasting.
+            // Fetch more historical data for a better forecast basis (e.g., 3x the forecast period)
+            int historicalDays = Math.min(periods * 3, 180);
+
             HistoricalCostDto historicalCostData = costService.getHistoricalCost(
-                accountId, 
-                null, // No specific service, get total cost
-                null, // No specific region, get total cost
-                90    // days
+                accountId,
+                "ALL".equalsIgnoreCase(serviceName) ? null : serviceName, // Pass null for "All Services"
+                null,
+                historicalDays
             ).get();
 
             if (historicalCostData == null || historicalCostData.getLabels() == null || historicalCostData.getLabels().isEmpty()) {
@@ -57,16 +61,14 @@ public class ForecastingController {
                 return "[]";
             }
 
-            // Added logging to help debug the data being returned by your service
             logger.info("Historical Data Labels received: " + historicalCostData.getLabels());
             logger.info("Historical Data Costs received: " + historicalCostData.getCosts());
 
             List<Map<String, Object>> formattedData = new ArrayList<>();
-            
+
             for (int i = 0; i < historicalCostData.getLabels().size(); i++) {
                 Map<String, Object> point = new HashMap<>();
-                // The date format from CostService is already YYYY-MM-DD, so we pass it directly
-                point.put("ds", historicalCostData.getLabels().get(i)); 
+                point.put("ds", historicalCostData.getLabels().get(i));
                 point.put("y", historicalCostData.getCosts().get(i));
                 formattedData.add(point);
             }
