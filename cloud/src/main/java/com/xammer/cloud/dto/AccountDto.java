@@ -10,10 +10,11 @@ import lombok.NoArgsConstructor;
 public class AccountDto {
     private Long dbId;
     private String name;
-    private String id; // AWS Account ID
+    private String id; // AWS Account ID or GCP Project ID
     private String access;
     private String connection;
     private String status;
     private String roleArn;
-    private String externalId; // ADDED: To pass the externalId to the frontend
+    private String externalId;
+    private String provider;
 }

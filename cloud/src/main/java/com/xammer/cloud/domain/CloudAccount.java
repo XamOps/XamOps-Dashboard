@@ -12,6 +12,7 @@ import javax.persistence.Column;
 import javax.persistence.FetchType;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
+import javax.persistence.Lob;
 
 @Entity
 @Data
@@ -26,19 +27,26 @@ public class CloudAccount {
     private String accountName;
 
     @Column(unique = true)
-    private String awsAccountId;
+    private String awsAccountId; // For AWS, this is the account ID. For GCP, this is the Project ID.
 
-    @Column(nullable = false, unique = true)
+    @Column
     private String externalId;
 
-    @Column(nullable = false)
+    @Column
     private String accessType; // "read-only" or "read-write"
 
     @Column(unique = true)
     private String roleArn;
+    
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String gcpServiceAccountKey;
 
     @Column(nullable = false)
     private String status = "PENDING"; // PENDING, CONNECTED, FAILED
+
+    @Column(nullable = false)
+    private String provider; // AWS or GCP
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
