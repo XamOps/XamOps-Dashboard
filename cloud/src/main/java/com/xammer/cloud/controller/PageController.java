@@ -70,6 +70,11 @@ public class PageController {
     public String addAccountPage() {
         return "add-account";
     }
+    
+    @GetMapping("/add-gcp-account")
+    public String addGcpAccountPage() {
+        return "add-gcp-account";
+    }
 
     @GetMapping("/cost")
     public String costPage() {
