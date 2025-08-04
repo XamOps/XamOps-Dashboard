@@ -81,8 +81,28 @@ import software.amazon.awssdk.services.ec2.model.Tag;
 import software.amazon.awssdk.services.cloudwatch.model.Dimension;
 import software.amazon.awssdk.services.cloudwatch.model.Metric;
 
+// import software.amazon.awssdk.services.sts.presigner.StsPresigner;
+// import software.amazon.awssdk.services.sts.model.GetCallerIdentityRequest;
+// import software.amazon.awssdk.services.sts.presigner.model.GetCallerIdentityPresignRequest;
+import java.net.URL;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import com.fasterxml.jackson.databind.ObjectMapper; // ADD THIS IMPORT
+import com.fasterxml.jackson.databind.JsonNode; // ADD THIS IMPORT
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+
+
+
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.net.URL;
@@ -2822,30 +2842,53 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         }
     }
 
-    @Async("awsTaskExecutor")
-    @Cacheable(value = "eksClusters", key = "#accountId")
-    public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId) {
-        CloudAccount account = getAccount(accountId);
-        EksClient eks = awsClientProvider.getEksClient(account, configuredRegion);
-        logger.info("Fetching EKS cluster list for account {}...", account.getAwsAccountId());
-        try {
-            List<String> clusterNames = eks.listClusters().clusters();
-            List<K8sClusterInfo> clusters = clusterNames.parallelStream().map(name -> {
-                try {
-                    Cluster cluster = getEksCluster(account, name);
-                    String region = cluster.arn().split(":")[3];
-                    return new K8sClusterInfo(name, cluster.statusAsString(), cluster.version(), region);
-                } catch (Exception e) {
-                    logger.error("Failed to describe EKS cluster {}", name, e);
-                    return null;
-                }
-            }).filter(Objects::nonNull).collect(Collectors.toList());
-            return CompletableFuture.completedFuture(clusters);
-        } catch (Exception e) {
-            logger.error("Could not list EKS clusters for account {}", e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
-        }
+private boolean checkContainerInsightsStatus(CloudAccount account, String clusterName, String region) {
+    logger.info("Checking Container Insights status for cluster {} in region {}", clusterName, region);
+    try {
+        CloudWatchLogsClient logsClient = awsClientProvider.getCloudWatchLogsClient(account, region);
+        // Container Insights creates a log group with this specific naming convention.
+        String logGroupName = "/aws/containerinsights/" + clusterName + "/performance";
+        
+        // We just need to check if this log group exists.
+        logsClient.describeLogGroups(req -> req.logGroupNamePrefix(logGroupName));
+        
+        // If the above call doesn't throw an exception, the log group exists.
+        logger.info("Container Insights is CONNECTED for cluster {}", clusterName);
+        return true;
+    } catch (Exception e) {
+        // A ResourceNotFoundException means the log group doesn't exist.
+        logger.info("Container Insights is NOT CONNECTED for cluster {}", clusterName);
+        return false;
     }
+}
+
+@Async("awsTaskExecutor")
+@Cacheable(value = "eksClusters", key = "#accountId")
+public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId) {
+    CloudAccount account = getAccount(accountId);
+    // Use a region where EKS is available for the initial client
+    EksClient eks = awsClientProvider.getEksClient(account, "us-east-1"); 
+    logger.info("Fetching EKS cluster list for account {}...", account.getAwsAccountId());
+    try {
+        List<String> clusterNames = eks.listClusters().clusters();
+        List<K8sClusterInfo> clusters = clusterNames.parallelStream().map(name -> {
+            try {
+                Cluster cluster = getEksCluster(account, name);
+                String region = cluster.arn().split(":")[3];
+                // Check connection status for each cluster
+                boolean isConnected = checkContainerInsightsStatus(account, name, region);
+                return new K8sClusterInfo(name, cluster.statusAsString(), cluster.version(), region, isConnected);
+            } catch (Exception e) {
+                logger.error("Failed to describe EKS cluster {}", name, e);
+                return null;
+            }
+        }).filter(Objects::nonNull).collect(Collectors.toList());
+        return CompletableFuture.completedFuture(clusters);
+    } catch (Exception e) {
+        logger.error("Could not list EKS clusters for account {}", e);
+        return CompletableFuture.completedFuture(Collections.emptyList());
+    }
+}
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "k8sNodes", key = "#accountId + '-' + #clusterName")
@@ -2995,7 +3038,19 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         CloudAccount account = getAccount(accountId);
         try {
             CoreV1Api api = getCoreV1Api(account, clusterName);
-            List<V1Pod> pods = api.listNamespacedPod(namespace, null, null, null, null, null, null, null, null, null, null).getItems();
+            List<V1Pod> pods = api.listNamespacedPod(
+                namespace, // namespace
+                null,      // pretty
+                null,      // allowWatchBookmarks
+                null,      // _continue
+                null,      // fieldSelector
+                null,      // labelSelector
+                null,      // limit
+                null,      // resourceVersion
+                null,      // resourceVersionMatch
+                null,      // timeoutSeconds
+                false      // watch
+            ).getItems();
             return CompletableFuture.completedFuture(pods.stream().map(p -> {
                 long readyContainers = p.getStatus() != null && p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().filter(cs -> cs.getReady()).count() : 0;
                 int totalContainers = p.getSpec() != null && p.getSpec().getContainers() != null ? p.getSpec().getContainers().size() : 0;
@@ -3055,17 +3110,75 @@ private CompletableFuture<List<DashboardData.SecurityFinding>> findPublicS3Bucke
         return new AppsV1Api(apiClient);
     }
 
-    private ApiClient buildK8sApiClient(CloudAccount account, String clusterName) throws IOException {
-        Cluster cluster = getEksCluster(account, clusterName);
-        ApiClient apiClient = ClientBuilder
-                .kubeconfig(KubeConfig.loadKubeConfig(new FileReader(System.getProperty("user.home") + "/.kube/config")))
-                .setBasePath(cluster.endpoint())
-                .setVerifyingSsl(true)
-                .setCertificateAuthority(Base64.getDecoder().decode(cluster.certificateAuthority().data()))
-                .build();
-        io.kubernetes.client.openapi.Configuration.setDefaultApiClient(apiClient);
-        return apiClient;
+private ApiClient buildK8sApiClient(CloudAccount account, String clusterName) throws IOException {
+        try {
+            Cluster cluster = getEksCluster(account, clusterName);
+            String region = cluster.arn().split(":")[3];
+
+            ApiClient client = new ClientBuilder()
+                    .setBasePath(cluster.endpoint())
+                    .setVerifyingSsl(true)
+                    .setCertificateAuthority(Base64.getDecoder().decode(cluster.certificateAuthority().data()))
+                    .build();
+
+            String token;
+            
+            // 1. Get the credentials provider that has assumed the customer's role
+            AwsCredentialsProvider credentialsProvider = awsClientProvider.getCredentialsProvider(account);
+            AwsCredentials credentials = credentialsProvider.resolveCredentials();
+
+            // 2. Create the ProcessBuilder and set the temporary credentials as environment variables
+            ProcessBuilder processBuilder = new ProcessBuilder("aws", "eks", "get-token", "--cluster-name", clusterName, "--region", region);
+            Map<String, String> environment = processBuilder.environment();
+            environment.put("AWS_ACCESS_KEY_ID", credentials.accessKeyId());
+            environment.put("AWS_SECRET_ACCESS_KEY", credentials.secretAccessKey());
+            // AWS session token is required for assumed roles
+            if (credentials instanceof software.amazon.awssdk.auth.credentials.AwsSessionCredentials) {
+                String sessionToken = ((software.amazon.awssdk.auth.credentials.AwsSessionCredentials) credentials).sessionToken();
+                environment.put("AWS_SESSION_TOKEN", sessionToken);
+            }
+            
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+
+            // 3. Read the output from the command
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                // 4. Correctly parse the nested JSON to get the token
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode rootNode = mapper.readTree(output.toString());
+                JsonNode tokenNode = rootNode.path("status").path("token");
+                
+                if (tokenNode.isMissingNode() || tokenNode.asText().isEmpty()) {
+                    throw new IOException("Token not found in AWS CLI JSON output: " + output.toString());
+                }
+                token = tokenNode.asText();
+            } else {
+                throw new IOException("Failed to get EKS token via AWS CLI. Exit code: " + exitCode + " Output: " + output);
+            }
+
+            // 5. Apply the token to the Kubernetes client
+            client.setApiKeyPrefix("Bearer");
+            client.setApiKey(token);
+
+            io.kubernetes.client.openapi.Configuration.setDefaultApiClient(client);
+            return client;
+
+        } catch (Exception e) {
+            logger.error("Failed to build Kubernetes ApiClient for cluster {}: {}", clusterName, e.getMessage(), e);
+            throw new IOException("Could not configure Kubernetes client", e);
+        }
     }
+    
+    
 
     private String formatAge(OffsetDateTime creationTimestamp) { if (creationTimestamp == null) return "N/A"; Duration duration = Duration.between(creationTimestamp, OffsetDateTime.now()); long days = duration.toDays(); if (days > 0) return days + "d"; long hours = duration.toHours(); if (hours > 0) return hours + "h"; long minutes = duration.toMinutes(); if (minutes > 0) return minutes + "m"; return duration.toSeconds() + "s"; }
 

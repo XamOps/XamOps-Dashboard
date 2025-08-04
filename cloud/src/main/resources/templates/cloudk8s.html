@@ -7,233 +7,33 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        
         :root {
             --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             --k8s-gradient: linear-gradient(135deg, #326ce5 0%, #1e3a8a 100%);
             --glass-bg: rgba(255, 255, 255, 0.95);
-            --glass-border: rgba(255, 255, 255, 0.2);
+            --glass-border: rgba(229, 231, 235, 0.8);
         }
-
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            min-height: 100vh;
-        }
-        
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
         [x-cloak] { display: none !important; }
-        
-        .glass-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .glass-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-        
-        .header-gradient {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
-        }
-        
-        .table-container { 
-            max-height: 60vh;
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        
-        .table-enhanced {
-            background: transparent;
-        }
-        
-        .table-enhanced thead {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        }
-        
-        .table-enhanced tr {
-            transition: all 0.2s ease;
-        }
-        
-        .table-enhanced tr:hover {
-            background: rgba(102, 126, 234, 0.05);
-            transform: translateX(2px);
-        }
-        
-        .progress-bar { 
-            background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 100%);
-            border-radius: 9999px; 
-            overflow: hidden; 
-            height: 0.5rem;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .progress-bar-fill { 
-            height: 100%; 
-            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-            border-radius: 9999px;
-            position: relative;
-        }
-        
-        .progress-bar-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-            animation: shimmer 2s infinite;
-        }
-        
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-        
-        .k8s-selector {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            transition: all 0.3s ease;
-        }
-        
-        .k8s-selector:focus {
-            background: rgba(255, 255, 255, 1);
-            border-color: #326ce5;
-            box-shadow: 0 0 0 3px rgba(50, 108, 229, 0.1);
-        }
-        
-        .tab-button {
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .tab-button.active {
-            background: linear-gradient(135deg, rgba(50, 108, 229, 0.1) 0%, rgba(50, 108, 229, 0.05) 100%);
-            color: #326ce5;
-            border-color: #326ce5;
-        }
-        
-        .tab-button.active::before {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--k8s-gradient);
-        }
-        
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .empty-state {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 2px dashed rgba(50, 108, 229, 0.3);
-            transition: all 0.3s ease;
-        }
-        
-        .empty-state:hover {
-            border-color: rgba(50, 108, 229, 0.5);
-            background: rgba(255, 255, 255, 0.98);
-        }
-        
-        .cluster-selector-card {
-            background: linear-gradient(135deg, rgba(50, 108, 229, 0.05) 0%, rgba(50, 108, 229, 0.1) 100%);
-            border: 1px solid rgba(50, 108, 229, 0.2);
-        }
-        
-        .pulse-dot {
-            animation: pulse-dot 2s infinite;
-        }
-        
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading-spinner {
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #326ce5;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .k8s-icon {
-            background: var(--k8s-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .resource-row {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .resource-row::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--k8s-gradient);
-            transform: scaleY(0);
-            transition: transform 0.2s ease;
-        }
-        
-        .resource-row:hover::before {
-            transform: scaleY(1);
-        }
-        
-        .namespace-selector {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 231, 235, 0.5);
-        }
+        .glass-card { background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .header-gradient { background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%); backdrop-filter: blur(10px); border-bottom: 1px solid var(--glass-border); }
+        .table-enhanced thead { background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
+        .table-enhanced tr:hover { background: rgba(102, 126, 234, 0.05); }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .loading-spinner { border: 3px solid #f3f4f6; border-top: 3px solid #326ce5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal-overlay { background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
+        .modal-content { background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); }
+        .code-block { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; font-family: 'Courier New', Courier, monospace; white-space: pre-wrap; word-break: break-all; }
+        .progress-bar { background: #e5e7eb; border-radius: 9999px; overflow: hidden; height: 0.5rem; }
+        .progress-bar-fill { height: 100%; transition: width 0.5s ease-in-out; border-radius: 9999px; }
+        .status-badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .chart-container { background: var(--glass-bg); backdrop-filter: blur(10px); border-radius: 1rem; padding: 1.5rem; border: 1px solid var(--glass-border); position: relative; overflow: hidden; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -244,8 +44,7 @@
     </aside>
 
     <div class="ml-64 flex-1">
-        <main class="flex-1 flex flex-col min-h-screen" x-data="cloudK8s()" x-init="init()" @destroy="cleanup()">
-            <!-- Enhanced Header -->
+        <main class="flex-1 flex flex-col min-h-screen" x-data="cloudK8s()" @destroy="cleanup()">
             <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-20">
                 <div class="flex items-center space-x-4">
                     <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
@@ -256,403 +55,401 @@
                         <p class="text-sm text-gray-600">Monitor your EKS clusters and workloads</p>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-blue-500 rounded-full pulse-dot" x-show="isPolling"></div>
-                        <div class="w-2 h-2 bg-gray-400 rounded-full" x-show="!isPolling"></div>
-                        <span class="text-sm text-gray-600">
-                            <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': isPolling }"></i>
-                            <span x-text="isPolling ? `Auto-refresh in ${countdown}s` : 'Auto-refresh paused'"></span>
-                        </span>
-                    </div>
-                </div>
             </header>
 
             <div class="flex-1 p-8 space-y-8">
-                <!-- Enhanced Cluster Selector -->
-                <div class="cluster-selector-card rounded-2xl p-6 fade-in">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                                <i class="fas fa-server text-white text-sm"></i>
-                            </div>
-                            <h3 class="text-lg font-bold text-gray-800">EKS Cluster Selection</h3>
-                        </div>
-                        <div class="text-sm text-gray-600" x-show="clusters.length > 0">
-                            <span x-text="clusters.length"></span> cluster<span x-show="clusters.length !== 1">s</span> available
-                        </div>
-                    </div>
-                    <div class="relative">
-                        <select id="cluster-selector" x-model="selectedClusterName" @change="onClusterChange()" class="k8s-selector w-full px-4 py-3 text-lg rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 appearance-none">
-                            <option value="">-- Select an EKS Cluster --</option>
+                <div class="glass-card rounded-2xl p-8 fade-in">
+                    <h2 class="text-xl font-bold text-gray-800 mb-6">K8s Clusters</h2>
+                    <div x-show="isLoading.clusters" class="text-center py-12"><div class="loading-spinner mx-auto"></div></div>
+
+                    <table x-show="!isLoading.clusters && clusters.length > 0" x-cloak class="w-full text-sm table-enhanced">
+                        <thead class="text-xs text-gray-700 uppercase">
+                            <tr>
+                                <th class="px-6 py-4 text-left font-bold">Name / ID</th>
+                                <th class="px-6 py-4 text-left font-bold">Account / Region</th>
+                                <th class="px-6 py-4 text-left font-bold">Connection</th>
+                                <th class="px-6 py-4 text-center font-bold">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
                             <template x-for="cluster in clusters" :key="cluster.name">
-                                <option :value="cluster.name" x-text="cluster.name"></option>
+                                <tr @click="selectCluster(cluster)" class="cursor-pointer transition-all" :class="{'bg-blue-50 border-l-4 border-blue-500': selectedCluster && selectedCluster.name === cluster.name}">
+                                    <td class="px-6 py-4 font-semibold text-gray-800" x-text="cluster.name"></td>
+                                    <td class="px-6 py-4"><span x-text="selectedAccountId"></span> / <span x-text="cluster.region"></span></td>
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center space-x-3">
+                                            <button type="button" @click.stop="!cluster.connected && showConnectionModal(cluster)"
+                                                class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                                                role="switch" :aria-checked="cluster.connected" :disabled="cluster.connected"
+                                                :class="{'bg-green-500': cluster.connected, 'bg-gray-300': !cluster.connected, 'cursor-default': cluster.connected, 'cursor-pointer': !cluster.connected}">
+                                                <span :class="cluster.connected ? 'translate-x-5' : 'translate-x-0'" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                                            </button>
+                                            <span class="text-sm font-medium" :class="cluster.connected ? 'text-green-700' : 'text-gray-600'" x-text="cluster.connected ? 'Connected' : 'Not Connected'"></span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-center"><button class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50">Details</button></td>
+                                </tr>
                             </template>
-                        </select>
-                        <i class="fas fa-chevron-down absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
-                    </div>
+                        </tbody>
+                    </table>
                 </div>
 
-                <!-- Enhanced Loading and Empty States -->
-                <div x-show="isLoading.clusters" class="glass-card rounded-2xl p-20 text-center fade-in">
-                    <div class="loading-spinner mx-auto mb-6"></div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-2">Discovering EKS Clusters</h3>
-                    <p class="text-gray-600">Scanning your AWS account for Kubernetes clusters...</p>
-                </div>
-                
-                <div x-show="!isLoading.clusters && clusters.length === 0" x-cloak class="empty-state text-center py-20 px-8 rounded-2xl">
-                    <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <i class="fas fa-dharmachakra text-white text-3xl"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">No EKS Clusters Found</h3>
-                    <p class="text-gray-600 mb-6">We couldn't find any EKS clusters in this account and region.</p>
-                    <button @click="fetchClusters()" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                        <i class="fas fa-sync-alt mr-2"></i>Refresh Search
-                    </button>
-                </div>
-                
-                <div x-show="!isLoading.clusters && clusters.length > 0 && !selectedClusterName" x-cloak class="empty-state text-center py-20 px-8 rounded-2xl">
-                    <div class="w-20 h-20 bg-gradient-to-br from-gray-400 to-gray-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <i class="fas fa-mouse-pointer text-white text-3xl"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">Select a Cluster</h3>
-                    <p class="text-gray-600">Choose a cluster from the dropdown above to view its detailed metrics and workloads.</p>
-                </div>
-
-                <!-- Enhanced Cluster Details -->
-                <div x-show="selectedCluster" x-cloak class="space-y-8 fade-in">
-                    <!-- Enhanced Tabs -->
-                    <div class="glass-card rounded-2xl p-2">
-                        <nav class="flex space-x-2" aria-label="Tabs">
-                            <template x-for="tab in tabs" :key="tab.name">
-                                <button @click="activeTab = tab.name" 
-                                        :class="activeTab === tab.name ? 'active' : ''" 
-                                        class="tab-button flex-1 flex items-center justify-center space-x-2 py-4 px-6 rounded-xl font-semibold text-sm transition-all">
-                                    <i :class="tab.icon" class="text-lg"></i>
-                                    <span x-text="tab.label"></span>
-                                    <div x-show="isLoading[tab.name]" class="ml-2">
-                                        <div class="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                                    </div>
-                                </button>
-                            </template>
-                        </nav>
-                    </div>
-
-                    <!-- Enhanced Content Area -->
-                    <div>
-                        <!-- Enhanced Nodes Tab -->
-                        <div x-show="activeTab === 'nodes'" class="fade-in">
-                            <div class="glass-card rounded-2xl p-8">
-                                <div class="flex items-center justify-between mb-6">
-                                    <h3 class="text-xl font-bold text-gray-800">Cluster Nodes</h3>
-                                    <div class="text-sm text-gray-600">
-                                        <span x-text="nodes.length"></span> node<span x-show="nodes.length !== 1">s</span>
-                                    </div>
-                                </div>
-                                <div class="table-container overflow-y-auto">
-                                    <table class="table-enhanced w-full text-sm">
-                                        <thead class="text-xs text-gray-700 uppercase sticky top-0">
-                                            <tr>
-                                                <th class="px-6 py-4 text-left font-bold">Node Name</th>
-                                                <th class="px-6 py-4 text-left font-bold">Status</th>
-                                                <th class="px-6 py-4 text-left font-bold">CPU Usage</th>
-                                                <th class="px-6 py-4 text-left font-bold">Memory Usage</th>
-                                                <th class="px-6 py-4 text-left font-bold">K8s Version</th>
-                                                <th class="px-6 py-4 text-left font-bold">Age</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200">
-                                            <template x-for="node in nodes" :key="node.name">
-                                                <tr class="resource-row hover:bg-gray-50 transition-all">
-                                                    <td class="px-6 py-4">
-                                                        <div class="flex items-center space-x-3">
-                                                            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                                                                <i class="fas fa-server text-white text-xs"></i>
-                                                            </div>
-                                                            <span class="font-semibold text-gray-800" x-text="node.name"></span>
-                                                        </div>
-                                                    </td>
-                                                    <td class="px-6 py-4">
-                                                        <span class="status-badge" :class="node.status === 'Ready' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'" x-text="node.status"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4" x-html="renderUsageBar(node.cpuUsage, 'cores')"></td>
-                                                    <td class="px-6 py-4" x-html="renderUsageBar(node.memUsage, 'Gi')"></td>
-                                                    <td class="px-6 py-4">
-                                                        <span class="font-mono text-sm bg-gray-100 px-2 py-1 rounded" x-text="node.k8sVersion"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4 text-gray-600" x-text="node.age"></td>
-                                                </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                <div x-show="selectedCluster && selectedCluster.connected" x-cloak class="fade-in space-y-8">
+                    <div class="glass-card rounded-2xl p-8">
+                        <h3 class="text-xl font-bold text-gray-800 mb-6" x-text="`Cluster Metrics: ${selectedCluster.name}`"></h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div class="bg-white/70 p-4 rounded-lg border">
+                                <h4 class="text-sm font-semibold text-gray-600">CPU Usage</h4>
+                                <p class="text-2xl font-bold text-blue-600" x-text="`${metrics.cpu.current.toFixed(2)} / ${metrics.cpu.total.toFixed(2)} Cores`"></p>
+                                <div class="progress-bar mt-2"><div class="progress-bar-fill bg-blue-500" :style="`width: ${metrics.cpu.percent}%`"></div></div>
+                            </div>
+                            <div class="bg-white/70 p-4 rounded-lg border">
+                                <h4 class="text-sm font-semibold text-gray-600">Memory Usage</h4>
+                                <p class="text-2xl font-bold text-purple-600" x-text="`${metrics.memory.current.toFixed(2)} / ${metrics.memory.total.toFixed(2)} Gi`"></p>
+                                <div class="progress-bar mt-2"><div class="progress-bar-fill bg-purple-500" :style="`width: ${metrics.memory.percent}%`"></div></div>
+                            </div>
+                            <div class="bg-white/70 p-4 rounded-lg border">
+                                <h4 class="text-sm font-semibold text-gray-600">Pods</h4>
+                                <p class="text-2xl font-bold text-green-600" x-text="`${pods.length} pods running`"></p>
+                            </div>
+                            <div class="bg-white/70 p-4 rounded-lg border">
+                                <h4 class="text-sm font-semibold text-gray-600">Nodes Ready</h4>
+                                <p class="text-2xl font-bold text-teal-600" x-text="`${metrics.nodes.current} / ${metrics.nodes.total}`"></p>
+                                <div class="progress-bar mt-2"><div class="progress-bar-fill bg-teal-500" :style="`width: ${metrics.nodes.percent}%`"></div></div>
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div class="chart-container h-80">
+                            <canvas id="cpuUsageChart"></canvas>
+                        </div>
+                        <div class="chart-container h-80">
+                            <canvas id="memoryUsageChart"></canvas>
+                        </div>
+                    </div>
 
-                        <!-- Enhanced Workloads Tab -->
-                        <div x-show="activeTab === 'deployments' || activeTab === 'pods'" class="space-y-6 fade-in">
-                            <!-- Enhanced Namespace Selector -->
-                            <div class="namespace-selector rounded-xl p-4">
-                                <div class="flex items-center space-x-4">
-                                    <div class="flex items-center space-x-2">
-                                        <i class="fas fa-layer-group text-blue-600"></i>
-                                        <label for="namespace-selector" class="text-sm font-semibold text-gray-700">Namespace:</label>
-                                    </div>
-                                    <select id="namespace-selector" x-model="selectedNamespace" @change="onNamespaceChange()" class="k8s-selector px-4 py-2 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                        <template x-for="ns in namespaces" :key="ns">
-                                            <option :value="ns" x-text="ns"></option>
+                    <div class="glass-card rounded-2xl p-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold text-gray-800">Workloads</h3>
+                            <div x-show="activeTab === 'deployments' || activeTab === 'pods'" class="flex items-center space-x-2">
+                                <label for="namespace-selector" class="text-sm font-semibold text-gray-700">Namespace:</label>
+                                <select id="namespace-selector" x-model="selectedNamespace" @change="onNamespaceChange()" class="py-1 px-2 rounded-md border-gray-300 text-sm">
+                                    <template x-for="ns in namespaces" :key="ns"><option :value="ns" x-text="ns"></option></template>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="border-b border-gray-200">
+                            <nav class="flex space-x-4">
+                                <button @click="activeTab = 'nodes'" :class="{'border-blue-500 text-blue-600': activeTab === 'nodes'}" class="py-2 px-3 border-b-2 font-medium text-sm">Nodes</button>
+                                <button @click="activeTab = 'deployments'" :class="{'border-blue-500 text-blue-600': activeTab === 'deployments'}" class="py-2 px-3 border-b-2 font-medium text-sm">Deployments</button>
+                                <button @click="activeTab = 'pods'" :class="{'border-blue-500 text-blue-600': activeTab === 'pods'}" class="py-2 px-3 border-b-2 font-medium text-sm">Pods</button>
+                            </nav>
+                        </div>
+                        
+                        <div class="mt-4 overflow-x-auto">
+                            <div x-show="activeTab === 'nodes'">
+                                <table class="w-full text-sm">
+                                    <thead class="text-xs text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Name</th>
+                                            <th class="px-4 py-2 text-left">Status</th>
+                                            <th class="px-4 py-2 text-left">CPU</th>
+                                            <th class="px-4 py-2 text-left">Memory</th>
+                                            <th class="px-4 py-2 text-left">Version</th>
+                                            <th class="px-4 py-2 text-left">Age</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template x-for="node in nodes" :key="node.name">
+                                            <tr>
+                                                <td class="px-4 py-3 font-semibold" x-text="node.name"></td>
+                                                <td class="px-4 py-3"><span class="status-badge" :class="node.status === 'Ready' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="node.status"></span></td>
+                                                <td class="px-4 py-3" x-html="renderUsageBar(node.cpuUsage, 'Cores')"></td>
+                                                <td class="px-4 py-3" x-html="renderUsageBar(node.memUsage, 'Gi')"></td>
+                                                <td class="px-4 py-3" x-text="node.k8sVersion"></td>
+                                                <td class="px-4 py-3" x-text="node.age"></td>
+                                            </tr>
                                         </template>
-                                    </select>
-                                    <div class="text-sm text-gray-600">
-                                        <span x-text="namespaces.length"></span> namespace<span x-show="namespaces.length !== 1">s</span> available
-                                    </div>
-                                </div>
+                                    </tbody>
+                                </table>
                             </div>
-                            
-                            <!-- Enhanced Deployments Table -->
-                            <div x-show="activeTab === 'deployments'" class="glass-card rounded-2xl p-8">
-                                <div class="flex items-center justify-between mb-6">
-                                    <h3 class="text-xl font-bold text-gray-800">Deployments</h3>
-                                    <div class="text-sm text-gray-600">
-                                        in namespace: <span class="font-semibold text-blue-600" x-text="selectedNamespace"></span>
-                                    </div>
-                                </div>
-                                <div class="table-container overflow-y-auto">
-                                    <table class="table-enhanced w-full text-sm">
-                                        <thead class="text-xs text-gray-700 uppercase sticky top-0">
+                            <div x-show="activeTab === 'deployments'">
+                                <table class="w-full text-sm">
+                                    <thead class="text-xs text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Name</th>
+                                            <th class="px-4 py-2 text-left">Ready</th>
+                                            <th class="px-4 py-2 text-left">Up-to-date</th>
+                                            <th class="px-4 py-2 text-left">Available</th>
+                                            <th class="px-4 py-2 text-left">Age</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template x-for="dep in deployments" :key="dep.name">
                                             <tr>
-                                                <th class="px-6 py-4 text-left font-bold">Deployment</th>
-                                                <th class="px-6 py-4 text-left font-bold">Ready</th>
-                                                <th class="px-6 py-4 text-left font-bold">Up-to-date</th>
-                                                <th class="px-6 py-4 text-left font-bold">Available</th>
-                                                <th class="px-6 py-4 text-left font-bold">Age</th>
+                                                <td class="px-4 py-3 font-semibold" x-text="dep.name"></td>
+                                                <td class="px-4 py-3" x-text="dep.ready"></td>
+                                                <td class="px-4 py-3" x-text="dep.upToDate"></td>
+                                                <td class="px-4 py-3" x-text="dep.available"></td>
+                                                <td class="px-4 py-3" x-text="dep.age"></td>
                                             </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200">
-                                            <template x-for="dep in deployments" :key="dep.name">
-                                                <tr class="resource-row hover:bg-gray-50 transition-all">
-                                                    <td class="px-6 py-4">
-                                                        <div class="flex items-center space-x-3">
-                                                            <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
-                                                                <i class="fas fa-box text-white text-xs"></i>
-                                                            </div>
-                                                            <span class="font-semibold text-gray-800" x-text="dep.name"></span>
-                                                        </div>
-                                                    </td>
-                                                    <td class="px-6 py-4 font-semibold text-blue-600" x-text="dep.ready"></td>
-                                                    <td class="px-6 py-4 text-gray-700" x-text="dep.upToDate"></td>
-                                                    <td class="px-6 py-4 text-gray-700" x-text="dep.available"></td>
-                                                    <td class="px-6 py-4 text-gray-600" x-text="dep.age"></td>
-                                                </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        </template>
+                                    </tbody>
+                                </table>
                             </div>
-                            
-                            <!-- Enhanced Pods Table -->
-                            <div x-show="activeTab === 'pods'" class="glass-card rounded-2xl p-8">
-                                <div class="flex items-center justify-between mb-6">
-                                    <h3 class="text-xl font-bold text-gray-800">Pods</h3>
-                                    <div class="text-sm text-gray-600">
-                                        in namespace: <span class="font-semibold text-blue-600" x-text="selectedNamespace"></span>
-                                    </div>
-                                </div>
-                                <div class="table-container overflow-y-auto">
-                                    <table class="table-enhanced w-full text-sm">
-                                        <thead class="text-xs text-gray-700 uppercase sticky top-0">
+                            <div x-show="activeTab === 'pods'">
+                                <table class="w-full text-sm">
+                                    <thead class="text-xs text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Name</th>
+                                            <th class="px-4 py-2 text-left">Status</th>
+                                            <th class="px-4 py-2 text-left">Restarts</th>
+                                            <th class="px-4 py-2 text-left">CPU (Req/Lim)</th>
+                                            <th class="px-4 py-2 text-left">Memory (Req/Lim)</th>
+                                            <th class="px-4 py-2 text-left">Node</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template x-for="pod in pods" :key="pod.name">
                                             <tr>
-                                                <th class="px-6 py-4 text-left font-bold">Pod Name</th>
-                                                <th class="px-6 py-4 text-left font-bold">Status</th>
-                                                <th class="px-6 py-4 text-left font-bold">CPU (Req/Lim)</th>
-                                                <th class="px-6 py-4 text-left font-bold">Memory (Req/Lim)</th>
-                                                <th class="px-6 py-4 text-left font-bold">Node</th>
-                                                <th class="px-6 py-4 text-left font-bold">Age</th>
+                                                <td class="px-4 py-3 font-semibold" x-text="pod.name"></td>
+                                                <td class="px-4 py-3"><span class="status-badge" :class="pod.status === 'Running' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'" x-text="pod.status"></span></td>
+                                                <td class="px-4 py-3" x-text="pod.restarts"></td>
+                                                <td class="px-4 py-3 font-mono text-xs" x-text="pod.cpu"></td>
+                                                <td class="px-4 py-3 font-mono text-xs" x-text="pod.memory"></td>
+                                                <td class="px-4 py-3 font-mono text-xs" x-text="pod.nodeName"></td>
                                             </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200">
-                                            <template x-for="pod in pods" :key="pod.name">
-                                                <tr class="resource-row hover:bg-gray-50 transition-all">
-                                                    <td class="px-6 py-4">
-                                                        <div class="flex items-center space-x-3">
-                                                            <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
-                                                                <i class="fas fa-cube text-white text-xs"></i>
-                                                            </div>
-                                                            <span class="font-semibold text-gray-800" x-text="pod.name"></span>
-                                                        </div>
-                                                    </td>
-                                                    <td class="px-6 py-4">
-                                                        <span class="status-badge" :class="pod.status === 'Running' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'" x-text="pod.status"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4">
-                                                        <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="pod.cpu"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4">
-                                                        <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded" x-text="pod.memory"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4">
-                                                        <span class="font-mono text-xs text-gray-600" x-text="pod.nodeName"></span>
-                                                    </td>
-                                                    <td class="px-6 py-4 text-gray-600" x-text="pod.age"></td>
-                                                </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        </template>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div x-show="isModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isModalOpen = false">
+                <div class="modal-content rounded-2xl p-8 w-full max-w-3xl mx-4" @click.stop>
+                     <h3 class="text-2xl font-bold text-gray-800 mb-2">Connect K8s cluster</h3>
+                     <p class="text-gray-600 mb-6">Follow the official AWS guide to install the OTEL agent. <a :href="otelManualLink" target="_blank" class="text-blue-600 hover:underline">Read manual <i class="fas fa-external-link-alt text-xs"></i></a></p>
+                     <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg mb-6"><p>Installing the AWS OTEL agent may result in additional CloudWatch costs.</p></div>
+                     <div class="space-y-4 text-sm">
+                         <p>1. Ensure your command line is configured with credentials for your AWS account.</p>
+                         <p>2. Run the official AWS command to deploy the Container Insights agent:</p>
+                         <div class="code-block">curl https://raw.githubusercontent.com/aws-observability/aws-otel-collector/main/deployment-template/eks/otel-container-insights-infra.yaml | kubectl apply -f -</div>
+                         <p>After a successful installation, it may take up to 15 minutes for performance metrics to appear.</p>
+                     </div>
+                     <div class="flex justify-end space-x-4 mt-8">
+                         <button @click="isModalOpen = false" class="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50">Cancel</button>
+                         <button @click="confirmInstruction()" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">I Have Deployed the Agent</button>
+                     </div>
                 </div>
             </div>
         </main>
     </div>
 </div>
 
+
 <script>
 function cloudK8s() {
     return {
-        // --- State ---
         isLoading: { clusters: true, nodes: false, namespaces: false, deployments: false, pods: false },
         clusters: [],
-        selectedClusterName: '',
-        nodes: [],
-        namespaces: [],
-        selectedNamespace: 'default',
-        deployments: [],
-        pods: [],
+        selectedCluster: null,
+        nodes: [], namespaces: [], selectedNamespace: 'default', deployments: [], pods: [],
         activeTab: 'nodes',
         selectedAccountId: null,
         pollingInterval: null,
-        isPolling: false,
-        countdown: 10,
-        tabs: [
-            { name: 'nodes', label: 'Nodes', icon: 'fa-server' },
-            { name: 'deployments', label: 'Deployments', icon: 'fa-box' },
-            { name: 'pods', label: 'Pods', icon: 'fa-cube' },
-        ],
+        otelManualLink: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-EKS-otel.html',
+        isModalOpen: false,
+        clusterToConnect: null,
+        
+        // ✅ ADDED: Chart instances and historical data
+        charts: { cpu: null, memory: null },
+        historicalData: {
+            cpu: [],
+            memory: []
+        },
+        MAX_DATA_POINTS: 20, // Keep 20 points (~5 minutes of data)
 
-        // --- Computed Properties ---
-        get selectedCluster() {
-            return this.clusters.find(c => c.name === this.selectedClusterName);
+        get metrics() {
+            const readyNodes = this.nodes.filter(n => n.status === 'Ready');
+            const totalCPU = this.nodes.reduce((sum, n) => sum + (n.cpuUsage && n.cpuUsage.total ? n.cpuUsage.total : 0), 0);
+            const totalMemory = this.nodes.reduce((sum, n) => sum + (n.memUsage && n.memUsage.total ? n.memUsage.total : 0), 0);
+            const currentCPU = readyNodes.reduce((sum, n) => sum + (n.cpuUsage && n.cpuUsage.current ? n.cpuUsage.current : 0), 0);
+            const currentMemory = readyNodes.reduce((sum, n) => sum + (n.memUsage && n.memUsage.current ? n.memUsage.current : 0), 0);
+            
+            return {
+                cpu: { total: totalCPU, current: currentCPU, percent: totalCPU > 0 ? (currentCPU / totalCPU) * 100 : 0 },
+                memory: { total: totalMemory, current: currentMemory, percent: totalMemory > 0 ? (currentMemory / totalMemory) * 100 : 0 },
+                nodes: { total: this.nodes.length, current: readyNodes.length, percent: this.nodes.length > 0 ? (readyNodes.length / this.nodes.length) * 100 : 0 }
+            };
         },
 
-        // --- Methods ---
         init() {
             this.selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!this.selectedAccountId) {
-                console.error("No account selected!");
-                this.isLoading.clusters = false;
-                return;
-            }
+            if (!this.selectedAccountId) { this.isLoading.clusters = false; return; }
             this.fetchClusters();
         },
         
         cleanup() {
-            if (this.pollingInterval) {
-                clearInterval(this.pollingInterval);
-            }
-        },
-        
-        startPolling() {
-            this.cleanup(); // Clear any existing interval
-            this.isPolling = true;
-            this.countdown = 10;
-            
-            this.pollingInterval = setInterval(() => {
-                this.countdown--;
-                if (this.countdown <= 0) {
-                    this.refreshData();
-                    this.countdown = 10;
-                }
-            }, 1000);
-        },
-        
-        stopPolling() {
-            this.cleanup();
-            this.isPolling = false;
+            if (this.pollingInterval) clearInterval(this.pollingInterval);
         },
 
-        refreshData() {
-            if (!this.selectedClusterName) return;
-            console.log("Auto-refreshing K8s data...");
-            this.fetchNodes(true);
-            this.fetchNamespaces(true); // This will chain-call deployments and pods
-        },
-
-        fetchClusters() {
+        fetchClusters(forceRefresh = false) {
             this.isLoading.clusters = true;
             fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
                 .then(res => res.json())
-                .then(data => {
-                    this.clusters = data;
-                })
+                .then(data => { this.clusters = data; })
                 .catch(err => console.error('Failed to fetch clusters', err))
                 .finally(() => this.isLoading.clusters = false);
         },
 
-        onClusterChange() {
-            if (!this.selectedClusterName) {
-                this.stopPolling();
-                this.nodes = []; this.namespaces = []; this.deployments = []; this.pods = [];
+        selectCluster(cluster) {
+            if (!cluster.connected) {
+                this.showConnectionModal(cluster);
                 return;
             }
+            this.selectedCluster = cluster;
+            this.historicalData = { cpu: [], memory: [] }; // Reset history for new cluster
+            this.cleanup();
+            
+            // ✅ ADDED: Initialize charts
+            this.initCharts();
+            
+            this.refreshData();
+            this.pollingInterval = setInterval(() => this.refreshData(), 15000);
+        },
+
+        refreshData() {
+            if (!this.selectedCluster) return;
+            console.log("Refreshing K8s data...");
             this.fetchNodes();
             this.fetchNamespaces();
-            this.startPolling();
+            
+            // ✅ ADDED: Update chart data after fetching
+            this.$nextTick(() => {
+                this.updateChartData();
+            });
+        },
+        
+        fetchNodes() {
+            this.isLoading.nodes = true;
+            fetch(`/api/k8s/clusters/${this.selectedCluster.name}/nodes?accountId=${this.selectedAccountId}`)
+                .then(res => res.json()).then(data => { this.nodes = data; })
+                .catch(err => console.error('Failed to fetch nodes', err)).finally(() => this.isLoading.nodes = false);
+        },
+
+        fetchNamespaces() {
+            this.isLoading.namespaces = true;
+            fetch(`/api/k8s/clusters/${this.selectedCluster.name}/namespaces?accountId=${this.selectedAccountId}`)
+                .then(res => res.json()).then(data => {
+                    this.namespaces = data;
+                    if (!this.namespaces.includes(this.selectedNamespace)) this.selectedNamespace = 'default';
+                    this.onNamespaceChange();
+                })
+                .catch(err => console.error('Failed to fetch namespaces', err)).finally(() => this.isLoading.namespaces = false);
         },
 
         onNamespaceChange() {
-            if (!this.selectedNamespace) return;
             this.fetchDeployments();
             this.fetchPods();
         },
 
-        fetchNodes(isRefresh = false) {
-            if (!isRefresh) this.isLoading.nodes = true;
-            fetch(`/api/k8s/clusters/${this.selectedClusterName}/nodes?accountId=${this.selectedAccountId}`)
-                .then(res => res.json())
-                .then(data => {
-                    this.nodes = data;
-                })
-                .catch(err => console.error('Failed to fetch nodes', err))
-                .finally(() => this.isLoading.nodes = false);
-        },
-
-        fetchNamespaces(isRefresh = false) {
-             if (!isRefresh) this.isLoading.namespaces = true;
-            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces?accountId=${this.selectedAccountId}`)
-                .then(res => res.json())
-                .then(data => {
-                    this.namespaces = data;
-                    if (!this.namespaces.includes(this.selectedNamespace)) {
-                        this.selectedNamespace = 'default';
-                    }
-                    this.onNamespaceChange();
-                })
-                .catch(err => console.error('Failed to fetch namespaces', err))
-                .finally(() => this.isLoading.namespaces = false);
-        },
-
         fetchDeployments() {
             this.isLoading.deployments = true;
-            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/deployments?accountId=${this.selectedAccountId}`)
-                .then(res => res.json())
-                .then(data => { this.deployments = data; })
-                .catch(err => console.error('Failed to fetch deployments', err))
-                .finally(() => this.isLoading.deployments = false);
+            fetch(`/api/k8s/clusters/${this.selectedCluster.name}/namespaces/${this.selectedNamespace}/deployments?accountId=${this.selectedAccountId}`)
+                .then(res => res.json()).then(data => { this.deployments = data; })
+                .catch(err => console.error('Failed to fetch deployments', err)).finally(() => this.isLoading.deployments = false);
         },
 
         fetchPods() {
             this.isLoading.pods = true;
-            fetch(`/api/k8s/clusters/${this.selectedClusterName}/namespaces/${this.selectedNamespace}/pods?accountId=${this.selectedAccountId}`)
-                .then(res => res.json())
-                .then(data => {
-                    this.pods = data;
-                })
-                .catch(err => console.error('Failed to fetch pods', err))
-                .finally(() => this.isLoading.pods = false);
+            fetch(`/api/k8s/clusters/${this.selectedCluster.name}/namespaces/${this.selectedNamespace}/pods?accountId=${this.selectedAccountId}`)
+                .then(res => res.json()).then(data => { this.pods = data; })
+                .catch(err => console.error('Failed to fetch pods', err)).finally(() => this.isLoading.pods = false);
         },
-        
+
+        showConnectionModal(cluster) {
+            this.clusterToConnect = cluster;
+            this.isModalOpen = true;
+        },
+
+        confirmInstruction() {
+            this.isModalOpen = false;
+            alert('Connection initiated. It may take up to 15 minutes for data to appear. The cluster list will refresh now.');
+            setTimeout(() => { this.fetchClusters(true); }, 1000);
+        },
+
+        // ✅ ADDED: Chart-related functions
+        initCharts() {
+            this.createChart('cpuUsageChart', 'CPU Usage (Cores)', '#3b82f6');
+            this.createChart('memoryUsageChart', 'Memory Usage (Gi)', '#8b5cf6');
+        },
+
+        createChart(canvasId, label, color) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (this.charts[canvasId.replace('UsageChart', '')]) {
+                this.charts[canvasId.replace('UsageChart', '')].destroy();
+            }
+            
+            this.charts[canvasId.replace('UsageChart', '')] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: `Usage`,
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: `${color}33`,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'second' }, ticks: { display: false } },
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        title: { display: true, text: label, align: 'start' },
+                        legend: { display: false }
+                    }
+                }
+            });
+        },
+
+        updateChartData() {
+            const now = new Date();
+            
+            // Update CPU Data
+            this.historicalData.cpu.push({ x: now, y: this.metrics.cpu.current });
+            if (this.historicalData.cpu.length > this.MAX_DATA_POINTS) {
+                this.historicalData.cpu.shift();
+            }
+            
+            // Update Memory Data
+            this.historicalData.memory.push({ x: now, y: this.metrics.memory.current });
+            if (this.historicalData.memory.length > this.MAX_DATA_POINTS) {
+                this.historicalData.memory.shift();
+            }
+            
+            // Update Charts
+            if(this.charts.cpu) {
+                this.charts.cpu.data.datasets[0].data = this.historicalData.cpu;
+                this.charts.cpu.update('quiet');
+            }
+            if(this.charts.memory) {
+                this.charts.memory.data.datasets[0].data = this.historicalData.memory;
+                this.charts.memory.update('quiet');
+            }
+        },
+
         renderUsageBar(usage, unit) {
             if (!usage || usage.total === undefined || usage.current === undefined) return 'N/A';
             const percentage = (usage.total > 0) ? (usage.current / usage.total) * 100 : 0;
@@ -661,11 +458,11 @@ function cloudK8s() {
             else if (percentage > 60) color = 'bg-yellow-500';
             
             return `
-                <div class="flex items-center space-x-3">
+                <div class="flex items-center space-x-2">
                     <div class="flex-1 progress-bar">
                         <div class="progress-bar-fill ${color}" style="width: ${percentage}%"></div>
                     </div>
-                    <span class="text-xs font-mono w-28 text-right text-gray-600">${usage.current.toFixed(2)} / ${usage.total.toFixed(2)} ${unit}</span>
+                    <span class="text-xs font-mono w-24 text-right text-gray-500">${usage.current.toFixed(2)} / ${usage.total.toFixed(2)} ${unit}</span>
                 </div>
             `;
         }

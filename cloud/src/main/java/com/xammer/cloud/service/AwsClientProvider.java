@@ -44,23 +44,20 @@ public class AwsClientProvider {
         this.stsClient = stsClient;
     }
 
-    private AwsCredentialsProvider getCredentialsProvider(CloudAccount account) {
-        if (account == null || account.getRoleArn() == null || account.getRoleArn().isBlank()) {
-            // Fallback to the host's default credentials if no role is specified.
-            return DefaultCredentialsProvider.create();
-        }
+ public AwsCredentialsProvider getCredentialsProvider(CloudAccount account) {
+    String roleArn = account.getRoleArn();
+    String externalId = account.getExternalId();
+    String roleSessionName = "xamops-session-" + account.getAwsAccountId();
 
-        AssumeRoleRequest assumeRoleRequest = AssumeRoleRequest.builder()
-                .roleArn(account.getRoleArn())
-                .roleSessionName("XamOps-Session-" + UUID.randomUUID())
-                .externalId(account.getExternalId())
-                .build();
-
-        return StsAssumeRoleCredentialsProvider.builder()
-                .stsClient(this.stsClient)
-                .refreshRequest(assumeRoleRequest)
-                .build();
-    }
+    return StsAssumeRoleCredentialsProvider.builder()
+            .stsClient(stsClient)
+            .refreshRequest(req -> req
+                .roleArn(roleArn)
+                .externalId(externalId)
+                .roleSessionName(roleSessionName)
+            )
+            .build();
+}
 
     public Ec2Client getEc2Client(CloudAccount account, String region) {
         return Ec2Client.builder()
@@ -184,4 +181,15 @@ public class AwsClientProvider {
             .region(Region.US_EAST_1) // Pricing service is a global service accessible via us-east-1
             .build();
     }
+
+   
+
+    public StsClient getStsClient(CloudAccount account, String region) {
+        return StsClient.builder()
+                .credentialsProvider(getCredentialsProvider(account))
+                .region(Region.of(region))
+                .build();
+    }
+
+    
 }

@@ -24,32 +24,37 @@ public class SecurityConfig {
         this.authenticationSuccessHandler = authenticationSuccessHandler;
     }
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests((requests) -> requests
-                // Allow WebSocket connections
-                .antMatchers("/ws/**").permitAll()
-                .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
-                .anyRequest().permitAll()
-            )
-            .formLogin((form) -> form
-                .loginPage("/login")
-                .successHandler(authenticationSuccessHandler)
-                .permitAll()
-            )
-            .logout((logout) -> logout
-                .logoutUrl("/logout")
-                .logoutSuccessUrl("/login?logout")
-                .invalidateHttpSession(true)
-                .deleteCookies("JSESSIONID")
-                .permitAll()
-            );
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http
+        .authorizeHttpRequests((requests) -> requests
+            // Allow WebSocket connections
+            .antMatchers("/ws/**").permitAll()
+            .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
 
-        http.csrf().disable();
+            // ✅ ADD THIS LINE to secure your Kubernetes API
+            .antMatchers("/api/k8s/**").authenticated()
 
-        return http.build();
-    }
+            // ✅ CHANGE THIS LINE to secure all other requests by default
+            .anyRequest().authenticated()
+        )
+        .formLogin((form) -> form
+            .loginPage("/login")
+            .successHandler(authenticationSuccessHandler)
+            .permitAll()
+        )
+        .logout((logout) -> logout
+            .logoutUrl("/logout")
+            .logoutSuccessUrl("/login?logout")
+            .invalidateHttpSession(true)
+            .deleteCookies("JSESSIONID")
+            .permitAll()
+        );
+
+    http.csrf().disable();
+
+    return http.build();
+}
 
     @Bean
     public PasswordEncoder passwordEncoder() {

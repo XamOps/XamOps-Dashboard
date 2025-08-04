@@ -13,4 +13,5 @@ public class K8sClusterInfo {
     private String status;
     private String version;
     private String region;
+    private boolean connected; // ADD THIS LINE
 }
