@@ -3,8 +3,11 @@ package com.xammer.cloud.controller;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.repository.CloudAccountRepository;
-import com.xammer.cloud.service.AwsDataService;
+import com.xammer.cloud.service.CloudListService;
 import com.xammer.cloud.service.ExcelExportService;
+import com.xammer.cloud.service.SecurityService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -14,53 +17,67 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.ByteArrayInputStream;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/security")
 public class SecurityController {
 
-    private final AwsDataService awsDataService;
+    private static final Logger logger = LoggerFactory.getLogger(SecurityController.class);
+
+    private final SecurityService securityService;
+    private final CloudListService cloudListService;
     private final ExcelExportService excelExportService;
     private final CloudAccountRepository cloudAccountRepository;
 
-    public SecurityController(AwsDataService awsDataService, ExcelExportService excelExportService, CloudAccountRepository cloudAccountRepository) {
-        this.awsDataService = awsDataService;
+    public SecurityController(SecurityService securityService,
+                              CloudListService cloudListService,
+                              ExcelExportService excelExportService,
+                              CloudAccountRepository cloudAccountRepository) {
+        this.securityService = securityService;
+        this.cloudListService = cloudListService;
         this.excelExportService = excelExportService;
         this.cloudAccountRepository = cloudAccountRepository;
     }
 
     @GetMapping("/findings")
-    public ResponseEntity<List<DashboardData.SecurityFinding>> getSecurityFindings(@RequestParam String accountId) throws ExecutionException, InterruptedException {
+    public CompletableFuture<ResponseEntity<List<DashboardData.SecurityFinding>>> getSecurityFindings(@RequestParam String accountId) {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-        
-        // **FIXED**: Fetch active regions first, then pass them to the service method.
-        List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
-        List<DashboardData.SecurityFinding> findings = awsDataService.getComprehensiveSecurityFindings(account, activeRegions).get();
 
-        return ResponseEntity.ok(findings);
+        return cloudListService.getRegionStatusForAccount(account)
+                .thenCompose(activeRegions -> securityService.getComprehensiveSecurityFindings(account, activeRegions))
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching security findings for account {}", accountId, ex);
+                    return ResponseEntity.status(500).body(Collections.emptyList());
+                });
     }
 
     @GetMapping("/export")
-    public ResponseEntity<byte[]> exportFindingsToExcel(@RequestParam String accountId) throws ExecutionException, InterruptedException {
+    public CompletableFuture<ResponseEntity<byte[]>> exportFindingsToExcel(@RequestParam String accountId) {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-        
-        // **FIXED**: Fetch active regions first, then pass them to the service method for export.
-        List<DashboardData.RegionStatus> activeRegions = awsDataService.getRegionStatusForAccount(account).get();
-        List<DashboardData.SecurityFinding> findings = awsDataService.getComprehensiveSecurityFindings(account, activeRegions).get();
 
-        ByteArrayInputStream in = excelExportService.exportSecurityFindingsToExcel(findings);
+        return cloudListService.getRegionStatusForAccount(account)
+                .thenCompose(activeRegions -> securityService.getComprehensiveSecurityFindings(account, activeRegions))
+                .thenApply(findings -> {
+                    ByteArrayInputStream in = excelExportService.exportSecurityFindingsToExcel(findings);
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.add("Content-Disposition", "attachment; filename=security-findings.xlsx");
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("Content-Disposition", "attachment; filename=security-findings.xlsx");
-
-        return ResponseEntity
-                .ok()
-                .headers(headers)
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(in.readAllBytes());
+                    return ResponseEntity
+                            .ok()
+                            .headers(headers)
+                            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                            .body(in.readAllBytes());
+                })
+                .exceptionally(ex -> {
+                    logger.error("Error exporting security findings for account {}", accountId, ex);
+                    return ResponseEntity.status(500).build();
+                });
     }
 }

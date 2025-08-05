@@ -28,23 +28,22 @@ import java.util.stream.Collectors;
 public class AiAdvisorService {
 
     private static final Logger logger = LoggerFactory.getLogger(AiAdvisorService.class);
-    private final AwsDataService awsDataService;
+    private final FinOpsService finOpsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${gemini.api.key}")
     private String geminiApiKey;
 
-    // Use @Lazy to break the circular dependency between AwsDataService and AiAdvisorService
     @Autowired
-    public AiAdvisorService(@Lazy AwsDataService awsDataService) {
-        this.awsDataService = awsDataService;
+    public AiAdvisorService(@Lazy FinOpsService finOpsService) {
+        this.finOpsService = finOpsService;
     }
 
     @Async("awsTaskExecutor")
     public CompletableFuture<AiAdvisorSummaryDto> getDashboardSummary(String accountId) {
         logger.info("Generating AI dashboard summary for account: {}", accountId);
 
-        return awsDataService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
+        return finOpsService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
             try {
                 Map<String, Object> promptData = new HashMap<>();
                 
@@ -94,7 +93,7 @@ public class AiAdvisorService {
     public CompletableFuture<Map<String, String>> getInteractiveResponse(String question, String accountId) {
         logger.info("Generating interactive AI response for account: {}, question: {}", accountId, question);
 
-        return awsDataService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
+        return finOpsService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
             try {
                 String contextData = objectMapper.writeValueAsString(finOpsReport);
                 String prompt = buildInteractivePrompt(question, contextData);

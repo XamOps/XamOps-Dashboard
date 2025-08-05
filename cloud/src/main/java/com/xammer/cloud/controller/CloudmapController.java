@@ -1,7 +1,10 @@
 package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.ResourceDto;
-import com.xammer.cloud.service.AwsDataService;
+import com.xammer.cloud.service.CloudMapService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -15,24 +18,34 @@ import java.util.concurrent.CompletableFuture;
 @RequestMapping("/api/cloudmap")
 public class CloudmapController {
 
-    private final AwsDataService awsDataService;
+    private static final Logger logger = LoggerFactory.getLogger(CloudmapController.class);
 
-    public CloudmapController(AwsDataService awsDataService) {
-        this.awsDataService = awsDataService;
+    private final CloudMapService cloudMapService;
+
+    public CloudmapController(CloudMapService cloudMapService) {
+        this.cloudMapService = cloudMapService;
     }
 
     @GetMapping("/vpcs")
-    public CompletableFuture<List<ResourceDto>> getVpcs(@RequestParam String accountId) {
-        // This method will now return a list of ResourceDto which includes the region.
-        return awsDataService.getVpcListForCloudmap(accountId);
+    public CompletableFuture<ResponseEntity<List<ResourceDto>>> getVpcs(@RequestParam String accountId) {
+        return cloudMapService.getVpcListForCloudmap(accountId)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Failed to get VPC list for cloudmap for account {}", accountId, ex);
+                    return ResponseEntity.status(500).body(null);
+                });
     }
 
     @GetMapping("/graph")
-    public CompletableFuture<List<Map<String, Object>>> getGraphData(
+    public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> getGraphData(
             @RequestParam String accountId,
             @RequestParam(required = false) String vpcId,
             @RequestParam(required = false) String region) {
-        // The region parameter is now used to fetch resources from the correct location.
-        return awsDataService.getGraphData(accountId, vpcId, region);
+        return cloudMapService.getGraphData(accountId, vpcId, region)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Failed to get graph data for account {} and VPC {}", accountId, vpcId, ex);
+                    return ResponseEntity.status(500).body(null);
+                });
     }
 }

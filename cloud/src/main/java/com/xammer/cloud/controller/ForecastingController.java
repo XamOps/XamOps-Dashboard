@@ -3,24 +3,20 @@ package com.xammer.cloud.controller;
 import com.xammer.cloud.dto.HistoricalCostDto;
 import com.xammer.cloud.service.CostService;
 import com.xammer.cloud.service.ForecastingService;
-import com.xammer.cloud.service.PerformanceInsightsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/forecast")
@@ -28,44 +24,36 @@ public class ForecastingController {
 
     private static final Logger logger = LoggerFactory.getLogger(ForecastingController.class);
 
-    @Autowired
-    private ForecastingService forecastingService;
+    private final ForecastingService forecastingService;
+    private final CostService costService;
 
     @Autowired
-    private CostService costService;
-
-    @Autowired
-    private PerformanceInsightsService performanceInsightsService;
-
-    private static final DateTimeFormatter PROPHET_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    public ForecastingController(ForecastingService forecastingService, CostService costService) {
+        this.forecastingService = forecastingService;
+        this.costService = costService;
+    }
 
     @GetMapping("/cost")
-    public String getCostForecastData(
+    public CompletableFuture<ResponseEntity<String>> getCostForecastData(
             @RequestParam String accountId,
             @RequestParam(defaultValue = "30") int periods,
             @RequestParam(required = false) String serviceName) {
 
-        try {
-            // Fetch more historical data for a better forecast basis (e.g., 3x the forecast period)
-            int historicalDays = Math.min(periods * 3, 180);
+        // Fetch more historical data for a better forecast basis (e.g., 3x the forecast period)
+        int historicalDays = Math.min(periods * 3, 180);
 
-            HistoricalCostDto historicalCostData = costService.getHistoricalCost(
+        return costService.getHistoricalCost(
                 accountId,
                 "ALL".equalsIgnoreCase(serviceName) ? null : serviceName, // Pass null for "All Services"
                 null,
                 historicalDays
-            ).get();
-
+        ).thenApply(historicalCostData -> {
             if (historicalCostData == null || historicalCostData.getLabels() == null || historicalCostData.getLabels().isEmpty()) {
                 logger.warn("No historical cost data found for account {} to generate a forecast.", accountId);
-                return "[]";
+                return ResponseEntity.ok("[]");
             }
 
-            logger.info("Historical Data Labels received: " + historicalCostData.getLabels());
-            logger.info("Historical Data Costs received: " + historicalCostData.getCosts());
-
             List<Map<String, Object>> formattedData = new ArrayList<>();
-
             for (int i = 0; i < historicalCostData.getLabels().size(); i++) {
                 Map<String, Object> point = new HashMap<>();
                 point.put("ds", historicalCostData.getLabels().get(i));
@@ -75,19 +63,19 @@ public class ForecastingController {
 
             if (formattedData.isEmpty()) {
                 logger.warn("Formatted data for forecasting is empty for account {}", accountId);
-                return "[]";
+                return ResponseEntity.ok("[]");
             }
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("periods", periods);
             requestBody.put("data", formattedData);
 
-            return forecastingService.getCostForecast(requestBody);
+            String forecastResult = forecastingService.getCostForecast(requestBody);
+            return ResponseEntity.ok(forecastResult);
 
-        } catch (InterruptedException | ExecutionException e) {
-            logger.error("Error fetching historical cost data for forecast", e);
-            Thread.currentThread().interrupt();
-            return "[]";
-        }
+        }).exceptionally(ex -> {
+            logger.error("Error fetching historical cost data for forecast for account {}", accountId, ex);
+            return ResponseEntity.status(500).body("[]");
+        });
     }
 }

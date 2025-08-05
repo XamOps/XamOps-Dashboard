@@ -2,48 +2,61 @@ package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.DashboardData.BudgetDetails;
 import com.xammer.cloud.dto.FinOpsReportDto;
-import com.xammer.cloud.service.AwsDataService;
+import com.xammer.cloud.service.FinOpsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/finops")
 public class FinOpsController {
 
-    private final AwsDataService awsDataService;
+    private static final Logger logger = LoggerFactory.getLogger(FinOpsController.class);
 
-    public FinOpsController(AwsDataService awsDataService) {
-        this.awsDataService = awsDataService;
+    private final FinOpsService finOpsService;
+
+    public FinOpsController(FinOpsService finOpsService) {
+        this.finOpsService = finOpsService;
     }
 
     @GetMapping("/report")
-    public ResponseEntity<FinOpsReportDto> getFinOpsReport(@RequestParam String accountId, @RequestParam(required = false) boolean forceRefresh) throws ExecutionException, InterruptedException {
+    public CompletableFuture<ResponseEntity<FinOpsReportDto>> getFinOpsReport(@RequestParam String accountId, @RequestParam(required = false) boolean forceRefresh) {
         if (forceRefresh) {
-            awsDataService.clearFinOpsReportCache(accountId);
+            finOpsService.clearFinOpsReportCache(accountId);
         }
-        FinOpsReportDto report = awsDataService.getFinOpsReport(accountId).get();
-        return ResponseEntity.ok(report);
+        return finOpsService.getFinOpsReport(accountId)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching FinOps report for account {}", accountId, ex);
+                    return ResponseEntity.status(500).body(null);
+                });
     }
-    
+
     @GetMapping("/cost-by-tag")
-    public ResponseEntity<List<Map<String, Object>>> getCostByTag(@RequestParam String accountId, @RequestParam String tagKey) throws ExecutionException, InterruptedException {
-        List<Map<String, Object>> costData = awsDataService.getCostByTag(accountId, tagKey).get();
-        return ResponseEntity.ok(costData);
+    public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> getCostByTag(@RequestParam String accountId, @RequestParam String tagKey) {
+        return finOpsService.getCostByTag(accountId, tagKey)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching cost by tag for account {}", accountId, ex);
+                    return ResponseEntity.status(500).body(Collections.emptyList());
+                });
     }
 
     @PostMapping("/budgets")
     public ResponseEntity<Void> createBudget(@RequestParam String accountId, @RequestBody BudgetDetails budgetDetails) {
-        awsDataService.createBudget(accountId, budgetDetails);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        try {
+            finOpsService.createBudget(accountId, budgetDetails);
+            return ResponseEntity.status(HttpStatus.CREATED).build();
+        } catch (Exception e) {
+            logger.error("Error creating budget for account {}", accountId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }

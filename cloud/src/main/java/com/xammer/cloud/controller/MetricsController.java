@@ -1,54 +1,76 @@
 package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.MetricDto;
-import com.xammer.cloud.service.AwsDataService;
+import com.xammer.cloud.service.MetricsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/metrics")
 public class MetricsController {
 
-    private final AwsDataService awsDataService;
+    private static final Logger logger = LoggerFactory.getLogger(MetricsController.class);
 
-    public MetricsController(AwsDataService awsDataService) {
-        this.awsDataService = awsDataService;
+    private final MetricsService metricsService;
+
+    public MetricsController(MetricsService metricsService) {
+        this.metricsService = metricsService;
     }
 
     @GetMapping("/ec2/{instanceId}")
-    public ResponseEntity<Map<String, List<MetricDto>>> getEc2Metrics(@RequestParam String accountId, @PathVariable String instanceId) {
-        Map<String, List<MetricDto>> metrics = awsDataService.getEc2InstanceMetrics(accountId, instanceId);
-        return ResponseEntity.ok(metrics);
+    public CompletableFuture<ResponseEntity<Map<String, List<MetricDto>>>> getEc2Metrics(
+            @RequestParam String accountId,
+            @PathVariable String instanceId) {
+        return metricsService.getEc2InstanceMetrics(accountId, instanceId)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching EC2 metrics for instance {} in account {}", instanceId, accountId, ex);
+                    return ResponseEntity.status(500).body(Collections.emptyMap());
+                });
     }
 
     @GetMapping("/rds/{instanceId}")
-    public ResponseEntity<Map<String, List<MetricDto>>> getRdsMetrics(@RequestParam String accountId, @PathVariable String instanceId) {
-        Map<String, List<MetricDto>> metrics = awsDataService.getRdsInstanceMetrics(accountId, instanceId);
-        return ResponseEntity.ok(metrics);
+    public CompletableFuture<ResponseEntity<Map<String, List<MetricDto>>>> getRdsMetrics(
+            @RequestParam String accountId,
+            @PathVariable String instanceId) {
+        return metricsService.getRdsInstanceMetrics(accountId, instanceId)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching RDS metrics for instance {} in account {}", instanceId, accountId, ex);
+                    return ResponseEntity.status(500).body(Collections.emptyMap());
+                });
     }
 
     @GetMapping("/s3/{bucketName}")
-    public ResponseEntity<Map<String, List<MetricDto>>> getS3Metrics(
+    public CompletableFuture<ResponseEntity<Map<String, List<MetricDto>>>> getS3Metrics(
             @RequestParam String accountId,
             @PathVariable String bucketName,
             @RequestParam String region) {
-        Map<String, List<MetricDto>> metrics = awsDataService.getS3BucketMetrics(accountId, bucketName, region);
-        return ResponseEntity.ok(metrics);
+        return metricsService.getS3BucketMetrics(accountId, bucketName, region)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching S3 metrics for bucket {} in account {}", bucketName, accountId, ex);
+                    return ResponseEntity.status(500).body(Collections.emptyMap());
+                });
     }
 
     @GetMapping("/lambda/{functionName}")
-    public ResponseEntity<Map<String, List<MetricDto>>> getLambdaMetrics(
+    public CompletableFuture<ResponseEntity<Map<String, List<MetricDto>>>> getLambdaMetrics(
             @RequestParam String accountId,
             @PathVariable String functionName,
             @RequestParam String region) {
-        Map<String, List<MetricDto>> metrics = awsDataService.getLambdaFunctionMetrics(accountId, functionName, region);
-        return ResponseEntity.ok(metrics);
+        return metricsService.getLambdaFunctionMetrics(accountId, functionName, region)
+                .thenApply(ResponseEntity::ok)
+                .exceptionally(ex -> {
+                    logger.error("Error fetching Lambda metrics for function {} in account {}", functionName, accountId, ex);
+                    return ResponseEntity.status(500).body(Collections.emptyMap());
+                });
     }
 }
