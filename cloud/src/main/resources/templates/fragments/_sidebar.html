@@ -374,29 +374,29 @@
         </div>
 
         <div class="sidebar-section" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'active' : ''}">
-            <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts')}]] }">
-                <button @click="open = !open" 
-                        class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200" 
-                        th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'bg-gradient-to-r from-red-500 to-orange-600 text-white shadow-lg' : 'text-gray-600 hover:bg-red-50 hover:text-red-600'}">
-                    <div class="flex items-center gap-3">
-                        <i class="fas fa-shield-alt menu-icon fa-fw w-5 text-center"></i>
-                        <span>Cloudguard</span>
-                    </div>
-                    <i class="fas fa-chevron-down text-xs submenu-indicator transition-transform duration-200" :class="open && 'rotate-180'"></i>
-                </button>
-                <div x-show="open" x-cloak class="ml-6 mt-2 space-y-1" x-transition>
-                    <a href="/security" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/security' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Security</a>
-                    <a href="/performance" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/performance' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Performance</a>
-                    <a href="/cloudguard/alerts" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/cloudguard/alerts' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Alerts</a>
-                </div>
+    <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts')}]] }">
+        <button @click="open = !open" 
+                class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200" 
+                th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'bg-gradient-to-r from-red-500 to-orange-600 text-white shadow-lg' : 'text-gray-600 hover:bg-red-50 hover:text-red-600'}">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-shield-alt menu-icon fa-fw w-5 text-center"></i>
+                <span>Cloudguard</span>
             </div>
+            <i class="fas fa-chevron-down text-xs submenu-indicator transition-transform duration-200" :class="open && 'rotate-180'"></i>
+        </button>
+        <div x-show="open" x-cloak class="ml-6 mt-2 space-y-1" x-transition>
+            <a href="/security" 
+               th:classappend="${#httpServletRequest.getRequestURI() == '/security' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
+               class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Security</a>
+            <a href="/performance" 
+               th:classappend="${#httpServletRequest.getRequestURI() == '/performance' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
+               class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Performance</a>
+            <a href="/cloudguard/alerts" 
+               th:classappend="${#httpServletRequest.getRequestURI() == '/cloudguard/alerts' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
+               class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Alerts</a>
         </div>
+    </div>
+</div>
 
         <div class="sidebar-section" th:classappend="${#httpServletRequest.getRequestURI() == '/account-manager' ? 'active' : ''}">
             <a href="/account-manager" 
