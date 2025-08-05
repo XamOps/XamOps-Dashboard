@@ -4,15 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Column;
-import javax.persistence.FetchType;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.Lob;
+import javax.persistence.*;
 
 @Entity
 @Data
@@ -27,20 +19,32 @@ public class CloudAccount {
     private String accountName;
 
     @Column(unique = true)
-    private String awsAccountId; // For AWS, this is the account ID. For GCP, this is the Project ID.
+    private String awsAccountId; // For AWS this is account ID, for GCP this is Project ID
 
     @Column
     private String externalId;
 
     @Column
-    private String accessType; // "read-only" or "read-write"
+    private String accessType;
 
     @Column(unique = true)
     private String roleArn;
-    
-    @Lob
+
+    // This is the field that was causing the error. The @Lob annotation has been removed.
     @Column(columnDefinition = "TEXT")
     private String gcpServiceAccountKey;
+
+    @Column
+    private String gcpWorkloadIdentityPoolId;
+
+    @Column
+    private String gcpWorkloadIdentityProviderId;
+
+    @Column
+    private String gcpServiceAccountEmail;
+
+    @Column
+    private String gcpProjectId;
 
     @Column(nullable = false)
     private String status = "PENDING"; // PENDING, CONNECTED, FAILED
@@ -58,5 +62,12 @@ public class CloudAccount {
         this.externalId = externalId;
         this.accessType = accessType;
         this.client = client;
+    }
+    public String getGcpProjectId() {
+        return gcpProjectId;
+    }
+
+    public void setGcpProjectId(String gcpProjectId) {
+        this.gcpProjectId = gcpProjectId;
     }
 }

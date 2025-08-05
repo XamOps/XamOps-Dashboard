@@ -25,23 +25,30 @@ public class GcpDataService {
     }
 
     public void createGcpAccount(GcpAccountRequestDto request, Client client) throws IOException {
-        // First, verify the credentials are valid by creating a client
-        Storage storage = gcpClientProvider.createStorageClient(request.getServiceAccountKey());
-        
-        // Test the connection by listing buckets
-        storage.list(Storage.BucketListOption.pageSize(1));
-
-        // If no exception, proceed to save the account
-        CloudAccount account = new CloudAccount();
-        account.setAccountName(request.getAccountName());
-        account.setProvider("GCP");
-        account.setAwsAccountId(request.getProjectId()); // Re-using this field for Project ID
-        account.setGcpServiceAccountKey(request.getServiceAccountKey());
-        account.setStatus("CONNECTED");
-        account.setAccessType("read-only"); // Default for now
-        account.setClient(client);
-
-        cloudAccountRepository.save(account);
+        try {
+            // First, verify the credentials are valid by creating a client
+            Storage storage = gcpClientProvider.createStorageClient(request.getServiceAccountKey());
+            // Test the connection by listing buckets
+            storage.list(Storage.BucketListOption.pageSize(1));
+            // If no exception, proceed to save the account
+            CloudAccount account = new CloudAccount();
+            account.setAccountName(request.getAccountName());
+            account.setProvider("GCP");
+            account.setAwsAccountId(request.getProjectId()); // Re-using this field for Project ID
+            account.setGcpServiceAccountKey(request.getServiceAccountKey());
+            account.setStatus("CONNECTED");
+            account.setAccessType("read-only"); // Default for now
+            account.setClient(client);
+            account.setExternalId(request.getProjectId()); // Set externalId to projectId for GCP
+            account.setGcpProjectId(request.getProjectId()); // Set gcpProjectId for GCP
+            cloudAccountRepository.save(account);
+        } catch (IOException e) {
+            // Propagate the exact error message from GCP
+            throw new RuntimeException("GCP connection error: " + e.getMessage(), e);
+        } catch (Exception e) {
+            // Catch any other exceptions and propagate their exact message
+            throw new RuntimeException("GCP error: " + e.getMessage(), e);
+        }
     }
 
 
@@ -62,7 +69,9 @@ public class GcpDataService {
             }
             return bucketNames;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to create GCP Storage client", e);
+            throw new RuntimeException("GCP connection error: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("GCP error: " + e.getMessage(), e);
         }
     }
 }
