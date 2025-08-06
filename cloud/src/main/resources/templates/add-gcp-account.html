@@ -9,39 +9,13 @@
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        
-        :root {
-            --gcp-gradient: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
-            --glass-bg: rgba(255, 255, 255, 0.95);
-            --glass-border: rgba(229, 231, 235, 0.8);
-        }
-
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        }
-        
-        .header-gradient {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--glass-border);
-        }
-
-        .form-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-        }
-        
-        .form-input {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-        }
-        
-        .btn-primary {
-            background: var(--gcp-gradient);
-            color: white;
-        }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
+        .header-gradient { background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(229, 231, 235, 0.8); }
+        .form-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .form-input { background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(229, 231, 235, 0.8); transition: all 0.3s ease; }
+        .form-input:focus { background: white; border-color: #4285F4; box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1); }
+        .btn-primary { background: linear-gradient(135deg, #4285F4 0%, #34A853 100%); color: white; transition: all 0.3s ease; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(66, 133, 244, 0.3); }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -82,7 +56,7 @@
                         </div>
                         <div>
                             <label for="serviceAccountKey" class="block text-sm font-semibold text-gray-700 mb-2">Service Account Key (JSON)</label>
-                            <textarea id="serviceAccountKey" x-model="serviceAccountKey" rows="5" class="form-input block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm" required></textarea>
+                            <textarea id="serviceAccountKey" x-model="serviceAccountKey" rows="8" class="form-input block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm font-mono text-xs" placeholder='{ "type": "service_account", ... }' required></textarea>
                         </div>
                         <div class="flex justify-end pt-4">
                             <button type="submit" class="btn-primary px-10 py-4 text-sm font-semibold rounded-xl shadow-md" :disabled="isLoading">

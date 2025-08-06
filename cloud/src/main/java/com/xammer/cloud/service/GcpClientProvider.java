@@ -18,6 +18,7 @@ public class GcpClientProvider {
             throw new IllegalArgumentException("GCP Service Account JSON cannot be null or empty.");
         }
         
+        // This reads the credentials directly from the JSON string you paste in the form
         InputStream credentialsStream = new ByteArrayInputStream(serviceAccountJson.getBytes(StandardCharsets.UTF_8));
         GoogleCredentials credentials = GoogleCredentials.fromStream(credentialsStream);
         

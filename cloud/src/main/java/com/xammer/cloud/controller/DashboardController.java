@@ -53,7 +53,7 @@ public class DashboardController {
     @GetMapping("/dashboard")
     public ResponseEntity<DashboardData> getDashboardData(
             @RequestParam(required = false) boolean force,
-            @RequestParam String accountId) throws ExecutionException, InterruptedException {
+            @RequestParam String accountId) throws ExecutionException, InterruptedException, java.io.IOException {
 
         if (force) {
             // Use the new dedicated service to clear caches

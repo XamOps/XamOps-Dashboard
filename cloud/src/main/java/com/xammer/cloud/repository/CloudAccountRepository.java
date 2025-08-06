@@ -44,4 +44,7 @@ public interface CloudAccountRepository extends JpaRepository<CloudAccount, Long
      * @return An Optional containing the found CloudAccount, or empty if not found.
      */
     Optional<CloudAccount> findByAwsAccountIdAndClientId(String awsAccountId, Long clientId);
+    Optional<CloudAccount> findByAwsAccountIdOrGcpProjectId(String awsAccountId, String gcpProjectId);
+
+    
 }

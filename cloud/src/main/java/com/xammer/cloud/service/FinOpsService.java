@@ -174,9 +174,6 @@ public class FinOpsService {
             int taggedCount = 0;
 
             for (ResourceDto resource : allResources) {
-                // This logic is simplified; a real implementation would need to fetch live tags for each resource.
-                // The current ResourceDto doesn't consistently hold all tags.
-                // For this refactoring, we'll keep the logic as-is, assuming details map might contain tags.
                 List<String> missingTags = new ArrayList<>(this.requiredTags);
                 
                 Map<String, String> resourceTags = new HashMap<>();
@@ -257,7 +254,7 @@ public class FinOpsService {
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
-
+    
     @Async("awsTaskExecutor")
     @Cacheable(value = "billingSummary", key = "#account.awsAccountId")
     public CompletableFuture<List<DashboardData.BillingSummary>> getBillingSummary(CloudAccount account) {
@@ -347,7 +344,7 @@ public class FinOpsService {
         return "Unknown Service";
     }
 
-    @CacheEvict(value = {"finopsReport", "budgets"}, key = "#accountId")
+    @CacheEvict(value = {"finopsReport", "budgets"}, allEntries = true)
     public void clearFinOpsReportCache(String accountId) {
         logger.info("FinOps-related caches for account {} have been evicted.", accountId);
     }
