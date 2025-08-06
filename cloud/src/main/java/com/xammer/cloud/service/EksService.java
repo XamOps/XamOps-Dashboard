@@ -1,55 +1,33 @@
 package com.xammer.cloud.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.domain.CloudAccount;
-import com.xammer.cloud.dto.k8s.K8sClusterInfo;
-import com.xammer.cloud.dto.k8s.K8sDeploymentInfo;
-import com.xammer.cloud.dto.k8s.K8sNodeInfo;
-import com.xammer.cloud.dto.k8s.K8sPodInfo;
+import com.xammer.cloud.dto.k8s.*;
 import com.xammer.cloud.repository.CloudAccountRepository;
-import io.kubernetes.client.openapi.ApiClient;
-import io.kubernetes.client.openapi.ApiException;
-import io.kubernetes.client.openapi.apis.AppsV1Api;
-import io.kubernetes.client.openapi.apis.CoreV1Api;
-import io.kubernetes.client.openapi.models.V1Container;
-import io.kubernetes.client.openapi.models.V1Deployment;
-import io.kubernetes.client.openapi.models.V1Node;
-import io.kubernetes.client.openapi.models.V1Pod;
-import io.kubernetes.client.util.ClientBuilder;
+import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.Event;
+import io.fabric8.kubernetes.api.model.Node;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.Config;
+import io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.auth.credentials.AwsCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.Dimension;
-import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
-import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataResponse;
-import software.amazon.awssdk.services.cloudwatch.model.Metric;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataResult;
-import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
+import software.amazon.awssdk.services.cloudwatch.model.*;
 import software.amazon.awssdk.services.cloudwatchlogs.CloudWatchLogsClient;
 import software.amazon.awssdk.services.eks.EksClient;
 import software.amazon.awssdk.services.eks.model.Cluster;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -63,9 +41,7 @@ public class EksService {
     private final String configuredRegion;
 
     @Autowired
-    public EksService(
-            CloudAccountRepository cloudAccountRepository,
-            AwsClientProvider awsClientProvider) {
+    public EksService(CloudAccountRepository cloudAccountRepository, AwsClientProvider awsClientProvider) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
@@ -76,17 +52,23 @@ public class EksService {
                 .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
     }
 
-    @Async("awsTaskExecutor")
+    private KubernetesClient getClientFromKubeconfig(String kubeConfigYaml) {
+        Config config = Config.fromKubeconfig(kubeConfigYaml);
+        return new DefaultKubernetesClient(config);
+    }
+
+    @Async
     @Cacheable(value = "eksClusters", key = "#accountId")
     public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId) {
         CloudAccount account = getAccount(accountId);
         EksClient eks = awsClientProvider.getEksClient(account, configuredRegion);
         logger.info("Fetching EKS cluster list for account {}...", account.getAwsAccountId());
+
         try {
             List<String> clusterNames = eks.listClusters().clusters();
-            List<K8sClusterInfo> clusters = clusterNames.parallelStream().map(name -> {
+            List<K8sClusterInfo> clusters = clusterNames.stream().map(name -> {
                 try {
-                    Cluster cluster = getEksCluster(account, name);
+                    Cluster cluster = eks.describeCluster(b -> b.name(name)).cluster();
                     String region = cluster.arn().split(":")[3];
                     boolean isConnected = checkContainerInsightsStatus(account, name, region);
                     return new K8sClusterInfo(name, cluster.statusAsString(), cluster.version(), region, isConnected);
@@ -95,144 +77,349 @@ public class EksService {
                     return null;
                 }
             }).filter(Objects::nonNull).collect(Collectors.toList());
+
             return CompletableFuture.completedFuture(clusters);
+
         } catch (Exception e) {
             logger.error("Could not list EKS clusters for account {}", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
 
-    @Async("awsTaskExecutor")
+    @Async
+    public CompletableFuture<List<String>> getK8sNamespaces(String kubeConfigYaml) {
+        if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
+            logger.warn("Kubeconfig is empty, cannot fetch namespaces.");
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
+            return CompletableFuture.completedFuture(
+                client.namespaces().list().getItems().stream()
+                    .map(ns -> ns.getMetadata().getName()).collect(Collectors.toList())
+            );
+        } catch (Exception e) {
+            logger.error("Failed to get namespaces", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async
+    public CompletableFuture<List<K8sPodInfo>> getK8sPods(String kubeConfigYaml, String namespace) {
+        if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
+            logger.warn("Kubeconfig is empty, cannot fetch pods.");
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
+            List<Pod> podList = client.pods().inNamespace(namespace).list().getItems();
+            List<K8sPodInfo> out = new ArrayList<>();
+            for (Pod pod : podList) {
+                K8sPodInfo info = new K8sPodInfo();
+                info.setName(pod.getMetadata().getName());
+                info.setNodeName(pod.getSpec().getNodeName());
+                info.setStatus(pod.getStatus().getPhase());
+                info.setRestarts(pod.getStatus().getContainerStatuses() != null
+                        ? pod.getStatus().getContainerStatuses().stream().mapToInt(s -> s.getRestartCount()).sum() : 0);
+                out.add(info);
+            }
+            return CompletableFuture.completedFuture(out);
+        } catch (Exception e) {
+            logger.error("Failed to get pods", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async
+    public CompletableFuture<List<K8sDeploymentInfo>> getK8sDeployments(String kubeConfigYaml, String namespace) {
+        if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
+            logger.warn("Kubeconfig is empty, cannot fetch deployments.");
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
+            List<Deployment> deployments = client.apps().deployments().inNamespace(namespace).list().getItems();
+            List<K8sDeploymentInfo> out = new ArrayList<>();
+            for (Deployment dep : deployments) {
+                K8sDeploymentInfo info = new K8sDeploymentInfo();
+                info.setName(dep.getMetadata().getName());
+                info.setReady(
+                  (dep.getStatus().getReadyReplicas() == null ? 0 : dep.getStatus().getReadyReplicas())
+                  + "/" + (dep.getStatus().getReplicas() == null ? 0 : dep.getStatus().getReplicas())
+                );
+                info.setUpToDate(dep.getStatus().getUpdatedReplicas() == null ? 0 : dep.getStatus().getUpdatedReplicas());
+                info.setAvailable(dep.getStatus().getAvailableReplicas() == null ? 0 : dep.getStatus().getAvailableReplicas());
+                info.setAge(dep.getMetadata().getCreationTimestamp());
+                out.add(info);
+            }
+            return CompletableFuture.completedFuture(out);
+        } catch (Exception e) {
+            logger.error("Failed to get deployments", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async
+    public CompletableFuture<List<K8sEventInfo>> getK8sEvents(String kubeConfigYaml, String namespace) {
+        if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
+            logger.warn("Kubeconfig is empty, cannot fetch events.");
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
+            List<Event> events = client.v1().events().inNamespace(namespace).list().getItems();
+            List<K8sEventInfo> out = new ArrayList<>();
+            for (Event evt : events) {
+                K8sEventInfo info = new K8sEventInfo();
+                info.setLastSeen(evt.getLastTimestamp());
+                info.setType(evt.getType());
+                info.setReason(evt.getReason());
+                info.setObject(evt.getInvolvedObject().getName());
+                info.setMessage(evt.getMessage());
+                out.add(info);
+            }
+            return CompletableFuture.completedFuture(out);
+        } catch (Exception e) {
+            logger.error("Failed to get events", e);
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+    }
+
+    @Async
+    public CompletableFuture<String> getPodLogs(String kubeConfigYaml, String namespace, String podName) {
+        if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
+            logger.warn("Kubeconfig is empty, cannot fetch logs.");
+            return CompletableFuture.completedFuture("Kubeconfig not provided.");
+        }
+        try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
+            String logs = client.pods().inNamespace(namespace).withName(podName).getLog();
+            return CompletableFuture.completedFuture(logs != null ? logs : "No logs found");
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture("Error fetching logs: " + e.getMessage());
+        }
+    }
+
+    // --- Existing methods remain unchanged ---
+
+    // 2. Fetch nodes and metrics (CPU %, Memory %)
+    @Async
     @Cacheable(value = "k8sNodes", key = "#accountId + '-' + #clusterName")
     public CompletableFuture<List<K8sNodeInfo>> getK8sNodes(String accountId, String clusterName) {
+        logger.info("Fetching nodes for cluster: {} in account: {}", clusterName, accountId);
         CloudAccount account = getAccount(accountId);
-        logger.info("Fetching nodes for K8s cluster: {} in account {}", clusterName, accountId);
+        String region;
+        List<String> nodeNames;
+
         try {
-            CoreV1Api api = getCoreV1Api(account, clusterName);
-            List<V1Node> nodeList = api.listNode(null, null, null, null, null, null, null, null, null, null).getItems();
-
-            Cluster cluster = getEksCluster(account, clusterName);
-            String region = cluster.arn().split(":")[3];
-
-            return CompletableFuture.completedFuture(nodeList.stream().map(node -> {
-                String status = node.getStatus().getConditions().stream()
-                        .filter(c -> "Ready".equals(c.getType()))
-                        .findFirst()
-                        .map(c -> "True".equals(c.getStatus()) ? "Ready" : "NotReady")
-                        .orElse("Unknown");
-
-                Map<String, Map<String, Double>> metrics = getK8sNodeMetrics(account, clusterName, node.getMetadata().getName(), region);
-
-                return new K8sNodeInfo(
-                        node.getMetadata().getName(),
-                        status,
-                        node.getMetadata().getLabels().get("node.kubernetes.io/instance-type"),
-                        node.getMetadata().getLabels().get("topology.kubernetes.io/zone"),
-                        formatAge(node.getMetadata().getCreationTimestamp()),
-                        node.getStatus().getNodeInfo().getKubeletVersion(),
-                        metrics.get("cpu"),
-                        metrics.get("memory")
-                );
-            }).collect(Collectors.toList()));
-        } catch (ApiException e) {
-            logger.error("Kubernetes API error while fetching nodes for cluster {}: {} - {}", clusterName, e.getCode(), e.getResponseBody(), e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
+            EksClient eks = awsClientProvider.getEksClient(account, configuredRegion);
+            Cluster cluster = eks.describeCluster(c -> c.name(clusterName)).cluster();
+            region = cluster.arn().split(":")[3];
+            nodeNames = fetchNodeNames(account, clusterName, region);
         } catch (Exception e) {
-            logger.error("Failed to get nodes for cluster {} in account {}", clusterName, accountId, e);
+            logger.error("Error fetching nodes for cluster {}: {}", clusterName, e.getMessage(), e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
-    }
 
-    @Async("awsTaskExecutor")
-    @Cacheable(value = "k8sNamespaces", key = "#accountId + '-' + #clusterName")
-    public CompletableFuture<List<String>> getK8sNamespaces(String accountId, String clusterName) {
-        CloudAccount account = getAccount(accountId);
-        logger.info("Fetching namespaces for K8s cluster: {} in account {}", clusterName, accountId);
-        try {
-            CoreV1Api api = getCoreV1Api(account, clusterName);
-            return CompletableFuture.completedFuture(api.listNamespace(null, null, null, null, null, null, null, null, null, null)
-                    .getItems().stream()
-                    .map(ns -> ns.getMetadata().getName())
-                    .collect(Collectors.toList()));
-        } catch (Exception e) {
-            logger.error("Failed to get namespaces for cluster {} in account {}", clusterName, accountId, e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
+        List<K8sNodeInfo> nodeInfos = nodeNames.stream().map(nodeName -> {
+            Map<String, Double> cpuMemory = fetchCpuMemoryMetrics(account, clusterName, nodeName, region);
+            return new K8sNodeInfo(
+                    nodeName,
+                    "Ready",
+                    "unknown",
+                    "unknown",
+                    "unknown",
+                    "unknown",
+                    formatPercentage(cpuMemory.getOrDefault("cpu", 0.0)),
+                    formatPercentage(cpuMemory.getOrDefault("memory", 0.0))
+            );
+        }).collect(Collectors.toList());
+
+        return CompletableFuture.completedFuture(nodeInfos);
+    }
+    
+    // Add this new method
+    @Async
+    public CompletableFuture<ClusterUsageDto> getClusterUsageFromKubeconfig(String kubeConfigYaml) {
+        if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
+            logger.warn("Kubeconfig is empty, cannot fetch cluster usage.");
+            return CompletableFuture.completedFuture(new ClusterUsageDto());
         }
-    }
+        ClusterUsageDto dto = new ClusterUsageDto();
+        try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
+            // 1. Fetch Nodes and sum CPU/Memory capacity
+            List<Node> nodes = client.nodes().list().getItems();
+            double cpuTotal = 0;
+            double memTotal = 0;
+            for (Node node : nodes) {
+                Map<String, Quantity> capacity = node.getStatus().getCapacity();
+                cpuTotal += parseCpuCores(capacity.get("cpu"));
+                memTotal += parseMemoryMi(capacity.get("memory"));
+            }
+            dto.setCpuTotal(cpuTotal);
+            dto.setMemoryTotal(memTotal);
+            dto.setNodeCount(nodes.size());
 
-    @Async("awsTaskExecutor")
-    @Cacheable(value = "k8sDeployments", key = "#accountId + '-' + #clusterName + '-' + #namespace")
-    public CompletableFuture<List<K8sDeploymentInfo>> getK8sDeployments(String accountId, String clusterName, String namespace) {
-        CloudAccount account = getAccount(accountId);
-        logger.info("Fetching deployments in namespace {} for K8s cluster: {} in account {}", namespace, clusterName, accountId);
-        try {
-            AppsV1Api api = getAppsV1Api(account, clusterName);
-            List<V1Deployment> deployments = api.listNamespacedDeployment(namespace, null, null, null, null, null, null, null, null, null, null).getItems();
-            return CompletableFuture.completedFuture(deployments.stream().map(d -> {
-                int available = d.getStatus().getAvailableReplicas() != null ? d.getStatus().getAvailableReplicas() : 0;
-                int upToDate = d.getStatus().getUpdatedReplicas() != null ? d.getStatus().getUpdatedReplicas() : 0;
-                String ready = (d.getStatus().getReadyReplicas() != null ? d.getStatus().getReadyReplicas() : 0) + "/" + d.getSpec().getReplicas();
-                return new K8sDeploymentInfo(
-                        d.getMetadata().getName(),
-                        ready,
-                        upToDate,
-                        available,
-                        formatAge(d.getMetadata().getCreationTimestamp())
-                );
-            }).collect(Collectors.toList()));
-        } catch (Exception e) {
-            logger.error("Failed to get deployments for cluster {} in account {}", clusterName, accountId, e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
-        }
-    }
+            // 2. Fetch Pods and count, sum requests and limits
+            List<Pod> pods = client.pods().inAnyNamespace().list().getItems();
+            dto.setPodCount(pods.size());
+            double cpuRequests = 0;
+            double cpuLimits = 0;
+            double memRequests = 0;
+            double memLimits = 0;
+            for (Pod pod : pods) {
+                if (pod.getSpec() == null) continue;
+                for (Container container : pod.getSpec().getContainers()) {
+                    if (container.getResources() == null) continue;
+                    Map<String, Quantity> req = container.getResources().getRequests();
+                    Map<String, Quantity> lim = container.getResources().getLimits();
+                    cpuRequests += parseCpuCores(req != null ? req.get("cpu") : null);
+                    cpuLimits += parseCpuCores(lim != null ? lim.get("cpu") : null);
+                    memRequests += parseMemoryMi(req != null ? req.get("memory") : null);
+                    memLimits += parseMemoryMi(lim != null ? lim.get("memory") : null);
+                }
+            }
+            dto.setCpuRequests(cpuRequests);
+            dto.setCpuLimits(cpuLimits);
+            dto.setMemoryRequests(memRequests);
+            dto.setMemoryLimits(memLimits);
 
-    @Async("awsTaskExecutor")
-    @Cacheable(value = "k8sPods", key = "#accountId + '-' + #clusterName + '-' + #namespace")
-    public CompletableFuture<List<K8sPodInfo>> getK8sPods(String accountId, String clusterName, String namespace) {
-        logger.info("Fetching pods in namespace {} for K8s cluster: {} in account {}", namespace, clusterName, accountId);
-        CloudAccount account = getAccount(accountId);
-        try {
-            CoreV1Api api = getCoreV1Api(account, clusterName);
-            List<V1Pod> pods = api.listNamespacedPod(namespace, null, null, null, null, null, null, null, null, null, false).getItems();
-            return CompletableFuture.completedFuture(pods.stream().map(p -> {
-                long readyContainers = p.getStatus() != null && p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().filter(cs -> cs.getReady()).count() : 0;
-                int totalContainers = p.getSpec() != null && p.getSpec().getContainers() != null ? p.getSpec().getContainers().size() : 0;
-                int restarts = p.getStatus() != null && p.getStatus().getContainerStatuses() != null ? p.getStatus().getContainerStatuses().stream().mapToInt(cs -> cs.getRestartCount()).sum() : 0;
-                
-                String cpu = "0 / 0";
-                String memory = "0 / 0";
-
-                if (p.getSpec() != null && p.getSpec().getContainers() != null && !p.getSpec().getContainers().isEmpty()) {
-                    V1Container mainContainer = p.getSpec().getContainers().get(0);
-                    if (mainContainer.getResources() != null) {
-                        String cpuReq = formatResource(mainContainer.getResources().getRequests(), "cpu");
-                        String cpuLim = formatResource(mainContainer.getResources().getLimits(), "cpu");
-                        String memReq = formatResource(mainContainer.getResources().getRequests(), "memory");
-                        String memLim = formatResource(mainContainer.getResources().getLimits(), "memory");
-                        cpu = String.format("%s / %s", cpuReq, cpuLim);
-                        memory = String.format("%s / %s", memReq, memLim);
+            // 3. Fetch live CPU/Memory usage from metrics.k8s.io API via raw custom resources
+            try {
+                ResourceDefinitionContext nodeMetricsContext = new ResourceDefinitionContext.Builder()
+                        .withGroup("metrics.k8s.io")
+                        .withVersion("v1beta1")
+                        .withPlural("nodes")
+                        .build();
+                var genericResource = client.genericKubernetesResources(nodeMetricsContext);
+                var nodeMetricsList = genericResource.list();
+                double cpuUsage = 0;
+                double memUsage = 0;
+                if (nodeMetricsList != null && nodeMetricsList.getItems() != null) {
+                    for (var item : nodeMetricsList.getItems()) {
+                        Map<String, Object> usage = (Map<String, Object>) item.getAdditionalProperties().get("usage");
+                        if (usage != null) {
+                            cpuUsage += parseCpuCores(new Quantity((String) usage.get("cpu")));
+                            memUsage += parseMemoryMi(new Quantity((String) usage.get("memory")));
+                        }
                     }
                 }
-
-                return new K8sPodInfo(
-                        p.getMetadata() != null ? p.getMetadata().getName() : "N/A",
-                        readyContainers + "/" + totalContainers,
-                        p.getStatus() != null ? p.getStatus().getPhase() : "Unknown",
-                        restarts,
-                        p.getMetadata() != null ? formatAge(p.getMetadata().getCreationTimestamp()) : "N/A",
-                        p.getSpec() != null ? p.getSpec().getNodeName() : "N/A",
-                        cpu,
-                        memory
-                );
-            }).collect(Collectors.toList()));
+                dto.setCpuUsage(cpuUsage);
+                dto.setMemoryUsage(memUsage);
+            } catch (Exception e) {
+                // If metrics API is missing or error occurs, usage remains zero
+                dto.setCpuUsage(0);
+                dto.setMemoryUsage(0);
+            }
         } catch (Exception e) {
-            logger.error("Failed to get pods for cluster {} in account {}", clusterName, accountId, e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
+            // Log error and return empty dto or null
+            // logger.error("Error fetching cluster usage", e);
+            return CompletableFuture.completedFuture(null);
+        }
+        return CompletableFuture.completedFuture(dto);
+    }
+
+    private double parseCpuCores(Quantity q) {
+        if (q == null || q.getAmount() == null) return 0.0;
+        String s = q.getAmount();
+        if (s.endsWith("m")) {
+            return Double.parseDouble(s.substring(0, s.length() - 1)) / 1000.0;
+        }
+        return Double.parseDouble(s);
+    }
+
+    private double parseMemoryMi(Quantity q) {
+        if (q == null || q.getAmount() == null) return 0.0;
+        String s = q.getAmount();
+        if (s.endsWith("Ki")) return Double.parseDouble(s.replace("Ki", "")) / 1024.0;
+        else if (s.endsWith("Mi")) return Double.parseDouble(s.replace("Mi", ""));
+        else if (s.endsWith("Gi")) return Double.parseDouble(s.replace("Gi", "")) * 1024;
+        else return Double.parseDouble(s)/1024/1024;
+    }
+
+    // --- Utilities ---
+
+    // Fetch node names from CloudWatch ContainerInsights metrics
+    private List<String> fetchNodeNames(CloudAccount account, String clusterName, String region) {
+        try {
+            CloudWatchClient cloudWatch = awsClientProvider.getCloudWatchClient(account, region);
+            ListMetricsResponse metricsResponse = cloudWatch.listMetrics(b -> b
+                    .namespace("ContainerInsights")
+                    .metricName("node_cpu_utilization")
+                    .dimensions(DimensionFilter.builder().name("ClusterName").value(clusterName).build())
+            );
+            return metricsResponse.metrics().stream()
+                    .flatMap(metric -> metric.dimensions().stream())
+                    .filter(dim -> "NodeName".equals(dim.name()))
+                    .map(Dimension::value)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("Error fetching node names from CloudWatch for cluster {}: {}", clusterName, e.getMessage(), e);
+            return Collections.emptyList();
         }
     }
 
-    // --- Private Helper Methods ---
+    // Fetch CPU and Memory utilization percentages for a node
+    private Map<String, Double> fetchCpuMemoryMetrics(CloudAccount account, String clusterName, String nodeName, String region) {
+        try {
+            CloudWatchClient cloudWatch = awsClientProvider.getCloudWatchClient(account, region);
 
+            Instant now = Instant.now();
+            Instant start = now.minus(5, ChronoUnit.MINUTES);
+
+            MetricDataQuery cpuQuery = MetricDataQuery.builder()
+                    .id("cpu")
+                    .metricStat(MetricStat.builder()
+                            .metric(Metric.builder()
+                                    .namespace("ContainerInsights")
+                                    .metricName("node_cpu_utilization")
+                                    .dimensions(
+                                            Dimension.builder().name("ClusterName").value(clusterName).build(),
+                                            Dimension.builder().name("NodeName").value(nodeName).build()
+                                    )
+                                    .build())
+                            .period(60)
+                            .stat("Average")
+                            .build())
+                    .returnData(true)
+                    .build();
+
+            MetricDataQuery memQuery = MetricDataQuery.builder()
+                    .id("memory")
+                    .metricStat(MetricStat.builder()
+                            .metric(Metric.builder()
+                                    .namespace("ContainerInsights")
+                                    .metricName("node_memory_utilization")
+                                    .dimensions(
+                                            Dimension.builder().name("ClusterName").value(clusterName).build(),
+                                            Dimension.builder().name("NodeName").value(nodeName).build()
+                                    )
+                                    .build())
+                            .period(60)
+                            .stat("Average")
+                            .build())
+                    .returnData(true)
+                    .build();
+
+            GetMetricDataRequest request = GetMetricDataRequest.builder()
+                    .startTime(start)
+                    .endTime(now)
+                    .metricDataQueries(cpuQuery, memQuery)
+                    .build();
+
+            GetMetricDataResponse response = cloudWatch.getMetricData(request);
+
+            Map<String, Double> results = new HashMap<>();
+            for (MetricDataResult result : response.metricDataResults()) {
+                if (result.values() != null && !result.values().isEmpty()) {
+                    results.put(result.id(), result.values().get(0));
+                }
+            }
+            return results;
+        } catch (Exception e) {
+            logger.error("Error fetching CPU/Memory metrics from CloudWatch: {}", e.getMessage(), e);
+            return Collections.emptyMap();
+        }
+    }
+
+    // Check if Container Insights logs exist for cluster -> determines connection state
     private boolean checkContainerInsightsStatus(CloudAccount account, String clusterName, String region) {
         logger.info("Checking Container Insights status for cluster {} in region {}", clusterName, region);
         try {
@@ -247,156 +434,8 @@ public class EksService {
         }
     }
 
-    private Map<String, Map<String, Double>> getK8sNodeMetrics(CloudAccount account, String clusterName, String nodeName, String region) {
-        CloudWatchClient cwClient = awsClientProvider.getCloudWatchClient(account, region);
-        
-        Map<String, Map<String, Double>> results = new HashMap<>();
-        results.put("cpu", new HashMap<>());
-        results.put("memory", new HashMap<>());
-
-        try {
-            List<String> metricNames = List.of("node_cpu_utilization", "node_memory_utilization", "node_cpu_limit", "node_memory_limit");
-            
-            List<MetricDataQuery> queries = metricNames.stream().map(metricName -> 
-                MetricDataQuery.builder()
-                    .id(metricName.replace("_", ""))
-                    .metricStat(MetricStat.builder()
-                        .metric(Metric.builder()
-                            .namespace("ContainerInsights")
-                            .metricName(metricName)
-                            .dimensions(
-                                Dimension.builder().name("ClusterName").value(clusterName).build(),
-                                Dimension.builder().name("NodeName").value(nodeName).build()
-                            )
-                            .build())
-                        .period(60)
-                        .stat("Average")
-                        .build())
-                    .returnData(true)
-                    .build()
-            ).collect(Collectors.toList());
-
-            GetMetricDataRequest request = GetMetricDataRequest.builder()
-                .startTime(Instant.now().minus(5, ChronoUnit.MINUTES))
-                .endTime(Instant.now())
-                .metricDataQueries(queries)
-                .build();
-
-            GetMetricDataResponse response = cwClient.getMetricData(request);
-            
-            for (MetricDataResult result : response.metricDataResults()) {
-                if (!result.values().isEmpty()) {
-                    double value = result.values().get(0);
-                    if ("nodecpuutilization".equals(result.id())) {
-                        results.get("cpu").put("current", value);
-                    } else if ("nodememoryutilization".equals(result.id())) {
-                        results.get("memory").put("current", value);
-                    } else if ("nodecpulimit".equals(result.id())) {
-                        results.get("cpu").put("total", value / 1000); // Convert millicores to cores
-                    } else if ("nodememorylimit".equals(result.id())) {
-                        results.get("memory").put("total", value / (1024*1024*1024)); // Convert bytes to GiB
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Could not fetch Container Insights metrics for node {} in cluster {}", nodeName, clusterName, e);
-        }
-        return results;
-    }
-
-    private Cluster getEksCluster(CloudAccount account, String clusterName) {
-        EksClient eks = awsClientProvider.getEksClient(account, configuredRegion);
-        return eks.describeCluster(r -> r.name(clusterName)).cluster();
-    }
-
-    private CoreV1Api getCoreV1Api(CloudAccount account, String clusterName) throws IOException {
-        ApiClient apiClient = buildK8sApiClient(account, clusterName);
-        return new CoreV1Api(apiClient);
-    }
-
-    private AppsV1Api getAppsV1Api(CloudAccount account, String clusterName) throws IOException {
-        ApiClient apiClient = buildK8sApiClient(account, clusterName);
-        return new AppsV1Api(apiClient);
-    }
-
-    private ApiClient buildK8sApiClient(CloudAccount account, String clusterName) throws IOException {
-        try {
-            Cluster cluster = getEksCluster(account, clusterName);
-            String region = cluster.arn().split(":")[3];
-
-            ApiClient client = new ClientBuilder()
-                    .setBasePath(cluster.endpoint())
-                    .setVerifyingSsl(true)
-                    .setCertificateAuthority(Base64.getDecoder().decode(cluster.certificateAuthority().data()))
-                    .build();
-
-            String token;
-            
-            AwsCredentialsProvider credentialsProvider = awsClientProvider.getCredentialsProvider(account);
-            AwsCredentials credentials = credentialsProvider.resolveCredentials();
-
-            ProcessBuilder processBuilder = new ProcessBuilder("aws", "eks", "get-token", "--cluster-name", clusterName, "--region", region);
-            Map<String, String> environment = processBuilder.environment();
-            environment.put("AWS_ACCESS_KEY_ID", credentials.accessKeyId());
-            environment.put("AWS_SECRET_ACCESS_KEY", credentials.secretAccessKey());
-            if (credentials instanceof software.amazon.awssdk.auth.credentials.AwsSessionCredentials) {
-                String sessionToken = ((software.amazon.awssdk.auth.credentials.AwsSessionCredentials) credentials).sessionToken();
-                environment.put("AWS_SESSION_TOKEN", sessionToken);
-            }
-            
-            processBuilder.redirectErrorStream(true);
-            Process process = processBuilder.start();
-
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line);
-                }
-            }
-
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode rootNode = mapper.readTree(output.toString());
-                JsonNode tokenNode = rootNode.path("status").path("token");
-                
-                if (tokenNode.isMissingNode() || tokenNode.asText().isEmpty()) {
-                    throw new IOException("Token not found in AWS CLI JSON output: " + output.toString());
-                }
-                token = tokenNode.asText();
-            } else {
-                throw new IOException("Failed to get EKS token via AWS CLI. Exit code: " + exitCode + " Output: " + output);
-            }
-
-            client.setApiKeyPrefix("Bearer");
-            client.setApiKey(token);
-
-            io.kubernetes.client.openapi.Configuration.setDefaultApiClient(client);
-            return client;
-
-        } catch (Exception e) {
-            logger.error("Failed to build Kubernetes ApiClient for cluster {}: {}", clusterName, e.getMessage(), e);
-            throw new IOException("Could not configure Kubernetes client", e);
-        }
-    }
-    
-    private String formatAge(OffsetDateTime creationTimestamp) {
-        if (creationTimestamp == null) return "N/A";
-        Duration duration = Duration.between(creationTimestamp, OffsetDateTime.now());
-        long days = duration.toDays();
-        if (days > 0) return days + "d";
-        long hours = duration.toHours();
-        if (hours > 0) return hours + "h";
-        long minutes = duration.toMinutes();
-        if (minutes > 0) return minutes + "m";
-        return duration.toSeconds() + "s";
-    }
-
-    private String formatResource(Map<String, io.kubernetes.client.custom.Quantity> resources, String type) {
-        if (resources == null || !resources.containsKey(type)) {
-            return "0";
-        }
-        return resources.get(type).toSuffixedString();
+    private String formatPercentage(Double value) {
+        if (value == null) return "0.00 %";
+        return String.format("%.2f %%", value);
     }
 }

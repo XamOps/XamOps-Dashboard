@@ -59,6 +59,15 @@ public class AwsClientProvider {
             .build();
 }
 
+    public EksClient getEksClientForTokenGeneration(CloudAccount account) {
+        // This client uses the application's host credentials to generate a token
+        // on behalf of the user's role.
+        return EksClient.builder()
+                .credentialsProvider(getCredentialsProvider(account))
+                .region(Region.of(System.getenv().getOrDefault("AWS_REGION", "us-east-1")))
+                .build();
+    }
+
     public Ec2Client getEc2Client(CloudAccount account, String region) {
         return Ec2Client.builder()
                 .credentialsProvider(getCredentialsProvider(account))
