@@ -48,7 +48,6 @@ public static class RegionStatus {
     private double longitude;
     private String activeServices;
     
-    // Single manual constructor - remove @AllArgsConstructor to avoid conflicts
     public RegionStatus(String regionId, String regionName, String status, 
                        double latitude, double longitude, String activeServices) {
         this.regionId = regionId;
@@ -59,7 +58,6 @@ public static class RegionStatus {
         this.activeServices = activeServices;
     }
     
-    // Optional: Constructor without activeServices for backward compatibility
     public RegionStatus(String regionId, String regionName, String status, 
                        double latitude, double longitude) {
         this(regionId, regionName, status, latitude, longitude, null);

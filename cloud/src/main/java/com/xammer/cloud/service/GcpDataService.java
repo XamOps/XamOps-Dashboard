@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Service
 public class GcpDataService {
@@ -73,5 +75,11 @@ public class GcpDataService {
         } catch (Exception e) {
             throw new RuntimeException("GCP error: " + e.getMessage(), e);
         }
+    }
+
+    public List<Bucket> getBuckets(CloudAccount account) throws IOException {
+        Storage storage = gcpClientProvider.createStorageClient(account.getGcpServiceAccountKey());
+        return StreamSupport.stream(storage.list().iterateAll().spliterator(), false)
+                .collect(Collectors.toList());
     }
 }

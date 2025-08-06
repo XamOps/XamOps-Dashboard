@@ -15,7 +15,6 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
 import software.amazon.awssdk.services.costexplorer.model.*;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesOfferingsRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeReservedInstancesResponse;
 import software.amazon.awssdk.services.ec2.model.Filter;
@@ -23,9 +22,7 @@ import software.amazon.awssdk.services.ec2.model.ModifyReservedInstancesRequest;
 import software.amazon.awssdk.services.ec2.model.ModifyReservedInstancesResponse;
 import software.amazon.awssdk.services.ec2.model.ReservedInstances;
 import software.amazon.awssdk.services.ec2.model.ReservedInstancesConfiguration;
-import software.amazon.awssdk.services.ec2.model.ReservedInstancesOffering;
 
-import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -101,7 +98,10 @@ public class ReservationService {
             List<CoverageByTime> coverages = ce.getReservationCoverage(covRequest).coveragesByTime();
             double utilizationPercentage = utilizations.isEmpty() || utilizations.get(0).total() == null ? 0.0 : Double.parseDouble(utilizations.get(0).total().utilizationPercentage());
             double coveragePercentage = coverages.isEmpty() || coverages.get(0).total() == null ? 0.0 : Double.parseDouble(coverages.get(0).total().coverageHours().coverageHoursPercentage());
-            return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(utilizationPercentage, coveragePercentage));
+            return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(
+                    utilizationPercentage,
+                    coveragePercentage
+            ));
         } catch (Exception e) {
             logger.error("Could not fetch reservation analysis data for account {}", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(0.0, 0.0));
@@ -119,27 +119,28 @@ public class ReservationService {
             GetReservationPurchaseRecommendationResponse response = ce.getReservationPurchaseRecommendation(request);
 
             return CompletableFuture.completedFuture(response.recommendations().stream()
-                    .filter(rec -> rec.recommendationDetails() != null && !rec.recommendationDetails().isEmpty())
-                    .flatMap(rec -> rec.recommendationDetails().stream()
-                            .map(details -> {
-                                try {
-                                    return new DashboardData.ReservationPurchaseRecommendation(
-                                            getFieldValue(details, "instanceDetails"),
-                                            getFieldValue(details, "recommendedNumberOfInstancesToPurchase"),
-                                            getFieldValue(details, "recommendedNormalizedUnitsToPurchase"),
-                                            getFieldValue(details, "minimumNormalizedUnitsToPurchase"),
-                                            getFieldValue(details, "estimatedMonthlySavingsAmount"),
-                                            getFieldValue(details, "estimatedMonthlyOnDemandCost"),
-                                            getFieldValue(details, "estimatedMonthlyCost"),
-                                            getTermValue(rec)
-                                    );
-                                } catch (Exception e) {
-                                    logger.warn("Failed to process recommendation detail: {}", e.getMessage());
-                                    return null;
-                                }
-                            }))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList()));
+                .filter(rec -> rec.recommendationDetails() != null && !rec.recommendationDetails().isEmpty())
+                .flatMap(rec -> rec.recommendationDetails().stream()
+                    .map(details -> {
+                        try {
+                            // CORRECTED MAPPING LOGIC
+                            return new DashboardData.ReservationPurchaseRecommendation(
+                                details.instanceDetails().ec2InstanceDetails().family(),
+                                String.valueOf(details.recommendedNumberOfInstancesToPurchase()),
+                                String.valueOf(details.recommendedNormalizedUnitsToPurchase()),
+                                String.valueOf(details.minimumNumberOfInstancesUsedPerHour()),
+                                String.valueOf(details.estimatedMonthlySavingsAmount()),
+                                String.valueOf(details.estimatedMonthlyOnDemandCost()),
+                                String.valueOf(details.upfrontCost()),
+                                String.valueOf(rec.termInYears())
+                            );
+                        } catch (Exception e) {
+                            logger.warn("Failed to process recommendation detail: {}", e.getMessage());
+                            return null;
+                        }
+                    }))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList()));
         } catch (Exception e) {
             logger.error("Could not fetch reservation purchase recommendations.", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -311,9 +312,6 @@ public class ReservationService {
         }
     }
 
-    /**
-     * THIS IS THE NEWLY ADDED METHOD
-     */
     @Async("awsTaskExecutor")
     @Cacheable(value = "reservationCostByTag", key = "#accountId + '-' + #tagKey")
     public CompletableFuture<List<CostByTagDto>> getReservationCostByTag(String accountId, String tagKey) {
@@ -360,9 +358,6 @@ public class ReservationService {
         }
     }
 
-
-    // --- Private Helper Methods ---
-
     private String suggestSmallerInstanceType(String instanceType) {
         String[] parts = instanceType.split("\\.");
         if (parts.length != 2) return null;
@@ -374,26 +369,6 @@ public class ReservationService {
             return family + "." + this.instanceSizeOrder.get(currentIndex - 1);
         }
         return null;
-    }
-
-    private String getFieldValue(Object details, String methodName) {
-        try {
-            Method method = details.getClass().getMethod(methodName);
-            Object result = method.invoke(details);
-            return result != null ? result.toString() : "0";
-        } catch (Exception e) {
-            logger.debug("Could not access method {}: {}", methodName, e.getMessage());
-            return "N/A";
-        }
-    }
-
-    private String getTermValue(ReservationPurchaseRecommendation rec) {
-        try {
-            return rec.termInYears() != null ? rec.termInYears().toString() : "1 Year";
-        } catch (Exception e) {
-            logger.debug("Could not determine term value", e);
-            return "1 Year";
-        }
     }
 
     private <T> CompletableFuture<List<T>> fetchAllRegionalResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, Function<String, List<T>> fetchFunction, String serviceName) {

@@ -2,8 +2,8 @@ package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.dto.GcpResourceDto;
 import com.xammer.cloud.dto.ReservationInventoryDto;
-import com.xammer.cloud.dto.ResourceDto;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.iam.IamClient;
 import software.amazon.awssdk.services.iam.model.PolicyScopeType;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,7 +31,7 @@ public class DashboardDataService {
 
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
-    private final DashboardUpdateService dashboardUpdateService;
+    private final GcpDataService gcpDataService; // Added for GCP logic
     private final CloudListService cloudListService;
     private final OptimizationService optimizationService;
     private final SecurityService securityService;
@@ -41,7 +42,7 @@ public class DashboardDataService {
     public DashboardDataService(
             CloudAccountRepository cloudAccountRepository,
             AwsClientProvider awsClientProvider,
-            DashboardUpdateService dashboardUpdateService,
+            GcpDataService gcpDataService,
             CloudListService cloudListService,
             OptimizationService optimizationService,
             SecurityService securityService,
@@ -49,7 +50,7 @@ public class DashboardDataService {
             ReservationService reservationService) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
-        this.dashboardUpdateService = dashboardUpdateService;
+        this.gcpDataService = gcpDataService;
         this.cloudListService = cloudListService;
         this.optimizationService = optimizationService;
         this.securityService = securityService;
@@ -57,25 +58,90 @@ public class DashboardDataService {
         this.reservationService = reservationService;
     }
 
+    // CORRECTED: Use the new repository method to find by either ID
     private CloudAccount getAccount(String accountId) {
-        return cloudAccountRepository.findByAwsAccountId(accountId)
+        return cloudAccountRepository.findByAwsAccountIdOrGcpProjectId(accountId, accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
     }
 
     @Cacheable(value = "dashboardData", key = "#accountId")
-    public DashboardData getDashboardData(String accountId) throws ExecutionException, InterruptedException {
-        logger.info("--- LAUNCHING OPTIMIZED ASYNC DATA FETCH FROM AWS for account {} ---", accountId);
+    public DashboardData getDashboardData(String accountId) throws ExecutionException, InterruptedException, IOException {
         CloudAccount account = getAccount(accountId);
 
-        CompletableFuture<List<DashboardData.ServiceGroupDto>> groupedResourcesFuture = cloudListService.getAllResourcesGrouped(accountId);
-        
-        // This is a crucial step: get active regions first to pass to other services.
+        // --- THE CRITICAL FIX: Check the provider before proceeding ---
+        if ("GCP".equals(account.getProvider())) {
+            return getGcpDashboardData(account);
+        } else {
+            return getAwsDashboardData(account);
+        }
+    }
+
+    private DashboardData getGcpDashboardData(CloudAccount account) throws IOException {
+        logger.info("--- LAUNCHING DATA FETCH FOR GCP for project {} ---", account.getGcpProjectId());
+        DashboardData data = new DashboardData();
+
+        DashboardData.Account mainAccount = new DashboardData.Account(
+            account.getGcpProjectId(),
+            account.getAccountName(),
+            Collections.emptyList(), // regionStatus
+            null, // resourceInventory
+            null, // cloudWatchStatus
+            Collections.emptyList(), // securityInsights
+            null, // costHistory
+            Collections.emptyList(), // billingSummary
+            null, // iamResources
+            null, // savingsSummary
+            Collections.emptyList(), // ec2Recommendations
+            Collections.emptyList(), // costAnomalies
+            Collections.emptyList(), // ebsRecommendations
+            Collections.emptyList(), // lambdaRecommendations
+            null, // reservationAnalysis
+            Collections.emptyList(), // reservationPurchaseRecommendations
+            null, // optimizationSummary
+            Collections.emptyList(), // wastedResources
+            Collections.emptyList(), // serviceQuotas
+            100 // securityScore
+        );
+
+        data.setSelectedAccount(mainAccount);
+
+        List<DashboardData.Account> availableAccounts = cloudAccountRepository.findAll().stream()
+            .map(acc -> new DashboardData.Account(
+                "AWS".equals(acc.getProvider()) ? acc.getAwsAccountId() : acc.getGcpProjectId(),
+                acc.getAccountName(),
+                Collections.emptyList(), // regionStatus
+                null, // resourceInventory
+                null, // cloudWatchStatus
+                Collections.emptyList(), // securityInsights
+                null, // costHistory
+                Collections.emptyList(), // billingSummary
+                null, // iamResources
+                null, // savingsSummary
+                Collections.emptyList(), // ec2Recommendations
+                Collections.emptyList(), // costAnomalies
+                Collections.emptyList(), // ebsRecommendations
+                Collections.emptyList(), // lambdaRecommendations
+                null, // reservationAnalysis
+                Collections.emptyList(), // reservationPurchaseRecommendations
+                null, // optimizationSummary
+                Collections.emptyList(), // wastedResources
+                Collections.emptyList(), // serviceQuotas
+                100 // securityScore
+            ))
+            .collect(Collectors.toList());
+        data.setAvailableAccounts(availableAccounts);
+
+        return data;
+    }
+
+    private DashboardData getAwsDashboardData(CloudAccount account) throws ExecutionException, InterruptedException {
+        logger.info("--- LAUNCHING OPTIMIZED ASYNC DATA FETCH FROM AWS for account {} ---", account.getAwsAccountId());
+
+        CompletableFuture<List<DashboardData.ServiceGroupDto>> groupedResourcesFuture = cloudListService.getAllResourcesGrouped(account.getAwsAccountId());
         CompletableFuture<List<DashboardData.RegionStatus>> activeRegionsFuture = cloudListService.getRegionStatusForAccount(account);
         List<DashboardData.RegionStatus> activeRegions = activeRegionsFuture.get();
 
-        CompletableFuture<List<DashboardData.ServiceGroupDto>> groupedResources = groupedResourcesFuture; // Reuse the future
-
-        CompletableFuture<DashboardData.ResourceInventory> inventoryFuture = getResourceInventory(groupedResources);
+        CompletableFuture<DashboardData.ResourceInventory> inventoryFuture = getResourceInventory(groupedResourcesFuture);
         CompletableFuture<DashboardData.CloudWatchStatus> cwStatusFuture = getCloudWatchStatus(account, activeRegions);
         CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = optimizationService.getEc2InstanceRecommendations(account, activeRegions);
         CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = optimizationService.getEbsVolumeRecommendations(account, activeRegions);
@@ -86,14 +152,13 @@ public class DashboardDataService {
         CompletableFuture<DashboardData.CostHistory> costHistoryFuture = finOpsService.getCostHistory(account);
         CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = finOpsService.getBillingSummary(account);
         CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account);
-        
-        CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(
-                wastedResourcesFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture
-        );
-
         CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = finOpsService.getCostAnomalies(account);
         CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = reservationService.getReservationAnalysis(account);
         CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = reservationService.getReservationPurchaseRecommendations(account);
+        
+        CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(
+            wastedResourcesFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture
+        );
 
         CompletableFuture.allOf(
             inventoryFuture, cwStatusFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture,
@@ -102,51 +167,73 @@ public class DashboardDataService {
             reservationInventoryFuture
         ).join();
 
-        logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {}, assembling DTO ---", accountId);
+        logger.info("--- ALL ASYNC DATA FETCHES COMPLETE for account {}, assembling DTO ---", account.getAwsAccountId());
 
         List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.get();
-        List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ec2RecsFuture.get();
-        List<DashboardData.OptimizationRecommendation> ebsRecs = ebsRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : ebsRecsFuture.get();
-        List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.isCompletedExceptionally() ? Collections.emptyList() : lambdaRecsFuture.get();
-        List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.isCompletedExceptionally() ? Collections.emptyList() : anomaliesFuture.get();
-        List<DashboardData.SecurityFinding> securityFindings = securityFindingsFuture.isCompletedExceptionally() ? Collections.emptyList() : securityFindingsFuture.get();
-        
+        List<DashboardData.OptimizationRecommendation> ec2Recs = ec2RecsFuture.get();
+        List<DashboardData.OptimizationRecommendation> ebsRecs = ebsRecsFuture.get();
+        List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.get();
+        List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.get();
+        List<DashboardData.SecurityFinding> securityFindings = securityFindingsFuture.get();
+
         List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
-            .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory))
+            .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory, Collectors.groupingBy(DashboardData.SecurityFinding::getSeverity, Collectors.counting())))
             .entrySet().stream()
             .map(entry -> new DashboardData.SecurityInsight(
-                String.format("%s has %d potential issues", entry.getKey(), entry.getValue().size()),
+                String.format("%s has potential issues", entry.getKey()),
                 entry.getKey(),
-                "SECURITY",
-                entry.getValue().size()
+                entry.getValue().keySet().stream().findFirst().orElse("INFO"),
+                entry.getValue().values().stream().mapToInt(Long::intValue).sum()
             )).collect(Collectors.toList());
-
+            
         DashboardData.OptimizationSummary optimizationSummary = getOptimizationSummary(
                 wastedResources, ec2Recs, ebsRecs, lambdaRecs, anomalies
         );
-        
+
         int securityScore = calculateSecurityScore(securityFindings);
 
         DashboardData data = new DashboardData();
         DashboardData.Account mainAccount = new DashboardData.Account(
-                accountId, account.getAccountName(),
-                activeRegions, inventoryFuture.get(), cwStatusFuture.get(), securityInsights,
-                costHistoryFuture.get(), billingFuture.get(), iamFuture.get(), savingsFuture.get(),
-                ec2Recs, anomalies, ebsRecs, lambdaRecs,
-                reservationFuture.get(), reservationPurchaseFuture.get(),
-                optimizationSummary, wastedResources, Collections.emptyList(), // Service Quotas removed from here
-                securityScore);
+            account.getAwsAccountId(), account.getAccountName(),
+            activeRegions, inventoryFuture.get(), cwStatusFuture.get(), securityInsights,
+            costHistoryFuture.get(), billingFuture.get(), iamFuture.get(), savingsFuture.get(),
+            ec2Recs, anomalies, ebsRecs, lambdaRecs,
+            reservationFuture.get(), reservationPurchaseFuture.get(),
+            optimizationSummary, wastedResources, Collections.emptyList(),
+            securityScore
+        );
 
         data.setSelectedAccount(mainAccount);
 
         List<DashboardData.Account> availableAccounts = cloudAccountRepository.findAll().stream()
-                .map(acc -> new DashboardData.Account(acc.getAwsAccountId(), acc.getAccountName(), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 0))
-                .collect(Collectors.toList());
+            .map(acc -> new DashboardData.Account(
+                "AWS".equals(acc.getProvider()) ? acc.getAwsAccountId() : acc.getGcpProjectId(),
+                acc.getAccountName(),
+                Collections.emptyList(), // regionStatus
+                null, // resourceInventory
+                null, // cloudWatchStatus
+                Collections.emptyList(), // securityInsights
+                null, // costHistory
+                Collections.emptyList(), // billingSummary
+                null, // iamResources
+                null, // savingsSummary
+                Collections.emptyList(), // ec2Recommendations
+                Collections.emptyList(), // costAnomalies
+                Collections.emptyList(), // ebsRecommendations
+                Collections.emptyList(), // lambdaRecommendations
+                null, // reservationAnalysis
+                Collections.emptyList(), // reservationPurchaseRecommendations
+                null, // optimizationSummary
+                Collections.emptyList(), // wastedResources
+                Collections.emptyList(), // serviceQuotas
+                100 // securityScore
+            ))
+            .collect(Collectors.toList());
         data.setAvailableAccounts(availableAccounts);
 
         return data;
     }
-
+    
     private CompletableFuture<DashboardData.ResourceInventory> getResourceInventory(CompletableFuture<List<DashboardData.ServiceGroupDto>> groupedResourcesFuture) {
         return groupedResourcesFuture.thenApply(groupedResources -> {
             DashboardData.ResourceInventory inventory = new DashboardData.ResourceInventory();
@@ -175,12 +262,8 @@ public class DashboardDataService {
     @Async("awsTaskExecutor")
     @Cacheable(value = "cloudwatchStatus", key = "#account.awsAccountId")
     public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
-        // This is a simplified version; a full implementation might need the original fetchAllRegionalResources logic
-        // For now, we'll assume a single region check is sufficient for dashboard purposes or that it's handled elsewhere.
-        // Returning a placeholder.
         return CompletableFuture.completedFuture(new DashboardData.CloudWatchStatus(0, 0, 0));
     }
-
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "iamResources", key = "#account.awsAccountId")
@@ -260,10 +343,10 @@ public class DashboardDataService {
         long mediumWeight = 1;
         long lowWeight = 0;
 
-        long weightedScore = (counts.getOrDefault("Critical", 0L) * criticalWeight) +
-                              (counts.getOrDefault("High", 0L) * highWeight) +
-                              (counts.getOrDefault("Medium", 0L) * mediumWeight) +
-                              (counts.getOrDefault("Low", 0L) * lowWeight);
+        long weightedScore = (counts.getOrDefault("CRITICAL", 0L) * criticalWeight) +
+                              (counts.getOrDefault("HIGH", 0L) * highWeight) +
+                              (counts.getOrDefault("MEDIUM", 0L) * mediumWeight) +
+                              (counts.getOrDefault("LOW", 0L) * lowWeight);
 
         double score = 100.0 / (1 + 0.1 * weightedScore);
         

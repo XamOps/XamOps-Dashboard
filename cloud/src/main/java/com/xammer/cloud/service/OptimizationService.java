@@ -6,7 +6,6 @@ import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
@@ -38,7 +37,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -52,7 +50,7 @@ public class OptimizationService {
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
     private final PricingService pricingService;
-    private final CloudListService cloudListService; // Used to get active regions
+    private final CloudListService cloudListService;
 
     @Autowired
     public OptimizationService(
@@ -104,15 +102,16 @@ public class OptimizationService {
                         double recommendedCost = pricingService.getEc2InstanceMonthlyPrice(opt.instanceType(), regionId);
                         double currentCost = recommendedCost + savings;
 
+                        // CORRECTED CONSTRUCTOR CALL
                         return new DashboardData.OptimizationRecommendation(
-                                "EC2",
-                                r.instanceArn().split("/")[1],
-                                r.currentInstanceType(),
-                                opt.instanceType(),
-                                savings,
-                                r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
-                                currentCost,
-                                recommendedCost
+                                "EC2", // service
+                                r.instanceArn().split("/")[1], // resourceId
+                                r.currentInstanceType(), // currentType
+                                opt.instanceType(), // recommendedType
+                                savings, // estimatedMonthlySavings
+                                r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")), // recommendationReason
+                                currentCost, // currentMonthlyCost
+                                recommendedCost // recommendedMonthlyCost
                         );
                     })
                     .collect(Collectors.toList());
@@ -134,14 +133,17 @@ public class OptimizationService {
                         double recommendedCost = pricingService.getEbsGbMonthPrice(regionId, opt.configuration().volumeType()) * opt.configuration().volumeSize();
                         double currentCost = savings + recommendedCost;
 
-                        return new DashboardData.OptimizationRecommendation("EBS", r.volumeArn().split("/")[1],
-                                r.currentConfiguration().volumeType() + " - " + r.currentConfiguration().volumeSize() + "GiB",
-                                opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB",
-                                savings,
-                                r.finding().toString(),
-                                currentCost,
-                                recommendedCost
-                                );
+                        // CORRECTED CONSTRUCTOR CALL
+                        return new DashboardData.OptimizationRecommendation(
+                                "EBS", // service
+                                r.volumeArn().split("/")[1], // resourceId
+                                r.currentConfiguration().volumeType() + " - " + r.currentConfiguration().volumeSize() + "GiB", // currentType
+                                opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB", // recommendedType
+                                savings, // estimatedMonthlySavings
+                                r.finding().toString(), // recommendationReason
+                                currentCost, // currentMonthlyCost
+                                recommendedCost // recommendedMonthlyCost
+                        );
                     })
                     .collect(Collectors.toList());
         }, "EBS Recommendations");
@@ -159,17 +161,20 @@ public class OptimizationService {
                         .map(r -> {
                             LambdaFunctionMemoryRecommendationOption opt = r.memorySizeRecommendationOptions().get(0);
                             double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
-                            // Lambda pricing is complex, this remains an estimate
-                            double recommendedCost = savings > 0 ? savings * 1.5 : 0; 
+                            double recommendedCost = savings > 0 ? savings * 1.5 : 0; // Simplified cost
                             double currentCost = recommendedCost + savings;
 
-                            return new DashboardData.OptimizationRecommendation("Lambda",
-                                    r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1),
-                                    r.currentMemorySize() + " MB", opt.memorySize() + " MB",
-                                    savings,
-                                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
-                                    currentCost,
-                                    recommendedCost);
+                            // CORRECTED CONSTRUCTOR CALL
+                            return new DashboardData.OptimizationRecommendation(
+                                    "Lambda", // service
+                                    r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1), // resourceId
+                                    r.currentMemorySize() + " MB", // currentType
+                                    opt.memorySize() + " MB", // recommendedType
+                                    savings, // estimatedMonthlySavings
+                                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")), // recommendationReason
+                                    currentCost, // currentMonthlyCost
+                                    recommendedCost // recommendedMonthlyCost
+                            );
                         })
                         .collect(Collectors.toList());
             }, "Lambda Recommendations");
@@ -315,7 +320,6 @@ public class OptimizationService {
             
             eks.listClusters().clusters().forEach(clusterName -> {
                 try {
-                    // Simplified check: Assumes idle if node CPU is consistently low.
                     GetMetricDataRequest request = GetMetricDataRequest.builder()
                             .startTime(Instant.now().minus(14, ChronoUnit.DAYS))
                             .endTime(Instant.now())
@@ -337,7 +341,7 @@ public class OptimizationService {
                     List<MetricDataResult> results = cw.getMetricData(request).metricDataResults();
                     if (!results.isEmpty() && !results.get(0).values().isEmpty()) {
                         double avgCpu = results.get(0).values().stream().mapToDouble(Double::doubleValue).average().orElse(100.0);
-                        if (avgCpu < 5.0) { // If average daily CPU over 14 days is < 5%
+                        if (avgCpu < 5.0) { 
                             findings.add(new DashboardData.WastedResource(clusterName, clusterName, "EKS Cluster", regionId, 73.0, "Idle Cluster (low CPU)"));
                         }
                     }
@@ -374,13 +378,13 @@ public class OptimizationService {
                             .dimensions(software.amazon.awssdk.services.cloudwatch.model.Dimension.builder().name("FunctionName").value(func.functionName()).build())
                             .startTime(Instant.now().minus(30, ChronoUnit.DAYS))
                             .endTime(Instant.now())
-                            .period(2592000) // 30 days in seconds
+                            .period(2592000)
                             .statistics(Statistic.SUM)
                             .build();
                     
                     List<Datapoint> datapoints = cw.getMetricStatistics(request).datapoints();
                     if (datapoints.isEmpty() || datapoints.get(0).sum() < 10) {
-                        findings.add(new DashboardData.WastedResource(func.functionArn(), func.functionName(), "Lambda", regionId, 0.50, "Low Invocations (<10 in 30d)")); // Nominal cost
+                        findings.add(new DashboardData.WastedResource(func.functionArn(), func.functionName(), "Lambda", regionId, 0.50, "Low Invocations (<10 in 30d)"));
                     }
                 } catch (Exception e) {
                     logger.warn("Could not check Lambda function {} for waste in region {}", func.functionName(), regionId, e);
@@ -515,7 +519,6 @@ public class OptimizationService {
                 .collect(Collectors.toList()));
     }
     
-    // --- HELPER METHODS ---
     public String getTagName(List<Tag> tags, String defaultName) {
         if (tags == null || tags.isEmpty()) return defaultName;
         return tags.stream().filter(t -> "Name".equalsIgnoreCase(t.key())).findFirst().map(Tag::value).orElse(defaultName);
