@@ -317,7 +317,10 @@
                             <div x-show="isLoading" class="skeleton h-28 w-full rounded-lg"></div>
                             <div x-show="!isLoading">
                                 <div class="flex justify-between items-start mb-4">
-                                    <h3 class="text-gray-600 text-sm font-medium" x-text="kpi.label"></h3>
+                                    <h3 class="text-gray-600 text-sm font-medium" aria-live="polite">
+                                        <span x-text="kpi.label"></span>
+                                        <span class="sr-only" th:text="'KPI: ' + kpi.label">KPI label</span>
+                                    </h3>
                                     <div class="p-3 rounded-xl" :class="kpi.color.bg">
                                         <i class="fas text-xl" :class="[kpi.icon, kpi.color.text]"></i>
                                     </div>
@@ -369,7 +372,10 @@
                         <template x-for="budget in reportData.budgets" :key="budget.budgetName">
                             <div class="bg-white/70 backdrop-blur-sm border border-gray-200/50 rounded-xl p-6 hover:shadow-lg transition-all">
                                 <div class="flex items-center justify-between mb-4">
-                                    <h4 class="font-bold text-gray-800" x-text="budget.budgetName"></h4>
+                                    <h4 class="font-bold text-gray-800" aria-live="polite">
+                                        <span x-text="budget.budgetName"></span>
+                                        <span class="sr-only" th:text="'Budget Name: ' + budget.budgetName">Budget Name</span>
+                                    </h4>
                                     <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-teal-600 rounded-lg flex items-center justify-center">
                                         <i class="fas fa-chart-line text-white text-sm"></i>
                                     </div>

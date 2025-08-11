@@ -45,40 +45,12 @@ public class AiAdvisorService {
 
         return finOpsService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
             try {
-                Map<String, Object> promptData = new HashMap<>();
-                
-                if (finOpsReport.getCostBreakdown() != null && finOpsReport.getCostBreakdown().getByService() != null) {
-                    promptData.put("topCostServices", finOpsReport.getCostBreakdown().getByService().stream().limit(3).collect(Collectors.toList()));
-                }
-
-                if (finOpsReport.getRightsizingRecommendations() != null) {
-                    promptData.put("topRightsizingSavings", finOpsReport.getRightsizingRecommendations().stream()
-                        .sorted(Comparator.comparing(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).reversed())
-                        .limit(3).collect(Collectors.toList()));
-                }
-
-                if (finOpsReport.getWastedResources() != null) {
-                    promptData.put("topWastedResources", finOpsReport.getWastedResources().stream()
-                        .sorted(Comparator.comparing(DashboardData.WastedResource::getMonthlySavings).reversed())
-                        .limit(3).collect(Collectors.toList()));
-                }
-
-                promptData.put("keyPerformanceIndicators", finOpsReport.getKpis());
-
+                Map<String, Object> promptData = preparePromptData(finOpsReport);
                 String jsonData = objectMapper.writeValueAsString(promptData);
                 String prompt = buildPrompt(jsonData);
 
                 return callGeminiApi(prompt).thenApply(summaryText -> {
-                    List<AiAdvisorSummaryDto.SuggestedAction> actions = new ArrayList<>();
-                    if (finOpsReport.getRightsizingRecommendations() != null && !finOpsReport.getRightsizingRecommendations().isEmpty()) {
-                        actions.add(new AiAdvisorSummaryDto.SuggestedAction("Review Rightsizing", "navigate", "/rightsizing"));
-                    }
-                    if (finOpsReport.getWastedResources() != null && !finOpsReport.getWastedResources().isEmpty()) {
-                         actions.add(new AiAdvisorSummaryDto.SuggestedAction("Analyze Waste", "navigate", "/waste"));
-                    }
-                     if (finOpsReport.getCostAnomalies() != null && !finOpsReport.getCostAnomalies().isEmpty()) {
-                        actions.add(new AiAdvisorSummaryDto.SuggestedAction("Investigate Anomalies", "navigate", "/finops"));
-                    }
+                    List<AiAdvisorSummaryDto.SuggestedAction> actions = buildSuggestedActions(finOpsReport);
                     return new AiAdvisorSummaryDto(summaryText, actions);
                 });
 
@@ -87,6 +59,43 @@ public class AiAdvisorService {
                 return CompletableFuture.failedFuture(e);
             }
         });
+    }
+
+    private Map<String, Object> preparePromptData(FinOpsReportDto finOpsReport) {
+        Map<String, Object> promptData = new HashMap<>();
+
+        if (finOpsReport.getCostBreakdown() != null && finOpsReport.getCostBreakdown().getByService() != null) {
+            promptData.put("topCostServices", finOpsReport.getCostBreakdown().getByService().stream().limit(3).collect(Collectors.toList()));
+        }
+
+        if (finOpsReport.getRightsizingRecommendations() != null) {
+            promptData.put("topRightsizingSavings", finOpsReport.getRightsizingRecommendations().stream()
+                .sorted(Comparator.comparing(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).reversed())
+                .limit(3).collect(Collectors.toList()));
+        }
+
+        if (finOpsReport.getWastedResources() != null) {
+            promptData.put("topWastedResources", finOpsReport.getWastedResources().stream()
+                .sorted(Comparator.comparing(DashboardData.WastedResource::getMonthlySavings).reversed())
+                .limit(3).collect(Collectors.toList()));
+        }
+
+        promptData.put("keyPerformanceIndicators", finOpsReport.getKpis());
+        return promptData;
+    }
+
+    private List<AiAdvisorSummaryDto.SuggestedAction> buildSuggestedActions(FinOpsReportDto finOpsReport) {
+        List<AiAdvisorSummaryDto.SuggestedAction> actions = new ArrayList<>();
+        if (finOpsReport.getRightsizingRecommendations() != null && !finOpsReport.getRightsizingRecommendations().isEmpty()) {
+            actions.add(new AiAdvisorSummaryDto.SuggestedAction("Review Rightsizing", "navigate", "/rightsizing"));
+        }
+        if (finOpsReport.getWastedResources() != null && !finOpsReport.getWastedResources().isEmpty()) {
+            actions.add(new AiAdvisorSummaryDto.SuggestedAction("Analyze Waste", "navigate", "/waste"));
+        }
+        if (finOpsReport.getCostAnomalies() != null && !finOpsReport.getCostAnomalies().isEmpty()) {
+            actions.add(new AiAdvisorSummaryDto.SuggestedAction("Investigate Anomalies", "navigate", "/finops"));
+        }
+        return actions;
     }
 
     @Async("awsTaskExecutor")
@@ -163,12 +172,27 @@ public class AiAdvisorService {
 
     private String parseGeminiResponse(String responseBody) {
         try {
-            Map<String, Object> responseMap = objectMapper.readValue(responseBody, Map.class);
-            List<Map<String, Object>> candidates = (List<Map<String, Object>>) responseMap.get("candidates");
+            Map<String, Object> responseMap = objectMapper.readValue(
+                responseBody,
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+            );
+            Object candidatesObj = responseMap.get("candidates");
+            List<Map<String, Object>> candidates = objectMapper.convertValue(
+                candidatesObj,
+                new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {}
+            );
             if (candidates != null && !candidates.isEmpty()) {
-                Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
+                Object contentObj = candidates.get(0).get("content");
+                Map<String, Object> content = objectMapper.convertValue(
+                    contentObj,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}
+                );
                 if (content != null) {
-                    List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
+                    Object partsObj = content.get("parts");
+                    List<Map<String, Object>> parts = objectMapper.convertValue(
+                        partsObj,
+                        new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {}
+                    );
                     if (parts != null && !parts.isEmpty()) {
                         return (String) parts.get(0).get("text");
                     }

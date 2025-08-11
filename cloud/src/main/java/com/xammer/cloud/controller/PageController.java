@@ -85,4 +85,13 @@ public class PageController {
     public String resourceDetailPage() {
         return "resourcedetail";
     }
+    @GetMapping("/cloud/eks/details")
+    public String eksDetailsPage() {
+        return "eks-details";
+    }
+
+    @GetMapping("/settings")
+    public String settingsPage() {
+        return "settings";
+    }
 }

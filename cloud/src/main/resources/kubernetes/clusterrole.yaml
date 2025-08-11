@@ -1,0 +1,18 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: opencost
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - pods
+  - services
+  - namespaces
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources:
+  - deployments
+  - statefulsets
+  verbs: ["get", "list", "watch"]
+# Add other necessary roles as needed

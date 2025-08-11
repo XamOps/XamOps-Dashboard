@@ -30,9 +30,9 @@ public class CloudK8sController {
         @RequestParam String accountId,
         @RequestParam String clusterName,
         @RequestParam String region) {
-            
         return usageService.getClusterUsage(accountId, clusterName, region)
-            .thenApply(ResponseEntity::ok);
+            .thenApply(ResponseEntity::ok)
+            .exceptionally(ex -> ResponseEntity.status(500).body(new ClusterUsageDto()));
     }
     
     // This endpoint remains to list available EKS clusters
@@ -40,9 +40,7 @@ public class CloudK8sController {
     public CompletableFuture<ResponseEntity<List<K8sClusterInfo>>> getClusters(@RequestParam String accountId) {
         return eksService.getEksClusterInfo(accountId)
                 .thenApply(ResponseEntity::ok)
-                .exceptionally(ex -> {
-                    return ResponseEntity.status(500).body(Collections.emptyList());
-                });
+                .exceptionally(ex -> ResponseEntity.status(500).body(Collections.emptyList()));
     }
 
     // This endpoint remains to show basic node information
@@ -50,8 +48,6 @@ public class CloudK8sController {
     public CompletableFuture<ResponseEntity<List<K8sNodeInfo>>> getNodes(@RequestParam String accountId, @PathVariable String clusterName) {
         return eksService.getK8sNodes(accountId, clusterName)
                 .thenApply(ResponseEntity::ok)
-                .exceptionally(ex -> {
-                    return ResponseEntity.status(500).body(Collections.emptyList());
-                });
+                .exceptionally(ex -> ResponseEntity.status(500).body(Collections.emptyList()));
     }
 }
