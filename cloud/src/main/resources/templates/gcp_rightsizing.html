@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>XamOps - GCP Rightsizing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+        <main class="flex-1 flex flex-col p-6" x-data="gcpRightsizing()">
+            <header class="flex-shrink-0 mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">GCP Rightsizing Recommendations</h1>
+            </header>
+            <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <p class="text-sm font-medium text-gray-500">Total Potential Savings</p>
+                    <p class="text-3xl font-bold text-green-600" x-text="`$${totalSavings.toFixed(2)}`"></p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <p class="text-sm font-medium text-gray-500">Total Recommendations</p>
+                    <p class="text-3xl font-bold text-blue-600" x-text="recommendations.length"></p>
+                </div>
+            </div>
+            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="overflow-x-auto h-full">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Resource Name</th>
+                                <th scope="col" class="px-6 py-3">Current Type</th>
+                                <th scope="col" class="px-6 py-3">Recommended Type</th>
+                                <th scope="col" class="px-6 py-3 text-right">Monthly Savings (USD)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-if="isLoading">
+                                <tr class="bg-white border-b animate-pulse" x-ref="loading" x-init="$el.setAttribute('x-for', 'i in 5')">
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-1/4 ml-auto"></div></td>
+                                </tr>
+                            </template>
+                            <template x-for="rec in recommendations" :key="rec.resourceName">
+                                <tr class="bg-white border-b hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-900" x-text="rec.resourceName"></td>
+                                    <td class="px-6 py-4" x-text="rec.currentMachineType"></td>
+                                    <td class="px-6 py-4 font-semibold text-indigo-600" x-text="rec.recommendedMachineType"></td>
+                                    <td class="px-6 py-4 text-right font-medium text-green-600" x-text="`$${rec.monthlySavings.toFixed(2)}`"></td>
+                                </tr>
+                            </template>
+                            <template x-if="!isLoading && recommendations.length === 0">
+                                <tr>
+                                    <td colspan="4" class="text-center py-12 text-gray-500">No rightsizing recommendations found. Your resources are well-optimized!</td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script>
+        function gcpRightsizing() {
+            return {
+                isLoading: true,
+                accountId: sessionStorage.getItem('selectedAccountId'),
+                recommendations: [],
+                get totalSavings() {
+                    return this.recommendations.reduce((sum, rec) => sum + rec.monthlySavings, 0);
+                },
+                init() {
+                    this.fetchRecommendations();
+                },
+                fetchRecommendations() {
+                    this.isLoading = true;
+                    fetch(`/api/gcp/optimization/rightsizing-recommendations?accountId=${this.accountId}`)
+                        .then(res => res.json())
+                        .then(data => { this.recommendations = data; })
+                        .catch(err => console.error('Failed to load GCP rightsizing data:', err))
+                        .finally(() => this.isLoading = false);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

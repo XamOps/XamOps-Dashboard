@@ -184,6 +184,9 @@
         isLoading: true,
         init() {
             this.fetchAccounts();
+            window.addEventListener('account-changed', () => {
+                this.fetchAccounts();
+            });
         },
         fetchAccounts() {
             this.isLoading = true;
@@ -201,13 +204,14 @@
                     }
                     
                     if (foundAccount) {
-                        this.selectedAccount = foundAccount;
+                        this.selectedAccount = this.mapAccount(foundAccount);
+                        sessionStorage.setItem('selectedAccountProvider', foundAccount.provider);
                     } else if (this.accounts.length > 0) {
-                        this.selectedAccount = this.accounts[0];
-                        sessionStorage.setItem('selectedAccountId', this.selectedAccount.id);
+                        this.selectAccount(this.mapAccount(this.accounts[0]), false);
                     } else {
                         this.selectedAccount = {};
                         sessionStorage.removeItem('selectedAccountId');
+                        sessionStorage.removeItem('selectedAccountProvider');
                     }
                 })
                 .catch(err => {
@@ -219,19 +223,32 @@
                     this.isLoading = false;
                 });
         },
-        selectAccount(account) {
+        mapAccount(account) {
+            return {
+                dbId: account.dbId,
+                id: account.id,
+                name: account.name,
+                provider: account.provider
+            };
+        },
+        selectAccount(account, reload = true) {
             this.selectedAccount = account;
             sessionStorage.setItem('selectedAccountId', account.id);
+            sessionStorage.setItem('selectedAccountProvider', account.provider);
             this.open = false;
-            setTimeout(() => window.location.reload(), 100);
+            
+            if (reload) {
+                window.dispatchEvent(new CustomEvent('account-changed', { detail: account }));
+                const targetUrl = `/?accountId=${account.id}`;
+                setTimeout(() => window.location.href = targetUrl, 100);
+            }
         },
         get filteredAccounts() {
-            if (this.searchTerm === '') {
-                return this.accounts;
-            }
-            return this.accounts.filter(account => {
-                return account.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-                       (account.id && account.id.toLowerCase().includes(this.searchTerm.toLowerCase()));
+            if (this.searchTerm === '') return this.accounts.map(this.mapAccount);
+            return this.accounts.map(this.mapAccount).filter(account => {
+                const term = this.searchTerm.toLowerCase();
+                return account.name.toLowerCase().includes(term) ||
+                       (account.id && account.id.toLowerCase().includes(term));
             });
         }
     }" class="p-4 border-b bg-gradient-to-r from-gray-50 to-white flex-shrink-0">
@@ -241,8 +258,12 @@
                  class="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-300 cursor-pointer transition-all duration-200 hover:shadow-md">
                 <div class="flex items-center min-w-0">
                     <div class="relative flex-shrink-0">
-                        <div class="w-10 h-10 account-avatar rounded-full flex items-center justify-center text-white font-bold text-sm mr-3" 
-                             x-text="selectedAccount.name ? selectedAccount.name.charAt(0).toUpperCase() : 'X'"></div>
+                         <div class="w-10 h-10 account-avatar rounded-full flex items-center justify-center text-white font-bold text-sm mr-3" 
+                              x-show="!selectedAccount.id"
+                              x-text="'X'"></div>
+                         <img :src="selectedAccount.provider === 'GCP' ? '/images/gcp-icon.png' : '/images/aws-icon.png'" 
+                             class="w-10 h-10 rounded-full mr-3 object-cover" 
+                             x-show="selectedAccount.id">
                         <div class="connection-indicator" x-show="selectedAccount.id"></div>
                     </div>
                     <div class="flex-1 min-w-0">
@@ -273,22 +294,18 @@
                         <input type="text" 
                                x-model="searchTerm" 
                                placeholder="Search accounts..." 
-                               class="search-input w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                               class="search-input w-full px-3 py-2 text-sm rounded-lg focus:outline-none">
                     </div>
                 </div>
                 <div class="py-1 max-h-60 overflow-y-auto sidebar-scroll">
                     <template x-for="account in filteredAccounts" :key="account.dbId">
                         <div @click.stop="selectAccount(account)"
                              class="flex items-center px-4 py-3 text-sm hover:bg-indigo-50 cursor-pointer transition-colors duration-200 border-l-4 border-transparent hover:border-indigo-500">
-                            <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xs mr-3 flex-shrink-0"
-                                 x-text="account.name.charAt(0).toUpperCase()"></div>
+                            <img :src="account.provider === 'GCP' ? '/images/gcp-icon.png' : '/images/aws-icon.png'" 
+                                 class="w-8 h-8 rounded-full mr-3 flex-shrink-0 object-cover">
                             <div class="flex-1 min-w-0">
                                 <div class="font-medium text-gray-900 truncate" x-text="account.name"></div>
                                 <div class="text-xs text-gray-500 truncate" x-text="account.id"></div>
-                            </div>
-                            <div class="flex items-center ml-2">
-                                <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                                <span class="text-xs text-green-600 font-medium">Connected</span>
                             </div>
                         </div>
                     </template>
@@ -301,24 +318,33 @@
         </div>
     </div>
 
-    <nav class="flex-1 px-3 py-4 space-y-2 text-sm overflow-y-auto sidebar-scroll">
-        <div class="sidebar-section" th:classappend="${#httpServletRequest.getRequestURI() == '/' ? 'active' : ''}">
-            <a href="/" 
-               th:classappend="${#httpServletRequest.getRequestURI() == '/' ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'}" 
-               class="nav-item menu-item flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200">
+    <nav x-data="{
+            accountId: sessionStorage.getItem('selectedAccountId'),
+            isActive(path) {
+                const currentPath = window.location.pathname;
+                if (path === '/') return currentPath === '/' || currentPath.startsWith('/gcp_');
+                return currentPath.startsWith(path);
+            },
+            getLink(path) {
+                if (!this.accountId) return '#';
+                return `${path}?accountId=${this.accountId}`;
+            }
+        }" class="flex-1 px-3 py-4 space-y-2 text-sm overflow-y-auto sidebar-scroll">
+
+        <div class="sidebar-section" :class="{'active': isActive('/')}">
+            <a :href="getLink('/')"
+               class="nav-item menu-item flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
+               :class="isActive('/') ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'">
                 <i class="fas fa-tachometer-alt menu-icon fa-fw w-5 text-center"></i>
                 <span>Dashboard</span>
-                <div class="ml-auto">
-                    <div class="w-2 h-2 bg-green-400 rounded-full" th:if="${#httpServletRequest.getRequestURI() == '/'}"></div>
-                </div>
             </a>
         </div>
         
-        <div class="sidebar-section" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap') ? 'active' : ''}">
-            <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap')}]] }">
+        <div class="sidebar-section" :class="{'active': isActive('/cloudk8s') || isActive('/cloudlist') || isActive('/cloudmap')}">
+             <div x-data="{ open: isActive('/cloudk8s') || isActive('/cloudlist') || isActive('/cloudmap') }">
                 <button @click="open = !open" 
-                        class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200" 
-                        th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'cloudk8s') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudlist') || #strings.contains(#httpServletRequest.getRequestURI(), 'cloudmap') ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'}">
+                        class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
+                        :class="isActive('/cloudk8s') || isActive('/cloudlist') || isActive('/cloudmap') ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg' : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'">
                     <div class="flex items-center gap-3">
                         <i class="fas fa-cloud menu-icon fa-fw w-5 text-center"></i>
                         <span>Cloudview</span>
@@ -326,82 +352,59 @@
                     <i class="fas fa-chevron-down text-xs submenu-indicator transition-transform duration-200" :class="open && 'rotate-180'"></i>
                 </button>
                 <div x-show="open" x-cloak class="ml-6 mt-2 space-y-1" x-transition>
-                    <a href="/cloudk8s" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/cloudk8s' ? 'text-indigo-600 font-bold bg-indigo-50 border-l-4 border-indigo-500' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'}" 
-                       class="nav-item flex items-center justify-between rounded-lg px-4 py-2 transition-all duration-200">
-                        <span class="font-medium">CloudK8s</span>
-                        <span class="beta-badge text-xs text-white font-semibold px-2 py-1 rounded-full">BETA</span>
-                    </a>
-                    <a href="/cloudlist" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/cloudlist' ? 'text-indigo-600 font-bold bg-indigo-50 border-l-4 border-indigo-500' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Cloudlist</a>
-                    <a href="/cloudmap" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/cloudmap' ? 'text-indigo-600 font-bold bg-indigo-50 border-l-4 border-indigo-500' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Cloudmap</a>
+                    <a :href="getLink('/cloudk8s')" :class="{'text-indigo-600 font-bold bg-indigo-50 border-l-4 border-indigo-500': isActive('/cloudk8s')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-indigo-600 hover:bg-indigo-50">CloudK8s</a>
+                    <a :href="getLink('/cloudlist')" :class="{'text-indigo-600 font-bold bg-indigo-50 border-l-4 border-indigo-500': isActive('/cloudlist')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-indigo-600 hover:bg-indigo-50">Cloudlist</a>
+                    <a :href="getLink('/cloudmap')" :class="{'text-indigo-600 font-bold bg-indigo-50 border-l-4 border-indigo-500': isActive('/cloudmap')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-indigo-600 hover:bg-indigo-50">Cloudmap</a>
                 </div>
             </div>
         </div>
-
-        <div class="sidebar-section" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') || #strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation') ? 'active' : ''}">
-            <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') || #strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation')}]] }">
-                <button @click="open = !open" 
-                        class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200" 
-                        th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'waste') || #strings.contains(#httpServletRequest.getRequestURI(), 'rightsizing') || #strings.contains(#httpServletRequest.getRequestURI(), 'finops') || #strings.contains(#httpServletRequest.getRequestURI(), 'reservation') || #strings.contains(#httpServletRequest.getRequestURI(), 'cost') ? 'bg-gradient-to-r from-green-500 to-teal-600 text-white shadow-lg' : 'text-gray-600 hover:bg-green-50 hover:text-green-600'}">
-                    <div class="flex items-center gap-3">
+        
+        <div class="sidebar-section" :class="{'active': isActive('/finops') || isActive('/cost') || isActive('/waste') || isActive('/rightsizing') || isActive('/reservation')}">
+             <div x-data="{ open: isActive('/finops') || isActive('/cost') || isActive('/waste') || isActive('/rightsizing') || isActive('/reservation') }">
+                <button @click="open = !open"
+                        class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
+                        :class="isActive('/finops') || isActive('/cost') || isActive('/waste') || isActive('/rightsizing') || isActive('/reservation') ? 'bg-gradient-to-r from-green-500 to-teal-600 text-white shadow-lg' : 'text-gray-600 hover:bg-green-50 hover:text-green-600'">
+                     <div class="flex items-center gap-3">
                         <i class="fas fa-cogs menu-icon fa-fw w-5 text-center"></i>
                         <span>Optimization</span>
                     </div>
                     <i class="fas fa-chevron-down text-xs submenu-indicator transition-transform duration-200" :class="open && 'rotate-180'"></i>
                 </button>
                 <div x-show="open" x-cloak class="ml-6 mt-2 space-y-1" x-transition>
-                    <a href="/finops" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/finops' ? 'text-green-600 font-bold bg-green-50 border-l-4 border-green-500' : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">FinOps Report</a>
-                    <a href="/cost" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/cost' ? 'text-green-600 font-bold bg-green-50 border-l-4 border-green-500' : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Costs overview</a>
-                    <a href="/waste" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/waste' ? 'text-green-600 font-bold bg-green-50 border-l-4 border-green-500' : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Waste</a>
-                    <a href="/rightsizing" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/rightsizing' ? 'text-green-600 font-bold bg-green-50 border-l-4 border-green-500' : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Rightsizing</a>
-                    <a href="/reservation" 
-                       th:classappend="${#httpServletRequest.getRequestURI() == '/reservation' ? 'text-green-600 font-bold bg-green-50 border-l-4 border-green-500' : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}" 
-                       class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Reservation</a>
+                    <a :href="getLink('/finops')" :class="{'text-green-600 font-bold bg-green-50 border-l-4 border-green-500': isActive('/finops')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-green-600 hover:bg-green-50">FinOps Report</a>
+                    <a :href="getLink('/cost')" :class="{'text-green-600 font-bold bg-green-50 border-l-4 border-green-500': isActive('/cost')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-green-600 hover:bg-green-50">Costs Overview</a>
+                    <a :href="getLink('/waste')" :class="{'text-green-600 font-bold bg-green-50 border-l-4 border-green-500': isActive('/waste')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-green-600 hover:bg-green-50">Waste</a>
+                    <a :href="getLink('/rightsizing')" :class="{'text-green-600 font-bold bg-green-50 border-l-4 border-green-500': isActive('/rightsizing')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-green-600 hover:bg-green-50">Rightsizing</a>
+                    <a :href="getLink('/reservation')" :class="{'text-green-600 font-bold bg-green-50 border-l-4 border-green-500': isActive('/reservation')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-green-600 hover:bg-green-50">Reservation</a>
                 </div>
             </div>
         </div>
 
-        <div class="sidebar-section" th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'active' : ''}">
-    <div x-data="{ open: [[${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts')}]] }">
-        <button @click="open = !open" 
-                class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200" 
-                th:classappend="${#strings.contains(#httpServletRequest.getRequestURI(), 'security') || #strings.contains(#httpServletRequest.getRequestURI(), 'performance') || #strings.contains(#httpServletRequest.getRequestURI(), 'alerts') ? 'bg-gradient-to-r from-red-500 to-orange-600 text-white shadow-lg' : 'text-gray-600 hover:bg-red-50 hover:text-red-600'}">
-            <div class="flex items-center gap-3">
-                <i class="fas fa-shield-alt menu-icon fa-fw w-5 text-center"></i>
-                <span>Cloudguard</span>
+        <!-- UPDATED CLOUDGUARD SECTION -->
+        <div class="sidebar-section" :class="{'active': isActive('/security') || isActive('/performance') || isActive('/cloudguard/alerts')}">
+            <div x-data="{ open: isActive('/security') || isActive('/performance') || isActive('/cloudguard/alerts') }">
+                <button @click="open = !open"
+                        class="nav-item menu-item w-full flex items-center justify-between gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
+                        :class="isActive('/security') || isActive('/performance') || isActive('/cloudguard/alerts') ? 'bg-gradient-to-r from-red-500 to-orange-600 text-white shadow-lg' : 'text-gray-600 hover:bg-red-50 hover:text-red-600'">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-shield-alt menu-icon fa-fw w-5 text-center"></i>
+                        <span>Cloudguard</span>
+                    </div>
+                    <i class="fas fa-chevron-down text-xs submenu-indicator transition-transform duration-200" :class="open && 'rotate-180'"></i>
+                </button>
+                <div x-show="open" x-cloak class="ml-6 mt-2 space-y-1" x-transition>
+                    <a :href="getLink('/security')" :class="{'text-red-600 font-bold bg-red-50 border-l-4 border-red-500': isActive('/security')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-red-600 hover:bg-red-50">Security</a>
+                    <a :href="getLink('/performance')" :class="{'text-red-600 font-bold bg-red-50 border-l-4 border-red-500': isActive('/performance')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-red-600 hover:bg-red-50">Performance</a>
+                    <!-- ADDED ALERTS LINK BACK -->
+                    <a :href="getLink('/cloudguard/alerts')" :class="{'text-red-600 font-bold bg-red-50 border-l-4 border-red-500': isActive('/cloudguard/alerts')}" class="nav-item block rounded-lg px-4 py-2 font-medium text-gray-500 hover:text-red-600 hover:bg-red-50">Alerts</a>
+                </div>
             </div>
-            <i class="fas fa-chevron-down text-xs submenu-indicator transition-transform duration-200" :class="open && 'rotate-180'"></i>
-        </button>
-        <div x-show="open" x-cloak class="ml-6 mt-2 space-y-1" x-transition>
-            <a href="/security" 
-               th:classappend="${#httpServletRequest.getRequestURI() == '/security' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
-               class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Security</a>
-            <a href="/performance" 
-               th:classappend="${#httpServletRequest.getRequestURI() == '/performance' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
-               class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Performance</a>
-            <a href="/cloudguard/alerts" 
-               th:classappend="${#httpServletRequest.getRequestURI() == '/cloudguard/alerts' ? 'text-red-600 font-bold bg-red-50 border-l-4 border-red-500' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}" 
-               class="nav-item block rounded-lg px-4 py-2 font-medium transition-all duration-200">Alerts</a>
         </div>
-    </div>
-</div>
 
-        <div class="sidebar-section" th:classappend="${#httpServletRequest.getRequestURI() == '/account-manager' ? 'active' : ''}">
-            <a href="/account-manager" 
-               th:classappend="${#httpServletRequest.getRequestURI() == '/account-manager' ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg' : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'}" 
-               class="nav-item menu-item flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200">
+        <div class="sidebar-section" :class="{'active': isActive('/account-manager')}">
+            <a href="/account-manager"
+               class="nav-item menu-item flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
+               :class="isActive('/account-manager') ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg' : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'">
                 <i class="fas fa-users-cog menu-icon fa-fw w-5 text-center"></i>
                 <span>Account Manager</span>
             </a>

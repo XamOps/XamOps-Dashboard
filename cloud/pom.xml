@@ -1,29 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>2.7.5</version>
-        <relativePath />
+        <relativePath/>
     </parent>
     <groupId>com.xammer</groupId>
     <artifactId>cloud-dashboard</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>cloud-dashboard</name>
-    <description>Live AWS Dashboard - Advanced</description>
+    <description>Live AWS and GCP Dashboard</description>
     <properties>
         <java.version>17</java.version>
         <aws.java.sdk.version>2.20.0</aws.java.sdk.version>
         <springdoc.version>1.6.12</springdoc.version>
-        <k8s.client.version>15.0.1</k8s.client.version>
-        <gcp.libraries.bom.version>26.1.3</gcp.libraries.bom.version>
+        <k8s.client.version>6.8.1</k8s.client.version>
+        <gcp.libraries.bom.version>26.28.0</gcp.libraries.bom.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- AWS SDK Bill of Materials (BOM) -->
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
@@ -31,6 +32,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Google Cloud Libraries Bill of Materials (BOM) -->
             <dependency>
                 <groupId>com.google.cloud</groupId>
                 <artifactId>libraries-bom</artifactId>
@@ -42,10 +44,7 @@
     </dependencyManagement>
 
     <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
+        <!-- Spring Boot Starters -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -53,10 +52,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -72,126 +67,50 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
+        <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>runtime</scope>
-        </dependency>
 
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>ec2</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>servicequotas</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>costexplorer</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>iam</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatch</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>ecs</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>eks</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>lambda</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>computeoptimizer</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>pricing</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>rds</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>elasticloadbalancingv2</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>autoscaling</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>elasticache</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>dynamodb</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>ecr</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>route53</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatchlogs</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>sns</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>sqs</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudtrail</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>acm</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>budgets</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>sts</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudformation</artifactId>
-        </dependency>
+        <!-- AWS SDK Dependencies (versions managed by BOM) -->
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ec2</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>servicequotas</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>costexplorer</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>iam</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudwatch</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ecs</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>eks</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>lambda</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>computeoptimizer</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>pricing</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>rds</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>s3</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>elasticloadbalancingv2</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>autoscaling</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>elasticache</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>dynamodb</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ecr</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>route53</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudwatchlogs</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>sns</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>sqs</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudtrail</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>acm</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>budgets</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>sts</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>cloudformation</artifactId></dependency>
 
+        <!-- Google Cloud Dependencies (versions managed by BOM) -->
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
@@ -200,16 +119,60 @@
             <groupId>com.google.auth</groupId>
             <artifactId>google-auth-library-oauth2-http</artifactId>
         </dependency>
-
         <dependency>
-            <groupId>io.kubernetes</groupId>
-            <artifactId>client-java</artifactId>
-            <version>${k8s.client.version}</version>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-compute</artifactId>
         </dependency>
         <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-            <scope>provided</scope>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-billing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-bigquery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-recommender</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-monitoring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-securitycenter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-container</artifactId>
+        </dependency>
+<dependency>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>google-cloud-dns</artifactId>
+</dependency>
+
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-resourcemanager</artifactId>
+        </dependency>
+<dependency>
+  <groupId>com.google.apis</groupId>
+  <artifactId>google-api-services-sqladmin</artifactId>
+  <version>v1beta4-rev20250613-2.0.0</version>
+</dependency>
+
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-sqladmin</artifactId>
+            <version>v1beta4-rev20250613-2.0.0</version>
+        </dependency>
+
+        <!-- Other Libraries -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-client</artifactId>
+            <version>${k8s.client.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.poi</groupId>
@@ -221,13 +184,6 @@
             <artifactId>springdoc-openapi-ui</artifactId>
             <version>${springdoc.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.giffing.bucket4j.spring.boot.starter</groupId>
-            <artifactId>bucket4j-spring-boot-starter</artifactId>
-            <version>0.8.1</version>
-        </dependency>
-
-        <dependency> <groupId>io.fabric8</groupId> <artifactId>kubernetes-client</artifactId> <version>6.8.1</version> </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>XamOps - GCP FinOps Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+        <main class="flex-1 flex flex-col p-6" x-data="gcpFinOpsReport()">
+             <header class="flex-shrink-0 mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">GCP FinOps Report</h1>
+             </header>
+             <div class="flex-shrink-0 mb-6 p-4 bg-white rounded-lg shadow-md flex items-center space-x-4">
+                 <div>
+                    <label for="groupBy" class="text-sm font-medium text-gray-700">Group By</label>
+                    <select x-model="groupBy" @change="fetchReport" id="groupBy" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                        <option value="service">Service</option>
+                        <option value="project">Project</option>
+                        <option value="labels">Labels</option>
+                    </select>
+                </div>
+                 </div>
+            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="overflow-x-auto h-full">
+                    <table class="w-full text-sm text-left text-gray-500">
+                         <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                            <tr>
+                                <th scope="col" class="px-6 py-3" x-text="groupBy.charAt(0).toUpperCase() + groupBy.slice(1)"></th>
+                                <th scope="col" class="px-6 py-3 text-right">Cost (USD)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                             <template x-if="isLoading">
+                                <tr class="bg-white border-b animate-pulse" x-ref="loading" repeat="10">
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-1/4 ml-auto"></div></td>
+                                </tr>
+                            </template>
+                             <template x-for="item in reportData" :key="item.name">
+                                <tr class="bg-white border-b hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-900" x-text="item.name"></td>
+                                    <td class="px-6 py-4 text-right" x-text="`$${item.amount.toFixed(2)}`"></td>
+                                </tr>
+                            </template>
+                             <template x-if="!isLoading && reportData.length === 0">
+                                <tr>
+                                    <td colspan="2" class="text-center py-12 text-gray-500">No data available for the selected period.</td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script>
+        function gcpFinOpsReport() {
+            return {
+                isLoading: true,
+                accountId: sessionStorage.getItem('selectedAccountId'),
+                reportData: [],
+                groupBy: 'service',
+                init() {
+                    if (!this.accountId) {
+                        this.isLoading = false;
+                        return;
+                    }
+                    this.fetchReport();
+                },
+                fetchReport() {
+                    this.isLoading = true;
+                    const url = `/api/gcp/finops/report?accountId=${this.accountId}&groupBy=${this.groupBy}`;
+                    fetch(url)
+                        .then(res => res.json())
+                        .then(data => {
+                            this.reportData = data;
+                        })
+                        .catch(err => console.error('Failed to load GCP FinOps report:', err))
+                        .finally(() => this.isLoading = false);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

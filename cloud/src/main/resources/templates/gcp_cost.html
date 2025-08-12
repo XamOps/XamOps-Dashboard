@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>XamOps - GCP Costs Overview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="flex">
+        <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20">
+            <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+        </aside>
+        <div class="ml-64 flex-1">
+            <main class="flex-1 p-6" x-data="gcpCostOverview()">
+                 <header class="h-20 flex items-center justify-between px-6 -mx-6 -mt-6 mb-6 border-b sticky top-0 z-10 bg-white/50 backdrop-blur-sm">
+                    <h1 class="text-xl font-bold text-gray-800">GCP Costs Overview</h1>
+                    <div class="text-sm text-gray-500">Project ID: <span x-text="accountId" class="font-semibold text-gray-700"></span></div>
+                </header>
+                <div class="space-y-6">
+                     <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-4">6-Month Cost History</h2>
+                        <div x-show="isLoading" class="animate-pulse h-64 bg-gray-200 rounded-md"></div>
+                        <div x-show="!isLoading">
+                             <canvas id="historicalCostChart" class="w-full h-64"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-4">Current Month Costs by Service</h2>
+                        <div x-show="isLoading" class="animate-pulse h-64 bg-gray-200 rounded-md"></div>
+                         <div x-show="!isLoading">
+                            <canvas id="costByServiceChart" class="w-full h-64"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    <script>
+        function gcpCostOverview() {
+            return {
+                isLoading: true,
+                accountId: sessionStorage.getItem('selectedAccountId'),
+                init() {
+                    if (!this.accountId) {
+                        this.isLoading = false;
+                        return;
+                    }
+                    Promise.all([
+                        this.fetchHistoricalCosts(),
+                        this.fetchCostsByService()
+                    ]).finally(() => this.isLoading = false);
+                },
+                fetchHistoricalCosts() {
+                    return fetch(`/api/gcp/finops/historical-costs?accountId=${this.accountId}`)
+                        .then(res => res.json())
+                        .then(data => this.renderHistoricalChart(data));
+                },
+                fetchCostsByService() {
+                    return fetch(`/api/gcp/finops/costs-by-service?accountId=${this.accountId}`)
+                        .then(res => res.json())
+                        .then(data => this.renderServiceChart(data));
+                },
+                renderHistoricalChart(data) {
+                    const ctx = document.getElementById('historicalCostChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.map(d => d.name),
+                            datasets: [{
+                                label: 'Monthly Cost',
+                                data: data.map(d => d.amount),
+                                backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false }
+                    });
+                },
+                renderServiceChart(data) {
+                    const ctx = document.getElementById('costByServiceChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.map(d => d.name),
+                            datasets: [{
+                                data: data.map(d => d.amount),
+                                backgroundColor: ['#4f46e5', '#10b981', '#ef4444', '#f97316', '#3b82f6', '#8b5cf6'],
+                            }]
+                        },
+                         options: { responsive: true, maintainAspectRatio: false }
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>XamOps - GCP Cloudmap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <style>
+        #network-map {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+        <main class="flex-1 flex flex-col p-6" x-data="gcpCloudmap()">
+            <header class="flex-shrink-0 mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">GCP Network Cloudmap</h1>
+            </header>
+            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden" x-ref="mapContainer">
+                <div x-show="isLoading" class="flex items-center justify-center h-full">
+                    <div class="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                </div>
+                 <div id="network-map" x-show="!isLoading"></div>
+            </div>
+        </main>
+    </div>
+    <script>
+        function gcpCloudmap() {
+            return {
+                isLoading: true,
+                accountId: sessionStorage.getItem('selectedAccountId'),
+                network: null,
+                init() {
+                    this.fetchTopology();
+                },
+                fetchTopology() {
+                    this.isLoading = true;
+                    fetch(`/api/gcp/cloudmap/topology?accountId=${this.accountId}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            this.renderMap(data);
+                        })
+                        .catch(err => console.error('Failed to load GCP topology:', err))
+                        .finally(() => this.isLoading = false);
+                },
+                renderMap(data) {
+                    const nodes = [];
+                    const edges = [];
+
+                    // Add VPC nodes
+                    data.networks.forEach(vpc => {
+                        nodes.push({ id: vpc.selfLink, label: vpc.name, group: 'vpc', shape: 'box', color: '#6366f1'});
+                    });
+
+                    // Add Subnet and Instance nodes and connect them
+                    data.subnetworks.forEach(subnet => {
+                        nodes.push({ id: subnet.selfLink, label: subnet.name, group: 'subnet', shape: 'box', color: '#3b82f6' });
+                        edges.push({ from: subnet.network, to: subnet.selfLink });
+
+                        // Find instances in this subnet
+                        data.instances.forEach(instance => {
+                           instance.networkInterfacesList.forEach(nic => {
+                               if (nic.subnetwork === subnet.selfLink) {
+                                   nodes.push({ id: instance.selfLink, label: instance.name, group: 'instance', shape: 'image', image: '/images/gcp-compute-engine.png' });
+                                   edges.push({ from: subnet.selfLink, to: instance.selfLink });
+                               }
+                           });
+                        });
+                    });
+
+                    const container = document.getElementById('network-map');
+                    const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+                    const options = {
+                        layout: { hierarchical: false },
+                        edges: { color: '#d1d5db' },
+                        physics: { stabilization: true }
+                    };
+                    this.network = new vis.Network(container, graphData, options);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
