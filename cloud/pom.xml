@@ -114,9 +114,9 @@
             <artifactId>iam</artifactId>
         </dependency>
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>cloudwatch</artifactId>
-        </dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>cloudwatch</artifactId>
+            </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>ecs</artifactId>
@@ -201,11 +201,10 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>cloudformation</artifactId>
         </dependency>
-        <!-- AWS KMS specific version override - Kept from old POM -->
+        <!-- AWS KMS dependency - now managed by BOM -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>kms</artifactId>
-            <version>2.20.160</version>
         </dependency>
 
         <!-- Google Cloud Dependencies (versions managed by BOM, expanded from new POM) -->
@@ -259,7 +258,6 @@
             <artifactId>google-api-services-sqladmin</artifactId>
             <version>v1beta4-rev20250613-2.0.0</version>
         </dependency>
-        <!-- Duplicate entry for sqladmin removed, keeping one -->
 
         <!-- Other Libraries -->
         <dependency>
