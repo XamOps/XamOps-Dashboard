@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencost
+  namespace: opencost
+  labels:
+    app: opencost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencost
+  template:
+    metadata:
+      labels:
+        app: opencost
+    spec:
+      serviceAccountName: opencost
+      containers:
+      - name: opencost
+        image: gcr.io/kubecost1/cost-model:latest
+        ports:
+        - name: http
+          containerPort: 9090
+        env:
+        - name: CLOUD_PROVIDER
+          value: "aws" # Crucial for AWS integration
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"

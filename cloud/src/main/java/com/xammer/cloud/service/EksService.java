@@ -1,6 +1,7 @@
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.CloudAccount;
+import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.k8s.*;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import io.fabric8.kubernetes.api.model.Container;
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
@@ -38,12 +40,14 @@ public class EksService {
 
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
+    private final CloudListService cloudListService; // ADDED
     private final String configuredRegion;
 
     @Autowired
-    public EksService(CloudAccountRepository cloudAccountRepository, AwsClientProvider awsClientProvider) {
+    public EksService(CloudAccountRepository cloudAccountRepository, AwsClientProvider awsClientProvider, @Lazy CloudListService cloudListService) { // MODIFIED
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
+        this.cloudListService = cloudListService; // ADDED
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
     }
 
@@ -61,29 +65,43 @@ public class EksService {
     @Cacheable(value = "eksClusters", key = "#accountId")
     public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId) {
         CloudAccount account = getAccount(accountId);
-        EksClient eks = awsClientProvider.getEksClient(account, configuredRegion);
-        logger.info("Fetching EKS cluster list for account {}...", account.getAwsAccountId());
+        logger.info("Fetching EKS cluster list across all active regions for account {}...", account.getAwsAccountId());
 
-        try {
-            List<String> clusterNames = eks.listClusters().clusters();
-            List<K8sClusterInfo> clusters = clusterNames.stream().map(name -> {
-                try {
-                    Cluster cluster = eks.describeCluster(b -> b.name(name)).cluster();
-                    String region = cluster.arn().split(":")[3];
-                    boolean isConnected = checkContainerInsightsStatus(account, name, region);
-                    return new K8sClusterInfo(name, cluster.statusAsString(), cluster.version(), region, isConnected);
-                } catch (Exception e) {
-                    logger.error("Failed to describe EKS cluster {}", name, e);
-                    return null;
-                }
-            }).filter(Objects::nonNull).collect(Collectors.toList());
+        // CORRECTED LOGIC: First, find all active regions for the account
+        return cloudListService.getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+            
+            // Create a parallel task for each active region
+            List<CompletableFuture<List<K8sClusterInfo>>> futures = activeRegions.stream()
+                .map(region -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        EksClient eks = awsClientProvider.getEksClient(account, region.getRegionId());
+                        List<String> clusterNames = eks.listClusters().clusters();
+                        
+                        return clusterNames.stream().map(name -> {
+                            try {
+                                Cluster cluster = eks.describeCluster(b -> b.name(name)).cluster();
+                                boolean isConnected = checkContainerInsightsStatus(account, name, region.getRegionId());
+                                return new K8sClusterInfo(name, cluster.statusAsString(), cluster.version(), region.getRegionId(), isConnected);
+                            } catch (Exception e) {
+                                logger.error("Failed to describe EKS cluster {} in region {}", name, region.getRegionId(), e);
+                                return null;
+                            }
+                        }).filter(Objects::nonNull).collect(Collectors.toList());
 
-            return CompletableFuture.completedFuture(clusters);
+                    } catch (Exception e) {
+                        logger.error("Could not list EKS clusters in region {} for account {}", region.getRegionId(), account.getAwsAccountId(), e);
+                        return Collections.<K8sClusterInfo>emptyList();
+                    }
+                }))
+                .collect(Collectors.toList());
 
-        } catch (Exception e) {
-            logger.error("Could not list EKS clusters for account {}", account.getAwsAccountId(), e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
-        }
+            // Combine the results from all regional scans
+            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(v -> futures.stream()
+                    .map(CompletableFuture::join)
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList()));
+        });
     }
 
     @Async

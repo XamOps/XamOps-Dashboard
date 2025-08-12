@@ -28,7 +28,6 @@
         
         [x-cloak] { display: none !important; }
         
-        /* Enhanced table styling matching the screenshot exactly */
         .table-enhanced {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
@@ -44,12 +43,11 @@
             border-collapse: collapse;
         }
         
-        /* Exact column widths matching screenshot */
-        .table-enhanced th:nth-child(1) { width: 12%; } /* Category */
-        .table-enhanced th:nth-child(2) { width: 42%; } /* Description */
-        .table-enhanced th:nth-child(3) { width: 20%; } /* Resource */
-        .table-enhanced th:nth-child(4) { width: 16%; } /* Compliance */
-        .table-enhanced th:nth-child(5) { width: 10%; } /* Action */
+        .table-enhanced th:nth-child(1) { width: 12%; }
+        .table-enhanced th:nth-child(2) { width: 42%; }
+        .table-enhanced th:nth-child(3) { width: 20%; }
+        .table-enhanced th:nth-child(4) { width: 16%; }
+        .table-enhanced th:nth-child(5) { width: 10%; }
         
         .table-enhanced thead {
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
@@ -74,7 +72,7 @@
         
         .table-enhanced td {
             padding: 14px 12px;
-            vertical-align: top;
+            vertical-align: middle; /* This is the fix */
             border-right: 1px solid #e5e7eb;
             border-bottom: 1px solid #f3f4f6;
         }
@@ -92,42 +90,12 @@
             background: rgba(102, 126, 234, 0.05);
         }
         
-        /* Category column styling */
-        .category-display {
-            font-weight: 600;
-            font-size: 14px;
-            color: #1f2937;
-            text-align: left;
-        }
+        .category-display { font-weight: 600; font-size: 14px; color: #1f2937; text-align: left; }
+        .description-text { font-size: 13px; line-height: 1.5; color: #374151; text-align: left; }
+        .resource-info { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
+        .resource-id { font-size: 12px; color: #1f2937; font-weight: 500; margin-bottom: 4px; word-break: break-all; }
+        .resource-region { font-size: 11px; color: #6b7280; font-weight: 400; }
         
-        /* Description column styling */
-        .description-text {
-            font-size: 13px;
-            line-height: 1.5;
-            color: #374151;
-            text-align: left;
-        }
-        
-        /* Resource column styling */
-        .resource-info {
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        }
-        
-        .resource-id {
-            font-size: 12px;
-            color: #1f2937;
-            font-weight: 500;
-            margin-bottom: 4px;
-            word-break: break-all;
-        }
-        
-        .resource-region {
-            font-size: 11px;
-            color: #6b7280;
-            font-weight: 400;
-        }
-        
-        /* Compliance badge styling */
         .compliance-badge {
             display: inline-block;
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.15) 100%);
@@ -140,12 +108,16 @@
             text-align: center;
             white-space: nowrap;
         }
+
+        .soc2-badge {
+             background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.15) 100%);
+             border: 1px solid rgba(16, 185, 129, 0.25);
+             color: #047857;
+        }
         
-        /* Action button styling */
         .fix-now-btn {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             color: white;
-            border: none;
             padding: 8px 16px;
             border-radius: 6px;
             font-size: 11px;
@@ -153,7 +125,6 @@
             cursor: pointer;
             transition: all 0.2s ease;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
         
         .fix-now-btn:hover {
@@ -161,13 +132,11 @@
             box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
         }
         
-        /* Other existing styles remain the same */
         .glass-card {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         .security-card {
@@ -197,104 +166,21 @@
             border-bottom: 1px solid rgba(229, 231, 235, 0.8);
         }
         
-        .btn-primary {
-            background: var(--primary-gradient);
-            border: none;
-            color: white;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .btn-success {
-            background: var(--success-gradient);
-            border: none;
-            color: white;
-            transition: all 0.3s ease;
-        }
-        
-        .severity-section {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            transition: all 0.3s ease;
-        }
-        
-        .empty-state {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 2px dashed rgba(16, 185, 129, 0.3);
-            transition: all 0.3s ease;
-        }
-        
-        .modal-overlay {
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
-        }
-        
-        .modal-content {
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .gradient-text {
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .severity-badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .pulse-dot {
-            animation: pulse-dot 2s infinite;
-        }
-        
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading-spinner {
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .remediation-steps {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.1) 100%);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-        }
+        .btn-primary { background: var(--primary-gradient); border: none; color: white; }
+        .btn-success { background: var(--success-gradient); border: none; color: white; }
+        .severity-section { background: var(--glass-bg); border: 1px solid var(--glass-border); }
+        .empty-state { background: var(--glass-bg); border: 2px dashed rgba(16, 185, 129, 0.3); }
+        .modal-overlay { background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
+        .modal-content { background: var(--glass-bg); }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .gradient-text { background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .severity-badge { display: inline-flex; align-items: center; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .pulse-dot { animation: pulse-dot 2s infinite; }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .loading-spinner { border: 3px solid #f3f4f6; border-top: 3px solid #667eea; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .remediation-steps { background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.1) 100%); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 20px; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -418,7 +304,7 @@
                                         <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="getSeverityIconBg(severity)">
                                             <i class="fas text-white" :class="getSeverityIcon(severity)"></i>
                                         </div>
-                                        <h3 class="font-bold text-xl" x-text="`${severity} Severity Findings`"></h3>
+                                        <h3 class="font-bold text-xl" x-text="`${severity} Severity Findings`">Severity Findings</h3>
                                     </div>
                                     <div class="flex items-center space-x-4">
                                         <span class="severity-badge" :class="getSeverityPillColor(severity)" x-text="getFindingsBySeverity(severity).length"></span>
@@ -455,7 +341,7 @@
                                                                 </div>
                                                             </td>
                                                             <td>
-                                                                <span class="compliance-badge" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
+                                                                <span class="compliance-badge" :class="finding.complianceFramework === 'SOC2' ? 'soc2-badge' : ''" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
                                                             </td>
                                                             <td>
                                                                 <button @click="openRemediationModal(finding)" class="fix-now-btn">

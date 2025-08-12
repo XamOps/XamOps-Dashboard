@@ -31,17 +31,20 @@ public class CloudGuardService {
     private final AwsClientProvider awsClientProvider;
     private final CloudListService cloudListService;
     private final Set<String> keyQuotas;
+    private final FinOpsService finOpsService;
 
     @Autowired
     public CloudGuardService(
             CloudAccountRepository cloudAccountRepository,
             AwsClientProvider awsClientProvider,
             @Lazy CloudListService cloudListService,
-            @Value("${quotas.key-codes}") Set<String> keyQuotas) {
+            @Value("${quotas.key-codes}") Set<String> keyQuotas,
+            FinOpsService finOpsService) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.cloudListService = cloudListService;
         this.keyQuotas = keyQuotas;
+        this.finOpsService = finOpsService;
     }
 
     private CloudAccount getAccount(String accountId) {
@@ -194,4 +197,9 @@ public class CloudGuardService {
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .thenApply(v -> futures.stream().mapToInt(CompletableFuture::join).sum());
     }
+    @Async("awsTaskExecutor")
+@Cacheable(value = "costAnomalies", key = "#account.awsAccountId")
+public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies(CloudAccount account) {
+    return finOpsService.getCostAnomalies(account);
+}
 }

@@ -33,6 +33,14 @@
         .status-badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
         .sortable-header { cursor: pointer; }
         .sortable-header:hover { color: #326ce5; }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -62,14 +70,19 @@
 
             <div class="flex-1 p-4 md:p-8 space-y-8">
                 <div x-show="view === 'clusters'" class="glass-card rounded-2xl p-6 md:p-8 fade-in">
-                    <h2 class="text-xl font-bold text-gray-800 mb-6">K8s Clusters</h2>
+                    <h2 class="text-xl font-bold text-gray-800 mb-6">EKS Clusters</h2>
                     <div x-show="isLoading.clusters" class="text-center py-12"><div class="loading-spinner mx-auto"></div></div>
 
+                    <div x-show="!isLoading.clusters && clusters.length === 0" x-cloak class="text-center py-12">
+                        <p class="text-gray-600">No EKS clusters found for this account.</p>
+                    </div>
+                    
                     <table x-show="!isLoading.clusters && clusters.length > 0" x-cloak class="w-full text-sm table-enhanced rounded-lg overflow-hidden">
                         <thead class="text-xs text-gray-700 uppercase">
                             <tr>
-                                <th class="px-6 py-4 text-left font-bold">Name / ID</th>
-                                <th class="px-6 py-4 text-left font-bold hidden md:table-cell">Account / Region</th>
+                                <th class="px-6 py-4 text-left font-bold">Name</th>
+                                <th class="px-6 py-4 text-left font-bold hidden md:table-cell">Region</th>
+                                <th class="px-6 py-4 text-left font-bold hidden md:table-cell">Version</th>
                                 <th class="px-6 py-4 text-left font-bold">Connection</th>
                                 <th class="px-6 py-4 text-center font-bold">Action</th>
                             </tr>
@@ -78,9 +91,18 @@
                             <template x-for="cluster in clusters" :key="cluster.name">
                                 <tr>
                                     <td class="px-6 py-4 font-semibold text-gray-800" x-text="cluster.name"></td>
-                                    <td class="px-6 py-4 hidden md:table-cell"><span x-text="selectedAccountId"></span> / <span x-text="cluster.region"></span></td>
+                                    <td class="px-6 py-4 hidden md:table-cell" x-text="cluster.region"></td>
+                                    <td class="px-6 py-4 hidden md:table-cell" x-text="cluster.version"></td>
                                     <td class="px-6 py-4">
-                                        <span class="status-badge" :class="cluster.connected ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'" x-text="cluster.connected ? 'Connected' : 'Agent Not Detected'"></span>
+                                        <template x-if="cluster.connected">
+                                            <span class="status-badge bg-green-100 text-green-800">Connected</span>
+                                        </template>
+                                        <template x-if="!cluster.connected">
+                                             <button @click="enableMonitoring(cluster)" :disabled="cluster.isEnabling" class="px-3 py-1 text-xs font-semibold rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 disabled:opacity-50">
+                                                <span x-show="!cluster.isEnabling"><i class="fas fa-magic mr-1"></i> Enable Monitoring</span>
+                                                <span x-show="cluster.isEnabling"><i class="fas fa-spinner fa-spin mr-1"></i> Enabling...</span>
+                                            </button>
+                                        </template>
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <button @click="navigateToDetails(cluster)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700">
@@ -94,67 +116,81 @@
                 </div>
 
                 <div x-show="view === 'details' && selectedCluster" x-cloak class="fade-in space-y-8">
-                    <div class="glass-card rounded-2xl p-6 md:p-8 mb-6" x-show="clusterUsage">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="glass-card p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold text-gray-600">Status</h3>
+                            <p class="text-2xl font-bold text-green-500" x-text="selectedCluster.status"></p>
+                        </div>
+                        <div class="glass-card p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold text-gray-600">Kubernetes Version</h3>
+                            <p class="text-2xl font-bold text-gray-800" x-text="selectedCluster.version"></p>
+                        </div>
+                        <div class="glass-card p-6 rounded-lg shadow-md">
+                            <h3 class="font-semibold text-gray-600">Region</h3>
+                            <p class="text-2xl font-bold text-gray-800" x-text="selectedCluster.region"></p>
+                        </div>
+                    </div>
+
+                    <div class="glass-card p-6 rounded-lg shadow-md">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-xl text-gray-800">Automated Cost Monitoring</h3>
+                                <p class="text-sm text-gray-600 mt-1">Install OpenCost to get detailed, real-time cost breakdowns for this cluster.</p>
+                            </div>
+                            <template x-if="openCostStatus !== 'installed'">
+                                <button @click="installOpenCost" :disabled="openCostStatus === 'installing'"
+                                        class="btn-primary px-5 py-3 rounded-lg font-semibold text-white transition duration-200 ease-in-out flex items-center"
+                                        :class="{ 'opacity-50 cursor-not-allowed': openCostStatus === 'installing' }">
+                                    <span x-show="openCostStatus === 'not_installed'">
+                                        <i class="fas fa-download mr-2"></i>Install OpenCost
+                                    </span>
+                                    <span x-show="openCostStatus === 'installing'">
+                                        <i class="fas fa-spinner fa-spin mr-2"></i>Installing...
+                                    </span>
+                                </button>
+                            </template>
+                            <template x-if="openCostStatus === 'installed'">
+                                <div class="flex items-center space-x-3 text-green-600 font-semibold p-3 bg-green-50 rounded-lg">
+                                    <i class="fas fa-check-circle text-2xl"></i>
+                                    <span>OpenCost Installed Successfully</span>
+                                </div>
+                            </template>
+                        </div>
+                         <div x-show="installationMessage" x-text="installationMessage" class="mt-4 text-sm font-medium"
+                            :class="installationSuccess ? 'text-green-600' : 'text-red-600'">
+                        </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-6 md:p-8" x-show="clusterUsage">
                         <h3 class="text-lg font-semibold mb-2">Cluster Usage Summary</h3>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <p class="text-sm font-medium text-gray-600">CPU Usage</p>
-                                <p class="text-xl font-bold" x-text="clusterUsage.cpuUsage.toFixed(2) + ' %'"></p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-600">Memory Usage</p>
-                                <p class="text-xl font-bold" x-text="clusterUsage.memoryUsage.toFixed(2) + ' %'"></p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-600">Nodes</p>
-                                <p class="text-xl font-bold" x-text="clusterUsage.nodeCount"></p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-600">Pods</p>
-                                <p class="text-xl font-bold" x-text="clusterUsage.podCount"></p>
-                            </div>
+                             <div><p class="text-sm font-medium text-gray-600">CPU Usage</p><p class="text-xl font-bold" x-text="(clusterUsage.cpuUsage || 0).toFixed(2) + ' %'"></p></div>
+                             <div><p class="text-sm font-medium text-gray-600">Memory Usage</p><p class="text-xl font-bold" x-text="(clusterUsage.memoryUsage || 0).toFixed(2) + ' %'"></p></div>
+                             <div><p class="text-sm font-medium text-gray-600">Nodes</p><p class="text-xl font-bold" x-text="clusterUsage.nodeCount || 0"></p></div>
+                             <div><p class="text-sm font-medium text-gray-600">Pods</p><p class="text-xl font-bold" x-text="clusterUsage.podCount || 0"></p></div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
-                            <div class="glass-card p-6">
-                                <h4 class="text-lg font-semibold text-gray-700 mb-4 text-center">CPU Usage</h4>
-                                <div class="h-64">
-                                    <canvas id="cpuUsageChart"></canvas>
-                                </div>
-                            </div>
-                            <div class="glass-card p-6">
-                                <h4 class="text-lg font-semibold text-gray-700 mb-4 text-center">Memory Usage</h4>
-                                <div class="h-64">
-                                    <canvas id="memoryUsageChart"></canvas>
-                                </div>
-                            </div>
+                            <div class="glass-card p-6"><h4 class="text-lg font-semibold text-gray-700 mb-4 text-center">CPU Usage</h4><div class="h-64"><canvas id="cpuUsageChart"></canvas></div></div>
+                            <div class="glass-card p-6"><h4 class="text-lg font-semibold text-gray-700 mb-4 text-center">Memory Usage</h4><div class="h-64"><canvas id="memoryUsageChart"></canvas></div></div>
                         </div>
                     </div>
-
-                    <div class="glass-card rounded-2xl p-6 md:p-8">
+                    
+                    <div class="w-full">
+                        <div class="mb-4 border-b border-gray-200">
+                            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center">
+                                <li class="mr-2"><button @click="activeTab = 'nodes'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'nodes'}" class="inline-block p-4 border-b-2 rounded-t-lg">Nodes</button></li>
+                                <li class="mr-2"><button @click="activeTab = 'pods'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'pods'}" class="inline-block p-4 border-b-2 rounded-t-lg">Pods</button></li>
+                                <li class="mr-2"><button @click="activeTab = 'deployments'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'deployments'}" class="inline-block p-4 border-b-2 rounded-t-lg">Deployments</button></li>
+                            </ul>
                         </div>
-                </div>
-            </div>
-
-            <div x-show="isDetailsModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isDetailsModalOpen = false">
-                <div class="modal-content rounded-2xl p-8 w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col" @click.stop>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-4" x-text="`${selectedResource.type} Details`"></h3>
-                    <div class="flex-1 overflow-y-auto">
-                        <pre class="code-block" x-text="selectedResource.details"></pre>
-                    </div>
-                    <div class="flex justify-end mt-4">
-                        <button @click="isDetailsModalOpen = false" class="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50">Close</button>
-                    </div>
-                </div>
-            </div>
-            
-            <div x-show="isLogsModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isLogsModalOpen = false">
-                <div class="modal-content rounded-2xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col" @click.stop>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-4" x-text="`Logs for ${selectedPod.name}`"></h3>
-                    <div class="flex-1 overflow-y-auto">
-                        <pre class="code-block" x-text="podLogs"></pre>
-                    </div>
-                    <div class="flex justify-end mt-4">
-                        <button @click="isLogsModalOpen = false" class="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50">Close</button>
+                        <div>
+                            <div x-show="isLoading.details" class="p-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-3xl"></i><p>Loading data...</p></div>
+                            <div x-show="!isLoading.details">
+                                 <div x-show="activeTab === 'nodes'"><p class="text-gray-600">Node information will be displayed here.</p></div>
+                                 <div x-show="activeTab === 'pods'"><p class="text-gray-600">Pod information will be displayed here.</p></div>
+                                 <div x-show="activeTab === 'deployments'"><p class="text-gray-600">Deployment information will be displayed here.</p></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -165,22 +201,18 @@
 <script>
 function cloudK8s() {
     return {
-        // --- STATE MANAGEMENT ---
-        view: 'clusters', // 'clusters' or 'details'
-        isLoading: { clusters: true, usage: true },
+        view: 'clusters',
+        isLoading: { clusters: true, details: true, usage: true },
         clusters: [],
         selectedCluster: null,
+        clusterUsage: null,
         activeTab: 'nodes',
         selectedAccountId: null,
         pollingInterval: null,
-        isDetailsModalOpen: false, isLogsModalOpen: false,
-        selectedResource: { type: '', details: '' },
-        selectedPod: { name: '' }, podLogs: '',
-        searchTerm: '',
-        sortColumn: 'name', sortDirection: 'asc',
-        clusterUsage: null,
+        openCostStatus: 'not_installed',
+        installationMessage: '',
+        installationSuccess: false,
 
-        // --- INITIALIZATION & NAVIGATION ---
         init() {
             this.selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!this.selectedAccountId) { 
@@ -188,40 +220,50 @@ function cloudK8s() {
             }
             this.fetchClusters();
         },
-        cleanup() { if (this.pollingInterval) clearInterval(this.pollingInterval); },
+        cleanup() { 
+            if (this.pollingInterval) clearInterval(this.pollingInterval); 
+        },
         navigateToClusters() {
             this.view = 'clusters';
             this.selectedCluster = null;
             this.cleanup();
         },
         async navigateToDetails(cluster) {
-            if (!cluster.connected) {
-                alert('Container Insights agent is not detected for this cluster. Please deploy the agent to see performance data.');
-                return;
-            }
             this.selectedCluster = cluster;
             this.view = 'details';
-            await this.fetchClusterUsage(); // Wait for data
-            this.renderUsageCharts(); // Then render charts
-
-            // Optional: Start polling for live data
-            this.pollingInterval = setInterval(() => {
-                this.fetchClusterUsage();
-            }, 30000);
+            
+            if (!cluster.connected) {
+                console.warn('Container Insights not detected. Usage data will not be available.');
+                this.isLoading.usage = false;
+                this.clusterUsage = null;
+            } else {
+                await this.fetchClusterUsage();
+                this.renderUsageCharts();
+                this.pollingInterval = setInterval(() => this.fetchClusterUsage(), 30000);
+            }
+            // Add logic here to fetch nodes, pods, etc.
+            this.isLoading.details = false;
         },
-        
-        // --- DATA FETCHING ---
+        fetchClusters(force = false) {
+            if (force) console.log('Force refreshing cluster data...');
+            this.isLoading.clusters = true;
+            fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
+                .then(res => res.json())
+                .then(data => { 
+                    this.clusters = data.map(c => ({...c, isEnabling: false})); 
+                })
+                .catch(err => console.error('Failed to fetch clusters', err))
+                .finally(() => this.isLoading.clusters = false);
+        },
         async fetchClusterUsage() {
             if (!this.selectedCluster) return;
             this.isLoading.usage = true;
             const { name, region } = this.selectedCluster;
             
             try {
-                const response = await fetch(`/api/k8s/clusters/usage?accountId=${this.selectedAccountId}&clusterName=${name}&region=${region}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                this.clusterUsage = data;
+                const response = await fetch(`/api/k8s/clusters/usage?accountId=${this.selectedAccountId}&clusterName=${name}&region=${region}`, { method: 'POST' });
+                if (!response.ok) throw new Error('Failed to fetch usage data');
+                this.clusterUsage = await response.json();
             } catch (err) {
                 console.error('Failed to fetch cluster usage', err);
                 this.clusterUsage = null;
@@ -229,107 +271,87 @@ function cloudK8s() {
                 this.isLoading.usage = false;
             }
         },
-        fetchClusters(force = false) {
-            if (force) {
-                console.log('Force refreshing cluster data...');
-            }
-            this.isLoading.clusters = true;
-            fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
-                .then(res => res.json())
-                .then(data => { this.clusters = data; })
-                .catch(err => console.error('Failed to fetch clusters', err))
-                .finally(() => this.isLoading.clusters = false);
-        },
-
-        // --- NEW: Chart Rendering ---
         renderUsageCharts() {
             if (!this.clusterUsage) return;
 
             if (window.cpuChartInstance) window.cpuChartInstance.destroy();
             if (window.memChartInstance) window.memChartInstance.destroy();
 
-            const cpuCtx = document.getElementById('cpuUsageChart').getContext('2d');
-            window.cpuChartInstance = new Chart(cpuCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Used', 'Free'],
-                    datasets: [{
-                        data: [this.clusterUsage.cpuUsage, 100 - this.clusterUsage.cpuUsage],
-                        backgroundColor: ['#326ce5', '#e5e7eb'],
-                        borderColor: ['#ffffff', '#ffffff'],
-                        borderWidth: 4,
-                        hoverOffset: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${context.raw.toFixed(2)}%`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+            const cpuCtx = document.getElementById('cpuUsageChart')?.getContext('2d');
+            if(cpuCtx) {
+                window.cpuChartInstance = new Chart(cpuCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Free'],
+                        datasets: [{ data: [this.clusterUsage.cpuUsage, 100 - this.clusterUsage.cpuUsage], backgroundColor: ['#326ce5', '#e5e7eb'], borderWidth: 4, hoverOffset: 8 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw.toFixed(2)}%` } } } }
+                });
+            }
 
-            const memCtx = document.getElementById('memoryUsageChart').getContext('2d');
-            window.memChartInstance = new Chart(memCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Used', 'Free'],
-                    datasets: [{
-                        data: [this.clusterUsage.memoryUsage, 100 - this.clusterUsage.memoryUsage],
-                        backgroundColor: ['#667eea', '#e5e7eb'],
-                        borderColor: ['#ffffff', '#ffffff'],
-                        borderWidth: 4,
-                        hoverOffset: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${context.raw.toFixed(2)}%`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+            const memCtx = document.getElementById('memoryUsageChart')?.getContext('2d');
+            if(memCtx) {
+                window.memChartInstance = new Chart(memCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Free'],
+                        datasets: [{ data: [this.clusterUsage.memoryUsage, 100 - this.clusterUsage.memoryUsage], backgroundColor: ['#667eea', '#e5e7eb'], borderWidth: 4, hoverOffset: 8 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw.toFixed(2)}%` } } } }
+                });
+            }
         },
-
-        // --- DETAILS & LOGS MODAL LOGIC ---
-        showDetails(resource, type) {
-            this.selectedResource.type = type;
-            this.selectedResource.details = JSON.stringify(resource, null, 2);
-            this.isDetailsModalOpen = true;
-        },
-        showLogs(pod) {
-            this.selectedPod = pod;
-            this.podLogs = 'Loading logs...';
-            this.isLogsModalOpen = true;
+        installOpenCost() {
+            this.openCostStatus = 'installing';
+            this.installationMessage = '';
+            const accountId = sessionStorage.getItem('selectedAccountId');
             
-            const { name, region } = this.selectedCluster;
-            fetch(`/api/k8s/pods/logs?accountId=${this.selectedAccountId}&clusterName=${name}&region=${region}&namespace=${this.selectedNamespace}&podName=${pod.name}`, {
-                method: 'POST'
+            if (!accountId || !this.selectedCluster.name || !this.selectedCluster.region) {
+                this.installationMessage = 'Error: Missing account, cluster, or region information.';
+                this.installationSuccess = false;
+                this.openCostStatus = 'not_installed';
+                return;
+            }
+
+            const apiUrl = `/api/eks/${this.selectedCluster.name}/install-opencost?accountId=${accountId}&region=${this.selectedCluster.region}`;
+
+            fetch(apiUrl, { method: 'POST' })
+            .then(res => {
+                if (!res.ok) { return res.json().then(err => { throw new Error(err.message || 'Installation failed'); }); }
+                return res.json();
             })
-            .then(res => res.text())
-            .then(data => { this.podLogs = data; })
+            .then(data => {
+                this.openCostStatus = 'installed';
+                this.installationMessage = data.message || 'OpenCost installed successfully!';
+                this.installationSuccess = true;
+            })
             .catch(err => {
-                console.error('Failed to fetch logs', err);
-                this.podLogs = 'Error fetching logs.';
+                console.error('OpenCost installation error:', err);
+                this.openCostStatus = 'not_installed';
+                this.installationMessage = `Error: ${err.message}. Check server logs for details.`;
+                this.installationSuccess = false;
             });
+        },
+        async enableMonitoring(cluster) {
+            cluster.isEnabling = true;
+            const { name, region } = cluster;
+
+            try {
+                const response = await fetch(`/api/eks/${name}/enable-monitoring?accountId=${this.selectedAccountId}&region=${region}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                
+                alert(`Successfully initiated monitoring for ${name}. It may take a few minutes to connect.`);
+                setTimeout(() => this.fetchClusters(true), 5000);
+
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+                console.error('Failed to enable monitoring', err);
+            } finally {
+                cluster.isEnabling = false;
+            }
         }
     }
 }

@@ -109,23 +109,13 @@ public class PageController {
         // This page might need more specific logic if GCP resources have a different detail view
         return "resourcedetail";
     }
+    @GetMapping("/cloud/eks/details")
+    public String eksDetailsPage() {
+        return "eks-details";
+    }
 
-    // --- Mappings that are not provider-specific ---
-    @GetMapping("/login")
-    public String loginPage() { return "login"; }
-
-    @GetMapping("/reservation")
-    public String reservationPage() { return "reservation"; }
-
-    @GetMapping("/cloudk8s")
-    public String cloudk8sPage() { return "cloudk8s"; }
-
-    @GetMapping("/account-manager")
-    public String accountManagerPage() { return "account-manager"; }
-
-    @GetMapping("/add-account")
-    public String addAccountPage() { return "add-account"; }
-
-    @GetMapping("/add-gcp-account")
-    public String addGcpAccountPage() { return "add-gcp-account"; }
+    @GetMapping("/settings")
+    public String settingsPage() {
+        return "settings";
+    }
 }

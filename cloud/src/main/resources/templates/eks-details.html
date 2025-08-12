@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - EKS Cluster Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 p-8" x-data="eksDetails()" x-init="init()">
+
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800" x-text="clusterName" aria-live="polite">EKS Cluster Details</h1>
+                    <p class="text-gray-500">Details for your EKS cluster</p>
+                </div>
+                <a href="/cloud/eks" class="text-indigo-600 hover:text-indigo-800 font-semibold">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Clusters
+                </a>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="glass-card p-6 rounded-lg shadow-md">
+                    <h3 class="font-semibold text-gray-600">Status</h3>
+                    <p class="text-2xl font-bold text-green-500" x-text="cluster.status"></p>
+                </div>
+                <div class="glass-card p-6 rounded-lg shadow-md">
+                    <h3 class="font-semibold text-gray-600">Kubernetes Version</h3>
+                    <p class="text-2xl font-bold text-gray-800" x-text="cluster.version"></p>
+                </div>
+                <div class="glass-card p-6 rounded-lg shadow-md">
+                    <h3 class="font-semibold text-gray-600">Region</h3>
+                    <p class="text-2xl font-bold text-gray-800" x-text="cluster.region"></p>
+                </div>
+            </div>
+            
+            <div class="glass-card p-6 rounded-lg shadow-md mb-8">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="font-bold text-xl text-gray-800">Automated Cost Monitoring</h3>
+                        <p class="text-sm text-gray-600 mt-1">Install OpenCost to get detailed, real-time cost breakdowns for this cluster.</p>
+                    </div>
+                    <template x-if="openCostStatus !== 'installed'">
+                        <button @click="installOpenCost" :disabled="openCostStatus === 'installing'"
+                                class="btn-primary px-5 py-3 rounded-lg font-semibold text-white transition duration-200 ease-in-out flex items-center"
+                                :class="{ 'opacity-50 cursor-not-allowed': openCostStatus === 'installing' }">
+                            <span x-show="openCostStatus === 'not_installed'">
+                                <i class="fas fa-download mr-2"></i>Install OpenCost
+                            </span>
+                            <span x-show="openCostStatus === 'installing'">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>Installing...
+                            </span>
+                        </button>
+                    </template>
+                    <template x-if="openCostStatus === 'installed'">
+                        <div class="flex items-center space-x-3 text-green-600 font-semibold p-3 bg-green-50 rounded-lg">
+                            <i class="fas fa-check-circle text-2xl"></i>
+                            <span>OpenCost Installed Successfully</span>
+                        </div>
+                    </template>
+                </div>
+                 <div x-show="installationMessage" x-text="installationMessage" class="mt-4 text-sm font-medium"
+                    :class="installationSuccess ? 'text-green-600' : 'text-red-600'">
+                </div>
+            </div>
+
+            <div class="w-full">
+                <div class="mb-4 border-b border-gray-200">
+                    <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" id="myTab">
+                        <li class="mr-2">
+                            <button @click="activeTab = 'nodes'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'nodes'}" class="inline-block p-4 border-b-2 rounded-t-lg" type="button">
+                                <img src="/images/nodes-icon.svg" alt="Nodes" class="inline w-4 h-4 mr-2" />
+                                Nodes
+                            </button>
+                        </li>
+                        <li class="mr-2">
+                            <button @click="activeTab = 'pods'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'pods'}" class="inline-block p-4 border-b-2 rounded-t-lg" type="button">
+                                <img src="/images/pods-icon.svg" alt="Pods" class="inline w-4 h-4 mr-2" />
+                                Pods
+                            </button>
+                        </li>
+                        <li class="mr-2">
+                            <button @click="activeTab = 'deployments'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'deployments'}" class="inline-block p-4 border-b-2 rounded-t-lg" type="button">
+                                <img src="/images/deployments-icon.svg" alt="Deployments" class="inline w-4 h-4 mr-2" />
+                                Deployments
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <div x-show="isLoading" class="p-8 text-center text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-3xl"></i>
+                        <p>Loading data...</p>
+                    </div>
+                    <div x-show="!isLoading">
+                         <div x-show="activeTab === 'nodes'">
+                            <p class="text-gray-600">Node information will be displayed here once data is fetched.</p>
+                        </div>
+                        <div x-show="activeTab === 'pods'">
+                            <p class="text-gray-600">Pod information will be displayed here once data is fetched.</p>
+                        </div>
+                        <div x-show="activeTab === 'deployments'">
+                           <p class="text-gray-600">Deployment information will be displayed here once data is fetched.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<script>
+function eksDetails() {
+    return {
+        isLoading: true,
+        clusterName: '',
+        cluster: {},
+        activeTab: 'nodes',
+        openCostStatus: 'not_installed', // States: 'not_installed', 'installing', 'installed'
+        installationMessage: '',
+        installationSuccess: false,
+
+        init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            this.clusterName = urlParams.get('name');
+            this.cluster = history.state || {};
+            this.isLoading = false; 
+        },
+
+        installOpenCost() {
+            this.openCostStatus = 'installing';
+            this.installationMessage = '';
+            const accountId = sessionStorage.getItem('selectedAccountId');
+            
+            if (!accountId || !this.clusterName || !this.cluster.region) {
+                this.installationMessage = 'Error: Missing account, cluster, or region information.';
+                this.installationSuccess = false;
+                this.openCostStatus = 'not_installed';
+                return;
+            }
+
+            const apiUrl = `/api/eks/${this.clusterName}/install-opencost?accountId=${accountId}&region=${this.cluster.region}`;
+
+            fetch(apiUrl, { method: 'POST' })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.message || 'Installation failed'); });
+                }
+                return res.json();
+            })
+            .then(data => {
+                this.openCostStatus = 'installed';
+                this.installationMessage = data.message || 'OpenCost installed successfully!';
+                this.installationSuccess = true;
+            })
+            .catch(err => {
+                console.error('OpenCost installation error:', err);
+                this.openCostStatus = 'not_installed';
+                this.installationMessage = `Error: ${err.message}. Check server logs for details.`;
+                this.installationSuccess = false;
+            });
+        }
+    }
+}
+</script>
+
+</body>
+</html>

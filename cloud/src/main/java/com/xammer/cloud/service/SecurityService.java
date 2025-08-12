@@ -15,21 +15,21 @@ import software.amazon.awssdk.services.cloudtrail.model.Trail;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.FlowLog;
 import software.amazon.awssdk.services.iam.IamClient;
-import software.amazon.awssdk.services.iam.model.ListMfaDevicesResponse;
-import software.amazon.awssdk.services.iam.model.NoSuchEntityException;
-import software.amazon.awssdk.services.iam.model.Role;
+import software.amazon.awssdk.services.iam.model.*;
+import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.kms.model.KeyMetadata;
+import software.amazon.awssdk.services.kms.model.KeySpec;
+import software.amazon.awssdk.services.kms.model.KmsException;
+import software.amazon.awssdk.services.rds.RdsClient;
+import software.amazon.awssdk.services.rds.model.DBInstance;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.Bucket;
-import software.amazon.awssdk.services.s3.model.Permission;
-import software.amazon.awssdk.services.s3.model.PublicAccessBlockConfiguration;
-import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.*;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -65,7 +65,8 @@ public class SecurityService {
         logger.info("Starting comprehensive security scan for account {}...", account.getAwsAccountId());
         List<CompletableFuture<List<DashboardData.SecurityFinding>>> futures = List.of(
             findUsersWithoutMfa(account), findPublicS3Buckets(account), findUnrestrictedSecurityGroups(account, activeRegions),
-            findVpcsWithoutFlowLogs(account, activeRegions), checkCloudTrailStatus(account, activeRegions), findUnusedIamRoles(account)
+            findVpcsWithoutFlowLogs(account, activeRegions), checkCloudTrailStatus(account, activeRegions), findUnusedIamRoles(account),
+            findSoc2ComplianceFindings(account, activeRegions)
         );
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .thenApply(v -> futures.stream().map(CompletableFuture::join).flatMap(List::stream).collect(Collectors.toList()));
@@ -176,7 +177,6 @@ public class SecurityService {
         });
     }
 
-
     private CompletableFuture<List<DashboardData.SecurityFinding>> findUnrestrictedSecurityGroups(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             logger.info("Security Scan for account {}: Checking for unrestricted security groups in {}...", account.getAwsAccountId(), regionId);
@@ -280,6 +280,291 @@ public class SecurityService {
             }
             return findings;
         });
+    }
+
+    private CompletableFuture<List<DashboardData.SecurityFinding>> findSoc2ComplianceFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return CompletableFuture.supplyAsync(() -> {
+            logger.info("Security Scan for account {}: Checking for SOC2 compliance...", account.getAwsAccountId());
+            List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+            
+            findings.addAll(checkSoc2AccessControls(account));
+            
+            findings.addAll(checkSoc2DataTransmission(account, activeRegions));
+            
+            findings.addAll(checkSoc2SystemMonitoring(account, activeRegions));
+            
+            findings.addAll(checkSoc2DataClassification(account));
+            
+            findings.addAll(checkSoc2LogicalAccessSecurity(account));
+            
+            return findings;
+        });
+    }
+    
+    private List<DashboardData.SecurityFinding> checkSoc2AccessControls(CloudAccount account) {
+        List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+        IamClient iam = awsClientProvider.getIamClient(account);
+        
+        try {
+            // FIX: This check is for the 'root' user, which is a special account
+            // and not an IAM user. The listAccessKeys API will throw a NoSuchEntityException.
+            // We wrap this specific call in a try-catch to prevent a crash and log a warning.
+            try {
+                ListAccessKeysResponse rootKeys = iam.listAccessKeys(r -> r.userName("root"));
+                if (rootKeys.hasAccessKeyMetadata() && !rootKeys.accessKeyMetadata().isEmpty()) {
+                    findings.add(new DashboardData.SecurityFinding("root", "Global", "IAM", "Critical", 
+                        "Root user has active access keys, violating SOC2 access control requirements.", "SOC2", "CC6.1"));
+                }
+            } catch (NoSuchEntityException e) {
+                logger.warn("SOC2 access control check for root user access keys failed because 'root' is not a standard IAM user. This is expected behavior.");
+            }
+            
+            iam.listUsers().users().forEach(user -> {
+                try {
+                    boolean hasConsoleAccess = false;
+                    boolean hasProgrammaticAccess = false;
+                    
+                    try {
+                        iam.getLoginProfile(r -> r.userName(user.userName()));
+                        hasConsoleAccess = true;
+                    } catch (NoSuchEntityException e) {
+                        
+                    }
+                    
+                    ListAccessKeysResponse userKeys = iam.listAccessKeys(r -> r.userName(user.userName()));
+                    if (userKeys.hasAccessKeyMetadata() && !userKeys.accessKeyMetadata().isEmpty()) {
+                        hasProgrammaticAccess = true;
+                    }
+                    
+                    if (hasConsoleAccess && hasProgrammaticAccess) {
+                        findings.add(new DashboardData.SecurityFinding(user.userName(), "Global", "IAM", "Medium",
+                            "User has both console and programmatic access, violating SOC2 access segregation principles.", "SOC2", "CC6.1"));
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not check access types for user {}: {}", user.userName(), e.getMessage());
+                }
+            });
+            
+        } catch (AwsServiceException e) {
+            if (e.statusCode() == 403) {
+                 logger.warn("SOC2 access control check skipped due to insufficient permissions: {}", e.awsErrorDetails().errorMessage());
+            } else {
+                 logger.error("SOC2 access control check failed for account {}: {}", account.getAwsAccountId(), e.getMessage());
+            }
+        }
+        
+        return findings;
+    }
+    
+    private List<DashboardData.SecurityFinding> checkSoc2DataTransmission(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+        
+        S3Client s3GlobalClient = awsClientProvider.getS3Client(account, "us-east-1");
+        try {
+            List<Bucket> buckets = s3GlobalClient.listBuckets().buckets();
+            buckets.forEach(bucket -> {
+                String bucketName = bucket.name();
+                String bucketRegion = "us-east-1";
+                
+                try {
+                    String locationConstraint = s3GlobalClient.getBucketLocation(r -> r.bucket(bucketName)).locationConstraintAsString();
+                    if (locationConstraint != null && !locationConstraint.isEmpty()) {
+                        bucketRegion = locationConstraint;
+                    }
+                } catch (Exception e) {
+                    
+                }
+                
+                S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
+                
+                try {
+                    
+                    GetBucketEncryptionResponse encryption = regionalS3Client.getBucketEncryption(r -> r.bucket(bucketName));
+                    if (encryption.serverSideEncryptionConfiguration() == null) {
+                        findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "High",
+                            "S3 bucket does not have encryption enabled, violating SOC2 data protection requirements.", "SOC2", "CC6.7"));
+                    }
+                } catch (Exception e) {
+                    findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "High",
+                        "S3 bucket encryption configuration could not be verified, violating SOC2 data protection requirements.", "SOC2", "CC6.7"));
+                }
+                
+                try {
+                    
+                    GetBucketPolicyResponse policyResponse = regionalS3Client.getBucketPolicy(r -> r.bucket(bucketName));
+                    String policy = policyResponse.policy();
+                    if (policy == null || !policy.contains("aws:SecureTransport")) {
+                        findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "Medium",
+                            "S3 bucket does not enforce HTTPS-only access, violating SOC2 data transmission requirements.", "SOC2", "CC6.7"));
+                    }
+                } catch (Exception e) {
+                    findings.add(new DashboardData.SecurityFinding(bucketName, bucketRegion, "S3", "Medium",
+                        "S3 bucket does not have a secure transport policy, violating SOC2 data transmission requirements.", "SOC2", "CC6.7"));
+                }
+            });
+        } catch (Exception e) {
+            logger.error("SOC2 data transmission check failed for S3: {}", e.getMessage());
+        }
+        
+        activeRegions.forEach(regionStatus -> {
+            try {
+                RdsClient rds = awsClientProvider.getRdsClient(account, regionStatus.getRegionId());
+                List<DBInstance> dbInstances = rds.describeDBInstances().dbInstances();
+                dbInstances.forEach(db -> {
+                    if (!db.storageEncrypted()) {
+                        findings.add(new DashboardData.SecurityFinding(db.dbInstanceIdentifier(), regionStatus.getRegionId(), "RDS", "High",
+                            "RDS instance does not have storage encryption enabled, violating SOC2 data protection requirements.", "SOC2", "CC6.7"));
+                    }
+                });
+            } catch (Exception e) {
+                logger.warn("Could not check RDS encryption in region {}: {}", regionStatus.getRegionId(), e.getMessage());
+            }
+        });
+        
+        return findings;
+    }
+    
+    private List<DashboardData.SecurityFinding> checkSoc2SystemMonitoring(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+        
+        try {
+            CloudTrailClient cloudTrail = awsClientProvider.getCloudTrailClient(account, configuredRegion);
+            List<Trail> trails = cloudTrail.describeTrails().trailList();
+            
+            if (trails.isEmpty()) {
+                findings.add(new DashboardData.SecurityFinding("Account", "Global", "CloudTrail", "Critical",
+                    "No CloudTrail trails configured, violating SOC2 monitoring requirements.", "SOC2", "CC7.1"));
+            } else {
+                boolean hasValidTrail = false;
+                for (Trail trail : trails) {
+                    try {
+                        CloudTrailClient regionalTrailClient = awsClientProvider.getCloudTrailClient(account, trail.homeRegion());
+                        boolean isLogging = regionalTrailClient.getTrailStatus(r -> r.name(trail.name())).isLogging();
+                        boolean hasLogFileValidation = trail.logFileValidationEnabled();
+                        
+                        if (isLogging && trail.isMultiRegionTrail() && hasLogFileValidation) {
+                            hasValidTrail = true;
+                            break;
+                        }
+                        
+                        if (isLogging && !hasLogFileValidation) {
+                            findings.add(new DashboardData.SecurityFinding(trail.name(), trail.homeRegion(), "CloudTrail", "Medium",
+                                "CloudTrail log file validation is not enabled, reducing SOC2 monitoring integrity.", "SOC2", "CC7.1"));
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Could not verify trail {} status: {}", trail.name(), e.getMessage());
+                    }
+                }
+                
+                if (!hasValidTrail) {
+                    findings.add(new DashboardData.SecurityFinding("Account", "Global", "CloudTrail", "High",
+                        "No properly configured multi-region CloudTrail with log file validation found, violating SOC2 monitoring requirements.", "SOC2", "CC7.1"));
+                }
+            }
+        } catch (Exception e) {
+            logger.error("SOC2 system monitoring check failed: {}", e.getMessage());
+        }
+        
+        return findings;
+    }
+    
+    private List<DashboardData.SecurityFinding> checkSoc2DataClassification(CloudAccount account) {
+        List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+        
+        try {
+            KmsClient kms = awsClientProvider.getKmsClient(account, configuredRegion);
+            kms.listKeys().keys().forEach(key -> {
+                try {
+                    KeyMetadata metadata = kms.describeKey(r -> r.keyId(key.keyId())).keyMetadata();
+                    if ("ENCRYPT_DECRYPT".equals(metadata.keyUsageAsString()) &&
+                        metadata.keySpec() == KeySpec.SYMMETRIC_DEFAULT &&
+                        metadata.originAsString().equals("AWS_KMS")) {
+                        try {
+                            boolean rotationEnabled = kms.getKeyRotationStatus(r -> r.keyId(key.keyId())).keyRotationEnabled();
+                            if (!rotationEnabled) {
+                                findings.add(new DashboardData.SecurityFinding(key.keyId(), configuredRegion, "KMS", "Medium",
+                                    "KMS key does not have automatic rotation enabled, violating SOC2 key management requirements.", "SOC2", "CC6.8"));
+                            }
+                        } catch (Exception e) {
+                            // This catch block handles potential permissions errors for getKeyRotationStatus
+                            logger.warn("Could not get key rotation status for KMS key {}: {}", key.keyId(), e.getMessage());
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not check KMS key {}: {}", key.keyId(), e.getMessage());
+                }
+            });
+        } catch (KmsException e) {
+            if (e.statusCode() == 400) {
+                 logger.warn("SOC2 data classification check for KMS keys skipped due to insufficient permissions: {}", e.awsErrorDetails().errorMessage());
+            } else {
+                 logger.error("SOC2 data classification check failed for KMS: {}", e.getMessage());
+            }
+        } catch (Exception e) {
+             logger.error("SOC2 data classification check failed for KMS: {}", e.getMessage());
+        }
+        
+        return findings;
+    }
+    
+    private List<DashboardData.SecurityFinding> checkSoc2LogicalAccessSecurity(CloudAccount account) {
+        List<DashboardData.SecurityFinding> findings = new ArrayList<>();
+        IamClient iam = awsClientProvider.getIamClient(account);
+        
+        try {
+            try {
+                PasswordPolicy passwordPolicy = iam.getAccountPasswordPolicy().passwordPolicy();
+                
+                if (passwordPolicy.minimumPasswordLength() < 14) {
+                    findings.add(new DashboardData.SecurityFinding("Account", "Global", "IAM", "Medium",
+                        "Password policy minimum length is less than 14 characters, not meeting SOC2 access security standards.", "SOC2", "CC6.3"));
+                }
+                
+                if (!passwordPolicy.requireUppercaseCharacters() || !passwordPolicy.requireLowercaseCharacters() || 
+                    !passwordPolicy.requireNumbers() || !passwordPolicy.requireSymbols()) {
+                    findings.add(new DashboardData.SecurityFinding("Account", "Global", "IAM", "Medium",
+                        "Password policy does not require character complexity, violating SOC2 access security requirements.", "SOC2", "CC6.3"));
+                }
+                
+                if (passwordPolicy.maxPasswordAge() == null || passwordPolicy.maxPasswordAge() > 90) {
+                    findings.add(new DashboardData.SecurityFinding("Account", "Global", "IAM", "Medium",
+                        "Password policy does not enforce password expiration within 90 days, violating SOC2 access security requirements.", "SOC2", "CC6.3"));
+                }
+                
+            } catch (NoSuchEntityException e) {
+                findings.add(new DashboardData.SecurityFinding("Account", "Global", "IAM", "High",
+                    "No password policy is configured, violating SOC2 access security requirements.", "SOC2", "CC6.3"));
+            }
+            
+            iam.listPolicies(r -> r.scope("Local")).policies().forEach(policy -> {
+                try {
+                    String policyDocument = iam.getPolicyVersion(r -> r.policyArn(policy.arn())
+                        .versionId(policy.defaultVersionId())).policyVersion().document();
+                    
+                    if (policyDocument.contains("\"*\"") && policyDocument.contains("\"Effect\": \"Allow\"")) {
+                        findings.add(new DashboardData.SecurityFinding(policy.policyName(), "Global", "IAM", "High",
+                            "Custom IAM policy grants overly broad permissions (*), violating SOC2 least privilege principles.", "SOC2", "CC6.3"));
+                    }
+                } catch (AwsServiceException e) {
+                    if (e.statusCode() == 403) {
+                         logger.warn("Could not check policy {}: Insufficient permissions to get policy version. {}", policy.policyName(), e.awsErrorDetails().errorMessage());
+                    } else {
+                         logger.warn("Could not check policy {}: {}", policy.policyName(), e.getMessage());
+                    }
+                }
+            });
+            
+        } catch (AwsServiceException e) {
+            if (e.statusCode() == 403) {
+                 logger.warn("SOC2 logical access security check skipped due to insufficient permissions: {}", e.awsErrorDetails().errorMessage());
+            } else {
+                 logger.error("SOC2 logical access security check failed: {}", e.getMessage());
+            }
+        } catch (Exception e) {
+            logger.error("SOC2 logical access security check failed: {}", e.getMessage());
+        }
+        
+        return findings;
     }
     
     private <T> CompletableFuture<List<T>> fetchAllRegionalResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, Function<String, List<T>> fetchFunction, String serviceName) {
