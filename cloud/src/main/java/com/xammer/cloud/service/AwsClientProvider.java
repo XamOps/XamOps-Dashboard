@@ -1,3 +1,4 @@
+
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.CloudAccount;
@@ -30,6 +31,7 @@ import software.amazon.awssdk.services.servicequotas.ServiceQuotasClient;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
@@ -200,5 +202,11 @@ public class AwsClientProvider {
                 .build();
     }
 
+    public KmsClient getKmsClient(CloudAccount account, String region) {
+        return KmsClient.builder()
+            .credentialsProvider(getCredentialsProvider(account))
+            .region(software.amazon.awssdk.regions.Region.of(region))
+            .build();
+    }
     
 }

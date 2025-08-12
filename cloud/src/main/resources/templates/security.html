@@ -140,6 +140,12 @@
             text-align: center;
             white-space: nowrap;
         }
+
+        .soc2-badge {
+             background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.15) 100%);
+             border: 1px solid rgba(16, 185, 129, 0.25);
+             color: #047857;
+        }
         
         /* Action button styling */
         .fix-now-btn {
@@ -455,7 +461,7 @@
                                                                 </div>
                                                             </td>
                                                             <td>
-                                                                <span class="compliance-badge" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
+                                                                <span class="compliance-badge" :class="finding.complianceFramework === 'SOC2' ? 'soc2-badge' : ''" x-text="finding.complianceFramework + ' ' + finding.controlId"></span>
                                                             </td>
                                                             <td>
                                                                 <button @click="openRemediationModal(finding)" class="fix-now-btn">
