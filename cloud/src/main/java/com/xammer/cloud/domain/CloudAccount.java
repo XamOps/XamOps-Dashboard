@@ -19,7 +19,7 @@ public class CloudAccount {
     private String accountName;
 
     @Column(unique = true)
-    private String awsAccountId; // For AWS this is account ID, for GCP this is Project ID
+    private String awsAccountId;
 
     @Column
     private String externalId;
@@ -30,7 +30,6 @@ public class CloudAccount {
     @Column(unique = true)
     private String roleArn;
 
-    // This is the field that was causing the error. The @Lob annotation has been removed.
     @Column(columnDefinition = "TEXT")
     private String gcpServiceAccountKey;
 
@@ -52,6 +51,9 @@ public class CloudAccount {
     @Column(nullable = false)
     private String provider; // AWS or GCP
 
+    @Column
+    private String billingExportTable; // ADDED THIS FIELD FOR GCP
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     @JsonIgnore
@@ -62,12 +64,5 @@ public class CloudAccount {
         this.externalId = externalId;
         this.accessType = accessType;
         this.client = client;
-    }
-    public String getGcpProjectId() {
-        return gcpProjectId;
-    }
-
-    public void setGcpProjectId(String gcpProjectId) {
-        this.gcpProjectId = gcpProjectId;
     }
 }

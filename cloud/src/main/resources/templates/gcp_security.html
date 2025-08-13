@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>XamOps - GCP Security</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+        <main class="flex-1 flex flex-col p-6" x-data="gcpSecurity()">
+            <header class="flex-shrink-0 mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">GCP Security Center</h1>
+            </header>
+            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden">
+                <div class="overflow-x-auto h-full">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Severity</th>
+                                <th scope="col" class="px-6 py-3">Category</th>
+                                <th scope="col" class="px-6 py-3">Description</th>
+                                <th scope="col" class="px-6 py-3">Resource</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-if="isLoading">
+                                <tr class="bg-white border-b animate-pulse" x-ref="loading" x-init="$el.setAttribute('x-for', 'i in 5')">
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-20"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-32"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-full"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-48"></div></td>
+                                </tr>
+                            </template>
+                            <template x-for="finding in findings" :key="finding.resourceName + finding.category">
+                                <tr class="bg-white border-b hover:bg-gray-50">
+                                    <td class="px-6 py-4">
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full"
+                                              :class="{
+                                                  'bg-red-100 text-red-800': finding.severity === 'HIGH',
+                                                  'bg-yellow-100 text-yellow-800': finding.severity === 'MEDIUM',
+                                                  'bg-blue-100 text-blue-800': finding.severity === 'LOW'
+                                              }"
+                                              x-text="finding.severity"></span>
+                                    </td>
+                                    <td class="px-6 py-4 font-medium text-gray-900" x-text="finding.category"></td>
+                                    <td class="px-6 py-4" x-text="finding.description"></td>
+                                    <td class="px-6 py-4 font-mono text-xs" x-text="finding.resourceName"></td>
+                                </tr>
+                            </template>
+                             <template x-if="!isLoading && findings.length === 0">
+                                <tr><td colspan="4" class="text-center py-12 text-gray-500">No security findings. Your GCP account appears to be secure.</td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script>
+        function gcpSecurity() {
+            return {
+                isLoading: true,
+                accountId: sessionStorage.getItem('selectedAccountId'),
+                findings: [],
+                init() { this.fetchFindings(); },
+                fetchFindings() {
+                    this.isLoading = true;
+                    fetch(`/api/gcp/security/findings?accountId=${this.accountId}`)
+                        .then(res => res.json())
+                        .then(data => { this.findings = data; })
+                        .catch(err => console.error('Failed to load GCP security findings:', err))
+                        .finally(() => this.isLoading = false);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

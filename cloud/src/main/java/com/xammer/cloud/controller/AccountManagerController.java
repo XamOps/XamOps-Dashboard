@@ -12,7 +12,7 @@ import com.xammer.cloud.repository.CloudAccountRepository;
 import com.xammer.cloud.repository.KubernetesClusterRepository;
 import com.xammer.cloud.security.ClientUserDetails;
 import com.xammer.cloud.service.AwsAccountService;
-import com.xammer.cloud.service.GcpDataService;
+import com.xammer.cloud.service.gcp.GcpDataService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller; // Changed from @RestController

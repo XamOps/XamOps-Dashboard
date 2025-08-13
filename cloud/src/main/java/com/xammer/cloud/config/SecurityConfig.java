@@ -24,37 +24,39 @@ public class SecurityConfig {
         this.authenticationSuccessHandler = authenticationSuccessHandler;
     }
 
-@Bean
-public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-    http
-        .authorizeHttpRequests((requests) -> requests
-            // Allow WebSocket connections
-            .antMatchers("/ws/**").permitAll()
-            .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests((requests) -> requests
+                // ADD these lines to permit access to login and static resources
+                .antMatchers("/login", "/css/**", "/js/**", "/images/**", "/icons/**").permitAll()
+                // Allow WebSocket connections
+                .antMatchers("/ws/**").permitAll()
+                .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
 
-            // ✅ ADD THIS LINE to secure your Kubernetes API
-            .antMatchers("/api/k8s/**").authenticated()
+                // ✅ ADD THIS LINE to secure your Kubernetes API
+                .antMatchers("/api/k8s/**").authenticated()
 
-            // ✅ CHANGE THIS LINE to secure all other requests by default
-            .anyRequest().authenticated()
-        )
-        .formLogin((form) -> form
-            .loginPage("/login")
-            .successHandler(authenticationSuccessHandler)
-            .permitAll()
-        )
-        .logout((logout) -> logout
-            .logoutUrl("/logout")
-            .logoutSuccessUrl("/login?logout")
-            .invalidateHttpSession(true)
-            .deleteCookies("JSESSIONID")
-            .permitAll()
-        );
+                // ✅ CHANGE THIS LINE to secure all other requests by default
+                .anyRequest().authenticated()
+            )
+            .formLogin((form) -> form
+                .loginPage("/login")
+                .successHandler(authenticationSuccessHandler)
+                .permitAll()
+            )
+            .logout((logout) -> logout
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/login?logout")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
+                .permitAll()
+            );
 
-    http.csrf().disable();
+        http.csrf().disable();
 
-    return http.build();
-}
+        return http.build();
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {

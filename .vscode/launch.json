@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CloudDashboardApplication",
+            "request": "launch",
+            "mainClass": "CloudDashboardApplication",
+            "projectName": "cloud-dashboard"
+        },
+        {
+            "type": "java",
             "name": "Spring Boot-CloudDashboardApplication<cloud-dashboard>",
             "request": "launch",
             "cwd": "${workspaceFolder}",

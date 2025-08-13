@@ -2,9 +2,13 @@ package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
-import com.xammer.cloud.dto.GcpResourceDto;
+import com.xammer.cloud.dto.gcp.GcpDashboardData;
 import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.repository.CloudAccountRepository;
+import com.xammer.cloud.service.gcp.GcpDataService;
+import com.xammer.cloud.service.gcp.GcpCostService;
+import com.xammer.cloud.service.gcp.GcpOptimizationService;
+import com.xammer.cloud.service.gcp.GcpSecurityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,13 +35,14 @@ public class DashboardDataService {
 
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
-    private final GcpDataService gcpDataService; // Added for GCP logic
+    private final GcpDataService gcpDataService;
     private final CloudListService cloudListService;
     private final OptimizationService optimizationService;
     private final SecurityService securityService;
     private final FinOpsService finOpsService;
     private final ReservationService reservationService;
 
+    // ... constructor remains the same ...
     @Autowired
     public DashboardDataService(
             CloudAccountRepository cloudAccountRepository,
@@ -58,7 +63,7 @@ public class DashboardDataService {
         this.reservationService = reservationService;
     }
 
-    // CORRECTED: Use the new repository method to find by either ID
+
     private CloudAccount getAccount(String accountId) {
         return cloudAccountRepository.findByAwsAccountIdOrGcpProjectId(accountId, accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
@@ -68,71 +73,80 @@ public class DashboardDataService {
     public DashboardData getDashboardData(String accountId) throws ExecutionException, InterruptedException, IOException {
         CloudAccount account = getAccount(accountId);
 
-        // --- THE CRITICAL FIX: Check the provider before proceeding ---
         if ("GCP".equals(account.getProvider())) {
-            return getGcpDashboardData(account);
+            GcpDashboardData gcpData = gcpDataService.getDashboardData(account.getGcpProjectId())
+                .exceptionally(ex -> {
+                    logger.error("Failed to get a complete GCP dashboard data object for account {}. Returning partial data.", account.getGcpProjectId(), ex);
+                    return new GcpDashboardData(); // Return empty DTO on failure
+                })
+                .get();
+            return mapGcpDataToDashboardData(gcpData, account);
         } else {
             return getAwsDashboardData(account);
         }
     }
 
-    private DashboardData getGcpDashboardData(CloudAccount account) throws IOException {
-        logger.info("--- LAUNCHING DATA FETCH FOR GCP for project {} ---", account.getGcpProjectId());
+private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudAccount account) {
         DashboardData data = new DashboardData();
-
-        DashboardData.Account mainAccount = new DashboardData.Account(
-            account.getGcpProjectId(),
-            account.getAccountName(),
-            Collections.emptyList(), // regionStatus
-            null, // resourceInventory
-            null, // cloudWatchStatus
-            Collections.emptyList(), // securityInsights
-            null, // costHistory
-            Collections.emptyList(), // billingSummary
-            null, // iamResources
-            null, // savingsSummary
-            Collections.emptyList(), // ec2Recommendations
-            Collections.emptyList(), // costAnomalies
-            Collections.emptyList(), // ebsRecommendations
-            Collections.emptyList(), // lambdaRecommendations
-            null, // reservationAnalysis
-            Collections.emptyList(), // reservationPurchaseRecommendations
-            null, // optimizationSummary
-            Collections.emptyList(), // wastedResources
-            Collections.emptyList(), // serviceQuotas
-            100 // securityScore
-        );
+        
+        DashboardData.Account mainAccount = new DashboardData.Account();
+        mainAccount.setId(account.getGcpProjectId());
+        mainAccount.setName(account.getAccountName());
+        
+        // --- Populating with REAL GCP Data ---
+        mainAccount.setResourceInventory(gcpData.getResourceInventory());
+        mainAccount.setIamResources(gcpData.getIamResources());
+        mainAccount.setSecurityScore(gcpData.getSecurityScore());
+        mainAccount.setSecurityInsights(gcpData.getSecurityInsights());
+        mainAccount.setSavingsSummary(gcpData.getSavingsSummary());
+        mainAccount.setMonthToDateSpend(gcpData.getMonthToDateSpend());
+        mainAccount.setForecastedSpend(gcpData.getForecastedSpend());
+        mainAccount.setLastMonthSpend(gcpData.getLastMonthSpend());
+        mainAccount.setOptimizationSummary(gcpData.getOptimizationSummary());
+        
+        // NEW: Map Region Status for the world map
+        mainAccount.setRegionStatus(gcpData.getRegionStatus());
+        
+        // ... (rest of the mapping logic remains the same)
+        List<String> costLabels = gcpData.getCostHistory().stream().map(c -> c.getName()).collect(Collectors.toList());
+        List<Double> costValues = gcpData.getCostHistory().stream().map(c -> c.getAmount()).collect(Collectors.toList());
+        List<Boolean> costAnomalies = gcpData.getCostHistory().stream().map(c -> c.isAnomaly()).collect(Collectors.toList());
+        mainAccount.setCostHistory(new DashboardData.CostHistory(costLabels, costValues, costAnomalies));
+        List<DashboardData.BillingSummary> billingSummary = gcpData.getBillingSummary().stream()
+            .map(b -> new DashboardData.BillingSummary(b.getName(), b.getAmount()))
+            .collect(Collectors.toList());
+        mainAccount.setBillingSummary(billingSummary);
+        List<DashboardData.OptimizationRecommendation> gceRecs = gcpData.getRightsizingRecommendations().stream()
+            .map(rec -> new DashboardData.OptimizationRecommendation(
+                "GCE", rec.getResourceName(), rec.getCurrentMachineType(),
+                rec.getRecommendedMachineType(), rec.getMonthlySavings(), "Rightsizing opportunity", 0.0, 0.0))
+            .collect(Collectors.toList());
+        mainAccount.setEc2Recommendations(gceRecs);
+        List<DashboardData.WastedResource> wastedResources = gcpData.getWastedResources().stream()
+            .map(waste -> new DashboardData.WastedResource(
+                waste.getResourceName(), waste.getResourceName(), waste.getType(),
+                waste.getLocation(), waste.getMonthlySavings(), "Idle Resource"))
+            .collect(Collectors.toList());
+        mainAccount.setWastedResources(wastedResources);
+        mainAccount.setCloudWatchStatus(new DashboardData.CloudWatchStatus(0,0,0));
+        mainAccount.setCostAnomalies(Collections.emptyList());
+        mainAccount.setEbsRecommendations(Collections.emptyList());
+        mainAccount.setLambdaRecommendations(Collections.emptyList());
 
         data.setSelectedAccount(mainAccount);
-
+        
         List<DashboardData.Account> availableAccounts = cloudAccountRepository.findAll().stream()
             .map(acc -> new DashboardData.Account(
                 "AWS".equals(acc.getProvider()) ? acc.getAwsAccountId() : acc.getGcpProjectId(),
                 acc.getAccountName(),
-                Collections.emptyList(), // regionStatus
-                null, // resourceInventory
-                null, // cloudWatchStatus
-                Collections.emptyList(), // securityInsights
-                null, // costHistory
-                Collections.emptyList(), // billingSummary
-                null, // iamResources
-                null, // savingsSummary
-                Collections.emptyList(), // ec2Recommendations
-                Collections.emptyList(), // costAnomalies
-                Collections.emptyList(), // ebsRecommendations
-                Collections.emptyList(), // lambdaRecommendations
-                null, // reservationAnalysis
-                Collections.emptyList(), // reservationPurchaseRecommendations
-                null, // optimizationSummary
-                Collections.emptyList(), // wastedResources
-                Collections.emptyList(), // serviceQuotas
-                100 // securityScore
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 0, 0.0, 0.0, 0.0
             ))
             .collect(Collectors.toList());
         data.setAvailableAccounts(availableAccounts);
-
+        
         return data;
     }
+
 
     private DashboardData getAwsDashboardData(CloudAccount account) throws ExecutionException, InterruptedException {
         logger.info("--- LAUNCHING OPTIMIZED ASYNC DATA FETCH FROM AWS for account {} ---", account.getAwsAccountId());
@@ -200,7 +214,7 @@ public class DashboardDataService {
             ec2Recs, anomalies, ebsRecs, lambdaRecs,
             reservationFuture.get(), reservationPurchaseFuture.get(),
             optimizationSummary, wastedResources, Collections.emptyList(),
-            securityScore
+            securityScore, 0.0, 0.0, 0.0
         );
 
         data.setSelectedAccount(mainAccount);
@@ -209,24 +223,11 @@ public class DashboardDataService {
             .map(acc -> new DashboardData.Account(
                 "AWS".equals(acc.getProvider()) ? acc.getAwsAccountId() : acc.getGcpProjectId(),
                 acc.getAccountName(),
-                Collections.emptyList(), // regionStatus
-                null, // resourceInventory
-                null, // cloudWatchStatus
-                Collections.emptyList(), // securityInsights
-                null, // costHistory
-                Collections.emptyList(), // billingSummary
-                null, // iamResources
-                null, // savingsSummary
-                Collections.emptyList(), // ec2Recommendations
-                Collections.emptyList(), // costAnomalies
-                Collections.emptyList(), // ebsRecommendations
-                Collections.emptyList(), // lambdaRecommendations
-                null, // reservationAnalysis
-                Collections.emptyList(), // reservationPurchaseRecommendations
-                null, // optimizationSummary
-                Collections.emptyList(), // wastedResources
-                Collections.emptyList(), // serviceQuotas
-                100 // securityScore
+                Collections.emptyList(),
+                null, null, Collections.emptyList(), null, Collections.emptyList(), null, null,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+                null, Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
+                100, 0.0, 0.0, 0.0
             ))
             .collect(Collectors.toList());
         data.setAvailableAccounts(availableAccounts);
