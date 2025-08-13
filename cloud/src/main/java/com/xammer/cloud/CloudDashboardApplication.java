@@ -10,12 +10,16 @@ import org.springframework.web.client.RestTemplate;
 
 @SpringBootApplication
 @EnableCaching
-@EnableAsync // ADDED: Enables support for asynchronous method execution
+@EnableAsync
 public class CloudDashboardApplication {
 
     public static void main(String[] args) {
+        // ADD THIS LINE
+        System.setProperty("user.timezone", "UTC");
+
         SpringApplication.run(CloudDashboardApplication.class, args);
     }
+
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
         return builder.build();

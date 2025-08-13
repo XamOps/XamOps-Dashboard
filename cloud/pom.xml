@@ -90,11 +90,11 @@
             <scope>runtime</scope>
         </dependency>
         <!-- H2 Database (for development/testing) - Added from the old POM -->
-        <dependency>
+        <!-- <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
-        </dependency>
+        </dependency> -->
 
         <!-- AWS SDK Dependencies (versions managed by BOM) -->
         <dependency>

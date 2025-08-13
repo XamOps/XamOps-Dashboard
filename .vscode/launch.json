@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "PasswordGenerator",
+            "request": "launch",
+            "mainClass": "com.xammer.cloud.util.PasswordGenerator",
+            "projectName": "cloud-dashboard"
+        },
+        {
+            "type": "java",
             "name": "CloudDashboardApplication",
             "request": "launch",
             "mainClass": "CloudDashboardApplication",
