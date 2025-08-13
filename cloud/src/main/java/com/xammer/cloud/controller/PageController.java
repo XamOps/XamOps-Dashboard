@@ -39,6 +39,37 @@ public class PageController {
         }
         return "dashboard";
     }
+    
+    // NEWLY ADDED
+    @GetMapping("/account-manager")
+    public String accountManagerPage() {
+        return "account-manager";
+    }
+
+    // NEWLY ADDED
+    @GetMapping("/add-account")
+    public String addAccountPage() {
+        return "add-account";
+    }
+
+    // NEWLY ADDED
+    @GetMapping("/add-gcp-account")
+    public String addGcpAccountPage() {
+        return "add-gcp-account";
+    }
+
+    // NEWLY ADDED
+    @GetMapping("/cloudk8s")
+    public String cloudk8sPage() {
+        return "cloudk8s";
+    }
+
+    // NEWLY ADDED
+    @GetMapping("/reservation")
+    public String reservationPage() {
+        return "reservation";
+    }
+
 
     @GetMapping("/waste")
     public String wastePage(@RequestParam(required = false) String accountId) {
@@ -117,5 +148,10 @@ public class PageController {
     @GetMapping("/settings")
     public String settingsPage() {
         return "settings";
+    }
+
+    @GetMapping("/login")
+    public String loginPage() {
+        return "login";
     }
 }
