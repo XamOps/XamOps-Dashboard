@@ -2,6 +2,7 @@ package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.Client;
 import com.xammer.cloud.domain.CloudAccount;
+import com.xammer.cloud.dto.GenerateStackUrlRequest; // Assuming a DTO exists or is needed
 import com.xammer.cloud.dto.VerifyAccountRequest;
 import com.xammer.cloud.repository.ClientRepository;
 import com.xammer.cloud.repository.CloudAccountRepository;
@@ -53,13 +54,20 @@ public class AwsAccountService {
         this.hostAccountId = tmpAccountId;
     }
 
-    public Map<String, Object> generateCloudFormationUrl(String accountName, String accessType, Long clientId) throws Exception {
+    // ✅ MODIFICATION 1: Update method signature to accept all necessary data, ideally via a DTO.
+    // For simplicity, adding awsAccountId directly.
+    public Map<String, Object> generateCloudFormationUrl(String accountName, String awsAccountId, String accessType, Long clientId) throws Exception {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new RuntimeException("Client not found with id: " + clientId));
 
         String externalId = UUID.randomUUID().toString();
+        
+        // Use the constructor that takes all initial details
         CloudAccount newAccount = new CloudAccount(accountName, externalId, accessType, client);
-        newAccount.setProvider("AWS"); // Ensure provider is set
+        
+        // ✅ MODIFICATION 2: Set the AWS Account ID before saving
+        newAccount.setAwsAccountId(awsAccountId); 
+        newAccount.setProvider("AWS");
         cloudAccountRepository.save(newAccount);
 
         String stackName = "XamOps-Connection-" + accountName.replaceAll("[^a-zA-Z0-9-]", "");
@@ -73,22 +81,30 @@ public class AwsAccountService {
     }
 
     public CloudAccount verifyAccount(VerifyAccountRequest request) {
-        CloudAccount account = cloudAccountRepository.findByExternalId(request.getExternalId()).orElseThrow(() -> new RuntimeException("No pending account found for the given external ID."));
+        // Find by ExternalId, ensuring it's unique and tied to the pending request
+        CloudAccount account = cloudAccountRepository.findByExternalId(request.getExternalId())
+                .orElseThrow(() -> new RuntimeException("No pending account found for the given external ID."));
+
         if (!"PENDING".equals(account.getStatus())) {
             throw new RuntimeException("Account is not in a PENDING state.");
         }
-        String roleArn = String.format("arn:aws:iam::%s:role/%s", request.getAwsAccountId(), request.getRoleName());
+
+        // The account ID should already be set from the generate URL step, but we ensure it's correct
         account.setAwsAccountId(request.getAwsAccountId());
+        String roleArn = String.format("arn:aws:iam::%s:role/%s", request.getAwsAccountId(), request.getRoleName());
         account.setRoleArn(roleArn);
+
         try {
+            // This call will now succeed because the account object has the correct AWS Account ID
             Ec2Client testClient = awsClientProvider.getEc2Client(account, configuredRegion);
-            testClient.describeRegions();
+            testClient.describeRegions(); // Simple API call to verify role assumption
+            
             account.setStatus("CONNECTED");
             logger.info("Successfully verified and connected to account: {}", account.getAccountName());
         } catch (Exception e) {
             account.setStatus("FAILED");
             logger.error("Failed to verify account {}: {}", account.getAccountName(), e.getMessage());
-            throw new RuntimeException("Role assumption failed. Please check the role ARN and external ID.", e);
+            throw new RuntimeException("Role assumption failed. Please check the role ARN, trust policy, and external ID.", e);
         }
         return cloudAccountRepository.save(account);
     }
