@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,12 +40,11 @@ public class ForecastingController {
             @RequestParam(defaultValue = "30") int periods,
             @RequestParam(required = false) String serviceName) {
 
-        // Fetch more historical data for a better forecast basis (e.g., 3x the forecast period)
         int historicalDays = Math.min(periods * 3, 180);
 
         return costService.getHistoricalCost(
                 accountId,
-                "ALL".equalsIgnoreCase(serviceName) ? null : serviceName, // Pass null for "All Services"
+                "ALL".equalsIgnoreCase(serviceName) ? null : serviceName,
                 null,
                 historicalDays
         ).thenApply(historicalCostData -> {
@@ -69,9 +69,14 @@ public class ForecastingController {
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("periods", periods);
             requestBody.put("data", formattedData);
-
-            String forecastResult = forecastingService.getCostForecast(requestBody);
-            return ResponseEntity.ok(forecastResult);
+            
+            try {
+                String forecastResult = forecastingService.getCostForecast(requestBody);
+                return ResponseEntity.ok(forecastResult);
+            } catch (ResourceAccessException e) {
+                logger.error("Forecasting service is unavailable at the moment. Skipping forecast generation.", e);
+                return ResponseEntity.ok("[]");
+            }
 
         }).exceptionally(ex -> {
             logger.error("Error fetching historical cost data for forecast for account {}", accountId, ex);

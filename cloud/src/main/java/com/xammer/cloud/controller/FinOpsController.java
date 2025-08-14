@@ -2,6 +2,7 @@ package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.DashboardData.BudgetDetails;
 import com.xammer.cloud.dto.FinOpsReportDto;
+import com.xammer.cloud.service.CacheService; // Import the new service
 import com.xammer.cloud.service.FinOpsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,15 +22,19 @@ public class FinOpsController {
     private static final Logger logger = LoggerFactory.getLogger(FinOpsController.class);
 
     private final FinOpsService finOpsService;
+    private final CacheService cacheService; // Add the new service
 
-    public FinOpsController(FinOpsService finOpsService) {
+    // Update the constructor to inject CacheService
+    public FinOpsController(FinOpsService finOpsService, CacheService cacheService) {
         this.finOpsService = finOpsService;
+        this.cacheService = cacheService;
     }
 
     @GetMapping("/report")
     public CompletableFuture<ResponseEntity<FinOpsReportDto>> getFinOpsReport(@RequestParam String accountId, @RequestParam(required = false) boolean forceRefresh) {
         if (forceRefresh) {
-            finOpsService.clearFinOpsReportCache(accountId);
+            // Use the centralized cache service
+            cacheService.evictFinOpsReportCache(accountId);
         }
         return finOpsService.getFinOpsReport(accountId)
                 .thenApply(ResponseEntity::ok)

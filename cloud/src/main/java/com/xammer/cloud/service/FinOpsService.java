@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
@@ -46,6 +45,7 @@ public class FinOpsService {
     private final CloudListService cloudListService;
     private final OptimizationService optimizationService;
     private final List<String> requiredTags;
+    private final CacheService cacheService; 
 
     @Autowired
     public FinOpsService(
@@ -53,12 +53,14 @@ public class FinOpsService {
             AwsClientProvider awsClientProvider,
             @Lazy CloudListService cloudListService,
             @Lazy OptimizationService optimizationService,
-            @Value("${tagging.compliance.required-tags}") List<String> requiredTags) {
+            @Value("${tagging.compliance.required-tags}") List<String> requiredTags,
+            CacheService cacheService) { 
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.cloudListService = cloudListService;
         this.optimizationService = optimizationService;
         this.requiredTags = requiredTags;
+        this.cacheService = cacheService; 
     }
 
     private CloudAccount getAccount(String accountId) {
@@ -80,18 +82,14 @@ public class FinOpsService {
             CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
             CompletableFuture<DashboardData.TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account);
             CompletableFuture<List<DashboardData.BudgetDetails>> budgetsFuture = getAccountBudgets(account);
+            CompletableFuture<List<Map<String, Object>>> costByRegionFuture = getCostByRegion(account);
 
-            return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture)
+            return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture, costByRegionFuture)
                     .thenApply(v -> {
                         logger.info("--- ALL FINOPS DATA FETCHES COMPLETE, AGGREGATING NOW ---");
 
                         List<DashboardData.BillingSummary> billingSummary = billingSummaryFuture.join();
-                        List<DashboardData.WastedResource> wastedResources = wastedResourcesFuture.join();
-                        List<DashboardData.OptimizationRecommendation> rightsizingRecommendations = rightsizingFuture.join();
-                        List<DashboardData.CostAnomaly> costAnomalies = anomaliesFuture.join();
                         DashboardData.CostHistory costHistory = costHistoryFuture.join();
-                        DashboardData.TaggingCompliance taggingCompliance = taggingComplianceFuture.join();
-                        List<DashboardData.BudgetDetails> budgets = budgetsFuture.join();
 
                         double mtdSpend = billingSummary.stream().mapToDouble(DashboardData.BillingSummary::getMonthToDateCost).sum();
                         double lastMonthSpend = 0.0;
@@ -104,23 +102,23 @@ public class FinOpsService {
                         double daysInMonth = YearMonth.now().lengthOfMonth();
                         double currentDayOfMonth = LocalDate.now().getDayOfMonth();
                         double forecastedSpend = (currentDayOfMonth > 0) ? (mtdSpend / currentDayOfMonth) * daysInMonth : 0;
-                        double rightsizingSavings = rightsizingRecommendations.stream().mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).sum();
-                        double wasteSavings = wastedResources.stream().mapToDouble(DashboardData.WastedResource::getMonthlySavings).sum();
+                        double rightsizingSavings = rightsizingFuture.join().stream().mapToDouble(DashboardData.OptimizationRecommendation::getEstimatedMonthlySavings).sum();
+                        double wasteSavings = wastedResourcesFuture.join().stream().mapToDouble(DashboardData.WastedResource::getMonthlySavings).sum();
                         double totalPotentialSavings = rightsizingSavings + wasteSavings;
+                        
                         FinOpsReportDto.Kpis kpis = new FinOpsReportDto.Kpis(mtdSpend, lastMonthSpend, forecastedSpend, totalPotentialSavings);
+                        
                         List<Map<String, Object>> costByService = billingSummary.stream().sorted(Comparator.comparingDouble(DashboardData.BillingSummary::getMonthToDateCost).reversed()).limit(10).map(s -> Map.<String, Object>of("service", s.getServiceName(), "cost", s.getMonthToDateCost())).collect(Collectors.toList());
-                        List<Map<String, Object>> costByRegion = new ArrayList<>();
-                        try {
-                            costByRegion = getCostByRegion(account).join();
-                        } catch (Exception e) {
-                            logger.error("Could not fetch cost by region data for FinOps report.", e);
-                        }
-                        FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegion);
+                        
+                        FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegionFuture.join());
 
-                        return new FinOpsReportDto(kpis, costBreakdown, rightsizingRecommendations, wastedResources, costAnomalies, taggingCompliance, budgets);
+                        return new FinOpsReportDto(kpis, costBreakdown, rightsizingFuture.join(), wastedResourcesFuture.join(), anomaliesFuture.join(), taggingComplianceFuture.join(), budgetsFuture.join());
                     });
         });
     }
+
+    // Methods for getAccountBudgets, createBudget, getTaggingCompliance, getCostByTag, 
+    // getCostByRegion, getBillingSummary, getCostHistory, and getCostAnomalies remain the same...
 
     @Async("awsTaskExecutor")
     @Cacheable(value = "budgets", key = "#account.awsAccountId")
@@ -155,7 +153,7 @@ public class FinOpsService {
                     .budgetLimit(Spend.builder().amount(budgetDetails.getBudgetLimit()).unit(budgetDetails.getBudgetUnit()).build()).build();
             CreateBudgetRequest request = CreateBudgetRequest.builder().accountId(account.getAwsAccountId()).budget(budget).build();
             budgetsClient.createBudget(request);
-            clearFinOpsReportCache(accountId);
+            cacheService.evictFinOpsReportCache(accountId); 
         } catch (Exception e) {
             logger.error("Failed to create AWS Budget '{}' for account {}", budgetDetails.getBudgetName(), account.getAwsAccountId(), e);
             throw new RuntimeException("Failed to create budget", e);
@@ -167,9 +165,7 @@ public class FinOpsService {
     public CompletableFuture<DashboardData.TaggingCompliance> getTaggingCompliance(CloudAccount account) {
         logger.info("FinOps Scan: Checking tagging compliance for account {}...", account.getAwsAccountId());
 
-        CompletableFuture<List<ResourceDto>> allResourcesFuture = cloudListService.getAllResources(account);
-
-        return allResourcesFuture.thenApply(allResources -> {
+        return cloudListService.getAllResources(account).thenApply(allResources -> {
             List<DashboardData.UntaggedResource> untaggedList = new ArrayList<>();
             int taggedCount = 0;
 
@@ -344,8 +340,4 @@ public class FinOpsService {
         return "Unknown Service";
     }
 
-    @CacheEvict(value = {"finopsReport", "budgets"}, allEntries = true)
-    public void clearFinOpsReportCache(String accountId) {
-        logger.info("FinOps-related caches for account {} have been evicted.", accountId);
-    }
 }

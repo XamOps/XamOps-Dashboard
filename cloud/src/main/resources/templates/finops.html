@@ -286,7 +286,6 @@
 
     <div class="ml-64 flex-1">
         <main class="flex-1 flex flex-col min-h-screen" x-data="finopsReport()">
-            <!-- Enhanced Header -->
             <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
                 <div class="flex items-center space-x-4">
                     <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
@@ -310,7 +309,6 @@
             </header>
 
             <div class="flex-1 p-8 space-y-8">
-                <!-- Enhanced KPIs -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <template x-for="kpi in kpis" :key="kpi.label">
                         <div class="kpi-card rounded-2xl p-6 fade-in">
@@ -335,7 +333,6 @@
                     </template>
                 </div>
                 
-                <!-- Enhanced Budgets & Alerts Section -->
                 <div class="glass-card rounded-2xl p-8 fade-in">
                     <div class="flex justify-between items-center mb-6">
                         <div class="flex items-center space-x-3">
@@ -400,7 +397,6 @@
                     </div>
                 </div>
 
-                <!-- Enhanced Governance Section -->
                 <div class="glass-card rounded-2xl p-8 fade-in">
                     <div class="flex items-center space-x-3 mb-6">
                         <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
@@ -413,7 +409,6 @@
                     </div>
                     
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <!-- Enhanced Tagging Compliance -->
                         <div class="bg-white/70 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50">
                             <h4 class="text-lg font-bold text-gray-800 mb-4">Tagging Compliance</h4>
                             <div x-show="isLoading" class="skeleton h-64 w-full rounded-lg"></div>
@@ -449,7 +444,6 @@
                             </div>
                         </div>
                         
-                        <!-- Enhanced Cost Allocation -->
                         <div class="bg-white/70 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50">
                             <h4 class="text-lg font-bold text-gray-800 mb-4">Cost Allocation by Tag</h4>
                             <div class="flex items-center space-x-3 mb-6">
@@ -466,7 +460,6 @@
                     </div>
                 </div>
 
-                <!-- Enhanced Cost Breakdown Charts -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div class="glass-card rounded-2xl p-8 fade-in">
                         <div class="flex items-center space-x-3 mb-6">
@@ -501,7 +494,6 @@
                     </div>
                 </div>
                 
-                <!-- Enhanced Insights & Opportunities -->
                 <div class="glass-card rounded-2xl p-8 fade-in" x-show="!isLoading && (reportData.rightsizingRecommendations.length > 0 || reportData.wastedResources.length > 0 || reportData.costAnomalies.length > 0)">
                     <div class="flex items-center space-x-3 mb-6">
                         <div class="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
@@ -513,7 +505,6 @@
                         </div>
                     </div>
                     
-                    <!-- Enhanced Cost Anomalies -->
                     <div x-show="reportData.costAnomalies.length > 0" class="mb-8">
                         <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
@@ -541,7 +532,6 @@
                         </div>
                     </div>
 
-                    <!-- Enhanced Rightsizing -->
                     <div x-show="reportData.rightsizingRecommendations.length > 0" class="mb-8">
                         <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             <i class="fas fa-cogs text-green-500 mr-2"></i>
@@ -573,7 +563,6 @@
                         </div>
                     </div>
                     
-                    <!-- Enhanced Waste -->
                     <div x-show="reportData.wastedResources.length > 0">
                         <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             <i class="fas fa-trash-alt text-red-500 mr-2"></i>
@@ -607,7 +596,6 @@
                 </div>
             </div>
             
-            <!-- Enhanced Budget Creation Modal -->
             <div x-show="isBudgetModalOpen" x-cloak class="modal-overlay fixed inset-0 flex items-center justify-center z-50" @click.away="isBudgetModalOpen = false">
                 <div class="modal-content rounded-2xl p-8 w-full max-w-md mx-4" @click.stop>
                     <div class="flex items-center space-x-3 mb-6">
@@ -648,247 +636,305 @@
 </div>
 
 <script>
-function finopsReport() {
-    return {
-        isLoading: true,
-        isTagLoading: false,
-        isBudgetModalOpen: false,
-        isBudgetCreating: false,
-        tagKey: 'cost-center',
-        reportData: { kpis: {}, costBreakdown: { byService: [], byRegion: [] }, rightsizingRecommendations: [], wastedResources: [], costAnomalies: [], taggingCompliance: { compliancePercentage: 0, untaggedResources: [] }, budgets: [] },
-        newBudget: { budgetName: '', budgetLimit: null, budgetUnit: 'USD' },
-        charts: { byService: null, byRegion: null, byTag: null },
-        
-        init() {
-            this.loadReport();
-        },
-        
-        loadReport(forceRefresh = false) {
-            this.isLoading = true;
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                console.error("No account selected");
-                this.isLoading = false;
-                return;
-            }
-            const url = `/api/finops/report?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`;
-            fetch(url)
-                .then(res => res.json())
-                .then(data => {
-                    this.reportData = data;
-                    this.renderCharts();
-                    this.getCostByTag(); // Initial load for default tag
-                })
-                .catch(err => console.error("Failed to load FinOps report:", err))
-                .finally(() => this.isLoading = false);
-        },
-        
-        formatCurrency(value) {
-            return (value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-        },
-        
-        get kpis() {
-            const k = this.reportData.kpis;
-            const mtdSpend = k.monthToDateSpend || 0;
-            const lastMonthSpend = k.lastMonthSpend || 0;
-            const forecast = k.forecastedSpend || 0;
+    function finopsReport() {
+        return {
+            isLoading: true,
+            isTagLoading: false,
+            isBudgetModalOpen: false,
+            isBudgetCreating: false,
+            tagKey: 'cost-center',
+            reportData: {
+                kpis: {},
+                costBreakdown: {
+                    byService: [],
+                    byRegion: []
+                },
+                rightsizingRecommendations: [],
+                wastedResources: [],
+                costAnomalies: [],
+                taggingCompliance: {
+                    compliancePercentage: 0,
+                    untaggedResources: []
+                },
+                budgets: []
+            },
+            newBudget: {
+                budgetName: '',
+                budgetLimit: null,
+                budgetUnit: 'USD'
+            },
+            charts: {
+                byService: null,
+                byRegion: null,
+                byTag: null
+            },
 
-            const mtdTrend = lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend) * 100 : 0;
-            const forecastTrend = lastMonthSpend > 0 ? ((forecast - lastMonthSpend) / lastMonthSpend) * 100 : 0;
+            init() {
+                this.loadReport();
+            },
 
-            return [
-                { 
-                    label: 'Month-to-Date Spend', 
-                    value: this.formatCurrency(mtdSpend), 
-                    icon: 'fa-dollar-sign', 
-                    color: { bg: 'bg-blue-100', text: 'text-blue-500' },
+            loadReport(forceRefresh = false) {
+                this.isLoading = true;
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                if (!selectedAccountId) {
+                    console.error("No account selected");
+                    this.isLoading = false;
+                    return;
+                }
+                const url = `/api/finops/report?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`;
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.reportData = data;
+                        this.renderCharts();
+                        this.getCostByTag();
+                    })
+                    .catch(err => console.error("Failed to load FinOps report:", err))
+                    .finally(() => this.isLoading = false);
+            },
+
+            formatCurrency(value) {
+                return (value || 0).toLocaleString('en-US', {
+                    style: 'currency',
+                    currency: 'USD'
+                });
+            },
+
+            get kpis() {
+                const k = this.reportData.kpis;
+                const mtdSpend = k.monthToDateSpend || 0;
+                const lastMonthSpend = k.lastMonthSpend || 0;
+                const forecast = k.forecastedSpend || 0;
+
+                const mtdTrend = lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend) * 100 : 0;
+                const forecastTrend = lastMonthSpend > 0 ? ((forecast - lastMonthSpend) / lastMonthSpend) * 100 : 0;
+
+                return [{
+                    label: 'Month-to-Date Spend',
+                    value: this.formatCurrency(mtdSpend),
+                    icon: 'fa-dollar-sign',
+                    color: {
+                        bg: 'bg-blue-100',
+                        text: 'text-blue-500'
+                    },
                     trendIcon: mtdTrend >= 0 ? 'fa-arrow-up' : 'fa-arrow-down',
                     trendColor: mtdTrend >= 0 ? 'text-red-500' : 'text-green-500',
                     trendText: `${Math.abs(mtdTrend).toFixed(1)}% vs last month`
-                },
-                { 
-                    label: 'Forecasted Spend', 
-                    value: this.formatCurrency(forecast), 
-                    icon: 'fa-chart-line', 
-                    color: { bg: 'bg-yellow-100', text: 'text-yellow-500' },
+                }, {
+                    label: 'Forecasted Spend',
+                    value: this.formatCurrency(forecast),
+                    icon: 'fa-chart-line',
+                    color: {
+                        bg: 'bg-yellow-100',
+                        text: 'text-yellow-500'
+                    },
                     trendIcon: forecastTrend >= 0 ? 'fa-arrow-up' : 'fa-arrow-down',
                     trendColor: forecastTrend >= 0 ? 'text-red-500' : 'text-green-500',
                     trendText: `${Math.abs(forecastTrend).toFixed(1)}% vs last month`
-                },
-                { 
-                    label: 'Last Month Spend', 
-                    value: this.formatCurrency(lastMonthSpend), 
-                    icon: 'fa-calendar-alt', 
-                    color: { bg: 'bg-gray-100', text: 'text-gray-500' },
-                    trendIcon: '', trendColor: '', trendText: ''
-                },
-                { 
-                    label: 'Potential Savings', 
-                    value: this.formatCurrency(k.potentialSavings), 
-                    icon: 'fa-piggy-bank', 
-                    color: { bg: 'bg-green-100', text: 'text-green-500' },
-                    trendIcon: '', trendColor: '', trendText: ''
-                },
-            ];
-        },
-        
-        renderCharts() {
-            this.renderServiceChart();
-            this.renderRegionChart();
-        },
-        
-        handleChartClick(event, chart, type) {
-            const points = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
-            if (points.length) {
-                const firstPoint = points[0];
-                const label = chart.data.labels[firstPoint.index];
-                alert(`Chart clicked! You selected ${type}: ${label}. You would now be redirected to a filtered view.`);
-            }
-        },
-        
-        renderServiceChart() {
-            const ctx = document.getElementById('costByServiceChart').getContext('2d');
-            if (this.charts.byService) this.charts.byService.destroy();
-            const data = this.reportData.costBreakdown.byService;
-            this.charts.byService = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: data.map(d => d.service),
-                    datasets: [{ 
-                        data: data.map(d => d.cost), 
-                        backgroundColor: [
-                            '#667eea', '#764ba2', '#f093fb', '#f5576c', 
-                            '#4facfe', '#00f2fe', '#43e97b', '#38f9d7',
-                            '#ffecd2', '#fcb69f', '#a8edea', '#fed6e3'
-                        ],
-                        borderWidth: 0
-                    }]
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    plugins: { 
-                        legend: { 
-                            position: 'right',
-                            labels: { usePointStyle: true }
-                        }
+                }, {
+                    label: 'Last Month Spend',
+                    value: this.formatCurrency(lastMonthSpend),
+                    icon: 'fa-calendar-alt',
+                    color: {
+                        bg: 'bg-gray-100',
+                        text: 'text-gray-500'
                     },
-                    onClick: (e) => this.handleChartClick(e, this.charts.byService, 'SERVICE')
+                    trendIcon: '',
+                    trendColor: '',
+                    trendText: ''
+                }, {
+                    label: 'Potential Savings',
+                    value: this.formatCurrency(k.potentialSavings),
+                    icon: 'fa-piggy-bank',
+                    color: {
+                        bg: 'bg-green-100',
+                        text: 'text-green-500'
+                    },
+                    trendIcon: '',
+                    trendColor: '',
+                    trendText: ''
+                }, ];
+            },
+
+            renderCharts() {
+                this.renderServiceChart();
+                this.renderRegionChart();
+            },
+
+            handleChartClick(event, chart, type) {
+                const points = chart.getElementsAtEventForMode(event, 'nearest', {
+                    intersect: true
+                }, true);
+                if (points.length) {
+                    const firstPoint = points[0];
+                    const label = chart.data.labels[firstPoint.index];
+                    alert(`Chart clicked! You selected ${type}: ${label}. You would now be redirected to a filtered view.`);
                 }
-            });
-        },
-        
-        renderRegionChart() {
-            const ctx = document.getElementById('costByRegionChart').getContext('2d');
-            if (this.charts.byRegion) this.charts.byRegion.destroy();
-            const data = this.reportData.costBreakdown.byRegion;
-            this.charts.byRegion = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: data.map(d => d.region),
-                    datasets: [{ 
-                        label: 'Cost by Region', 
-                        data: data.map(d => d.cost), 
-                        backgroundColor: 'rgba(251, 146, 60, 0.8)',
-                        borderColor: 'rgba(251, 146, 60, 1)',
-                        borderWidth: 2,
-                        borderRadius: 8,
-                        borderSkipped: false
-                    }]
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    indexAxis: 'y',
-                    plugins: { 
-                        legend: { display: false }
+            },
+
+            renderServiceChart() {
+                const ctx = document.getElementById('costByServiceChart').getContext('2d');
+                if (this.charts.byService) this.charts.byService.destroy();
+                const data = this.reportData.costBreakdown.byService;
+                this.charts.byService = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.map(d => d.service),
+                        datasets: [{
+                            data: data.map(d => d.cost),
+                            backgroundColor: [
+                                '#667eea', '#764ba2', '#f093fb', '#f5576c',
+                                '#4facfe', '#00f2fe', '#43e97b', '#38f9d7',
+                                '#ffecd2', '#fcb69f', '#a8edea', '#fed6e3'
+                            ],
+                            borderWidth: 0
+                        }]
                     },
-                    scales: {
-                        x: {
-                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                            ticks: { color: '#6b7280' }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: {
+                                    usePointStyle: true
+                                }
+                            }
                         },
-                        y: {
-                            grid: { display: false },
-                            ticks: { color: '#6b7280' }
-                        }
+                        onClick: (e) => this.handleChartClick(e, this.charts.byService, 'SERVICE')
+                    }
+                });
+            },
+
+            renderRegionChart() {
+                const ctx = document.getElementById('costByRegionChart').getContext('2d');
+                if (this.charts.byRegion) this.charts.byRegion.destroy();
+                const data = this.reportData.costBreakdown.byRegion;
+                this.charts.byRegion = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.region),
+                        datasets: [{
+                            label: 'Cost by Region',
+                            data: data.map(d => d.cost),
+                            backgroundColor: 'rgba(251, 146, 60, 0.8)',
+                            borderColor: 'rgba(251, 146, 60, 1)',
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false
+                        }]
                     },
-                    onClick: (e) => this.handleChartClick(e, this.charts.byRegion, 'REGION')
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                },
+                                ticks: {
+                                    color: '#6b7280'
+                                }
+                            },
+                            y: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: '#6b7280'
+                                }
+                            }
+                        },
+                        onClick: (e) => this.handleChartClick(e, this.charts.byRegion, 'REGION')
+                    }
+                });
+            },
+
+            getCostByTag() {
+                if (!this.tagKey) return;
+                this.isTagLoading = true;
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                if (!selectedAccountId) {
+                    console.error("No account selected");
+                    this.isTagLoading = false;
+                    return;
                 }
-            });
-        },
-        
-        getCostByTag() {
-            if (!this.tagKey) return;
-            this.isTagLoading = true;
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                console.error("No account selected");
-                this.isTagLoading = false;
-                return;
-            }
-            fetch(`/api/finops/cost-by-tag?accountId=${selectedAccountId}&tagKey=${this.tagKey}`)
-                .then(res => res.json())
-                .then(data => {
-                    this.renderTagChart(data);
-                })
-                .catch(err => console.error("Failed to load cost by tag:", err))
-                .finally(() => this.isTagLoading = false);
-        },
-        
-        renderTagChart(data) {
-            const ctx = document.getElementById('costByTagChart').getContext('2d');
-            if (this.charts.byTag) this.charts.byTag.destroy();
-            this.charts.byTag = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: data.map(d => d.tagValue),
-                    datasets: [{ 
-                        data: data.map(d => d.cost), 
-                        backgroundColor: [
-                            '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', 
-                            '#f87171', '#fb923c', '#facc15', '#a855f7',
-                            '#ec4899', '#06b6d4', '#8b5cf6', '#84cc16'
-                        ],
-                        borderWidth: 0
-                    }]
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    plugins: { 
-                        legend: { 
-                            position: 'right',
-                            labels: { usePointStyle: true }
-                        }
+                fetch(`/api/finops/cost-by-tag?accountId=${selectedAccountId}&tagKey=${this.tagKey}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.renderTagChart(data);
+                    })
+                    .catch(err => console.error("Failed to load cost by tag:", err))
+                    .finally(() => this.isTagLoading = false);
+            },
+
+            renderTagChart(data) {
+                const ctx = document.getElementById('costByTagChart').getContext('2d');
+                if (this.charts.byTag) this.charts.byTag.destroy();
+                this.charts.byTag = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: data.map(d => d.tagValue),
+                        datasets: [{
+                            data: data.map(d => d.cost),
+                            backgroundColor: [
+                                '#10b981', '#34d399', '#6ee7b7', '#a7f3d0',
+                                '#f87171', '#fb923c', '#facc15', '#a855f7',
+                                '#ec4899', '#06b6d4', '#8b5cf6', '#84cc16'
+                            ],
+                            borderWidth: 0
+                        }]
                     },
-                    onClick: (e) => this.handleChartClick(e, this.charts.byTag, this.tagKey)
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: {
+                                    usePointStyle: true
+                                }
+                            }
+                        },
+                        onClick: (e) => this.handleChartClick(e, this.charts.byTag, this.tagKey)
+                    }
+                });
+            },
+
+            createBudget() {
+                if (!this.newBudget.budgetName || !this.newBudget.budgetLimit) {
+                    alert('Please fill out all fields.');
+                    return;
                 }
-            });
-        },
-        
-        createBudget() {
-            if (!this.newBudget.budgetName || !this.newBudget.budgetLimit) {
-                alert('Please fill out all fields.');
-                return;
+                this.isBudgetCreating = true;
+                fetch('/api/finops/budgets', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(this.newBudget)
+                    })
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to create budget.');
+                        this.isBudgetModalOpen = false;
+                        this.newBudget = {
+                            budgetName: '',
+                            budgetLimit: null,
+                            budgetUnit: 'USD'
+                        };
+                        this.loadReport(true);
+                    })
+                    .catch(err => alert(err.message))
+                    .finally(() => this.isBudgetCreating = false);
             }
-            this.isBudgetCreating = true;
-            fetch('/api/finops/budgets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(this.newBudget)
-            })
-            .then(res => {
-                if (!res.ok) throw new Error('Failed to create budget.');
-                this.isBudgetModalOpen = false;
-                this.newBudget = { budgetName: '', budgetLimit: null, budgetUnit: 'USD' };
-                this.loadReport(true); // Refresh data to show new budget
-            })
-            .catch(err => alert(err.message))
-            .finally(() => this.isBudgetCreating = false);
         }
     }
-}
 </script>
 
 </body>

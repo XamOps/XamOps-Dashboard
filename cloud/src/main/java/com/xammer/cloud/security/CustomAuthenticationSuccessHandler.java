@@ -1,6 +1,6 @@
 package com.xammer.cloud.security;
 
-import com.xammer.cloud.service.AwsAccountService;
+import com.xammer.cloud.service.CacheService; // Import the new service
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
@@ -13,22 +13,23 @@ import java.io.IOException;
 @Component
 public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-    private final AwsAccountService awsAccountService;
+    private final CacheService cacheService; // Use the new CacheService
 
-    public CustomAuthenticationSuccessHandler(AwsAccountService awsAccountService) {
-        this.awsAccountService = awsAccountService;
+    // Update the constructor to inject CacheService
+    public CustomAuthenticationSuccessHandler(CacheService cacheService) {
+        this.cacheService = cacheService;
     }
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                       Authentication authentication) throws IOException, ServletException {
-        // Clear all AWS data caches upon successful login using the new service
-        awsAccountService.clearAllCaches();
+        // Clear all application data caches upon successful login
+        cacheService.evictAllCaches();
         
         // Set the default target URL to redirect to after login
         setDefaultTargetUrl("/");
         
-        // Proceed with the default Spring Security login success behavior (e.g., redirect)
+        // Proceed with the default Spring Security login success behavior
         super.onAuthenticationSuccess(request, response, authentication);
     }
 }
