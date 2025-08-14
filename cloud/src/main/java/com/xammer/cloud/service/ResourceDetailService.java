@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.MetricDto;
@@ -8,7 +9,6 @@ import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
@@ -45,16 +46,19 @@ public class ResourceDetailService {
 
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
-    private final CloudListService cloudListService; // To find regions
+    private final CloudListService cloudListService;
+    private final DatabaseCacheService dbCache;
 
     @Autowired
     public ResourceDetailService(
             CloudAccountRepository cloudAccountRepository,
             AwsClientProvider awsClientProvider,
-            @Lazy CloudListService cloudListService) {
+            @Lazy CloudListService cloudListService,
+            DatabaseCacheService dbCache) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.cloudListService = cloudListService;
+        this.dbCache = dbCache;
     }
 
     private CloudAccount getAccount(String accountId) {
@@ -63,26 +67,43 @@ public class ResourceDetailService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "resourceDetail", key = "#accountId + '-' + #service + '-' + #resourceId")
-    public CompletableFuture<ResourceDetailDto> getResourceDetails(String accountId, String service, String resourceId) {
+    public CompletableFuture<ResourceDetailDto> getResourceDetails(String accountId, String service, String resourceId, boolean forceRefresh) {
+        String cacheKey = "resourceDetail-" + accountId + "-" + service + "-" + resourceId;
+        if (!forceRefresh) {
+            Optional<ResourceDetailDto> cachedData = dbCache.get(cacheKey, ResourceDetailDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
         logger.info("Fetching LIVE details for resource: {} (Service: {}) in account {}", resourceId, service, accountId);
 
+        CompletableFuture<ResourceDetailDto> future;
         switch (service) {
             case "EC2 Instance":
-                return getEc2InstanceDetails(account, resourceId);
+                future = getEc2InstanceDetails(account, resourceId);
+                break;
             case "RDS Instance":
-                return getRdsInstanceDetails(account, resourceId);
+                future = getRdsInstanceDetails(account, resourceId);
+                break;
             case "S3 Bucket":
-                return getS3BucketDetails(account, resourceId);
+                future = getS3BucketDetails(account, resourceId);
+                break;
             case "EBS Volume":
-                return getEbsVolumeDetails(account, resourceId);
+                future = getEbsVolumeDetails(account, resourceId);
+                break;
             default:
                 logger.warn("Live data fetching is not implemented for service: {}", service);
-                CompletableFuture<ResourceDetailDto> future = new CompletableFuture<>();
+                future = new CompletableFuture<>();
                 future.completeExceptionally(new UnsupportedOperationException("Live data fetching is not yet implemented for service: " + service));
                 return future;
         }
+        
+        return future.thenApply(details -> {
+            dbCache.put(cacheKey, details);
+            return details;
+        });
     }
 
     private CompletableFuture<ResourceDetailDto> getEc2InstanceDetails(CloudAccount account, String resourceId) {
@@ -113,16 +134,9 @@ public class ResourceDetailService {
                         .collect(Collectors.toList());
 
                 return new ResourceDetailDto(
-                        instance.instanceId(),
-                        getTagName(instance.tags(), instance.instanceId()),
-                        "EC2 Instance",
-                        instanceRegion,
-                        instance.state().nameAsString(),
-                        instance.launchTime(),
-                        details,
-                        tags,
-                        metricsFuture.join(),
-                        eventsFuture.join()
+                        instance.instanceId(), getTagName(instance.tags(), instance.instanceId()), "EC2 Instance",
+                        instanceRegion, instance.state().nameAsString(), instance.launchTime(),
+                        details, tags, metricsFuture.join(), eventsFuture.join()
                 );
             } catch (Exception e) {
                 logger.error("Failed to fetch live details for EC2 instance {}", resourceId, e);
@@ -182,12 +196,9 @@ public class ResourceDetailService {
                 details.put("Region", bucketRegion);
 
                 return new ResourceDetailDto(
-                        resourceId, resourceId, "S3 Bucket",
-                        bucketRegion, "Available", creationDate,
-                        details, Collections.emptyList(),
-                        Collections.emptyMap(), Collections.emptyList()
+                        resourceId, resourceId, "S3 Bucket", bucketRegion, "Available", creationDate,
+                        details, Collections.emptyList(), Collections.emptyMap(), Collections.emptyList()
                 );
-
             } catch (Exception e) {
                 logger.error("Failed to fetch live details for S3 bucket {}", resourceId, e);
                 throw new CompletionException(e);
@@ -222,16 +233,9 @@ public class ResourceDetailService {
                         .collect(Collectors.toList());
 
                 return new ResourceDetailDto(
-                        volume.volumeId(),
-                        getTagName(volume.tags(), volume.volumeId()),
-                        "EBS Volume",
-                        ebsRegion,
-                        volume.stateAsString(),
-                        volume.createTime(),
-                        details,
-                        tags,
-                        Collections.emptyMap(),
-                        Collections.emptyList()
+                        volume.volumeId(), getTagName(volume.tags(), volume.volumeId()), "EBS Volume",
+                        ebsRegion, volume.stateAsString(), volume.createTime(),
+                        details, tags, Collections.emptyMap(), Collections.emptyList()
                 );
             } catch (Exception e) {
                 logger.error("Failed to fetch live details for EBS volume {}", resourceId, e);
@@ -242,7 +246,7 @@ public class ResourceDetailService {
 
     public String findResourceRegion(CloudAccount account, String serviceType, String resourceId) {
         logger.debug("Attempting to find region for {} resource {}", serviceType, resourceId);
-        List<DashboardData.RegionStatus> activeRegions = cloudListService.getRegionStatusForAccount(account).join();
+        List<DashboardData.RegionStatus> activeRegions = cloudListService.getRegionStatusForAccount(account, false).join();
 
         for (DashboardData.RegionStatus region : activeRegions) {
             try {
@@ -276,14 +280,11 @@ public class ResourceDetailService {
         List<Region> allPossibleRegions = baseEc2Client.describeRegions().regions();
 
         for (Region region : allPossibleRegions) {
-            if ("not-opted-in".equals(region.optInStatus())) {
-                continue;
-            }
+            if ("not-opted-in".equals(region.optInStatus())) continue;
             try {
                 Ec2Client regionEc2Client = awsClientProvider.getEc2Client(account, region.regionName());
                 DescribeInstancesRequest request = DescribeInstancesRequest.builder().instanceIds(instanceId).build();
                 DescribeInstancesResponse response = regionEc2Client.describeInstances(request);
-
                 if (response.hasReservations() && !response.reservations().isEmpty()) {
                     logger.info("Found instance {} in region {}", instanceId, region.regionName());
                     return region.regionName();
@@ -292,7 +293,6 @@ public class ResourceDetailService {
                 logger.trace("Instance {} not found in region {}: {}", instanceId, region.regionName(), e.getMessage());
             }
         }
-        
         logger.warn("Could not find instance {} in any region.", instanceId);
         return null;
     }
@@ -321,20 +321,9 @@ public class ResourceDetailService {
         logger.info("Fetching CloudTrail events for resource {} in region {}", resourceId, region);
         CloudTrailClient trailClient = awsClientProvider.getCloudTrailClient(account, region);
         try {
-            LookupAttribute lookupAttribute = LookupAttribute.builder()
-                    .attributeKey("ResourceName")
-                    .attributeValue(resourceId)
-                    .build();
-
-            LookupEventsRequest request = LookupEventsRequest.builder()
-                    .lookupAttributes(lookupAttribute)
-                    .maxResults(10)
-                    .build();
-
-            return trailClient.lookupEvents(request).events().stream()
-                    .map(this::mapToCloudTrailEventDto)
-                    .collect(Collectors.toList());
-
+            LookupAttribute lookupAttribute = LookupAttribute.builder().attributeKey("ResourceName").attributeValue(resourceId).build();
+            LookupEventsRequest request = LookupEventsRequest.builder().lookupAttributes(lookupAttribute).maxResults(10).build();
+            return trailClient.lookupEvents(request).events().stream().map(this::mapToCloudTrailEventDto).collect(Collectors.toList());
         } catch (Exception e) {
             logger.error("Could not fetch CloudTrail events for resource {}", resourceId, e);
             return new ArrayList<>();
@@ -343,15 +332,10 @@ public class ResourceDetailService {
     
     private ResourceDetailDto.CloudTrailEventDto mapToCloudTrailEventDto(Event event) {
         return new ResourceDetailDto.CloudTrailEventDto(
-                event.eventId(),
-                event.eventName(),
-                event.eventTime(),
-                event.username(),
-                "N/A", 
-event.readOnly() != null && Boolean.parseBoolean(event.readOnly()) 
+            event.eventId(), event.eventName(), event.eventTime(),
+            event.username(), "N/A", event.readOnly() != null && Boolean.parseBoolean(event.readOnly()) 
        );
     }
-
     
     private GetMetricDataRequest buildMetricDataRequest(String resourceId, String metricName, String namespace, String dimensionName) { 
         Metric metric = Metric.builder().namespace(namespace).metricName(metricName).dimensions(Dimension.builder().name(dimensionName).value(resourceId).build()).build(); 

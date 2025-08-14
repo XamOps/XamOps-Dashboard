@@ -27,8 +27,10 @@ public class CloudmapController {
     }
 
     @GetMapping("/vpcs")
-    public CompletableFuture<ResponseEntity<List<ResourceDto>>> getVpcs(@RequestParam String accountId) {
-        return cloudMapService.getVpcListForCloudmap(accountId)
+    public CompletableFuture<ResponseEntity<List<ResourceDto>>> getVpcs(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return cloudMapService.getVpcListForCloudmap(accountId, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Failed to get VPC list for cloudmap for account {}", accountId, ex);
@@ -40,8 +42,9 @@ public class CloudmapController {
     public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> getGraphData(
             @RequestParam String accountId,
             @RequestParam(required = false) String vpcId,
-            @RequestParam(required = false) String region) {
-        return cloudMapService.getGraphData(accountId, vpcId, region)
+            @RequestParam(required = false) String region,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return cloudMapService.getGraphData(accountId, vpcId, region, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Failed to get graph data for account {} and VPC {}", accountId, vpcId, ex);

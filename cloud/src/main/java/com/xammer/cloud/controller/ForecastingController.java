@@ -38,7 +38,8 @@ public class ForecastingController {
     public CompletableFuture<ResponseEntity<String>> getCostForecastData(
             @RequestParam String accountId,
             @RequestParam(defaultValue = "30") int periods,
-            @RequestParam(required = false) String serviceName) {
+            @RequestParam(required = false) String serviceName,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
 
         int historicalDays = Math.min(periods * 3, 180);
 
@@ -46,7 +47,8 @@ public class ForecastingController {
                 accountId,
                 "ALL".equalsIgnoreCase(serviceName) ? null : serviceName,
                 null,
-                historicalDays
+                historicalDays,
+                forceRefresh
         ).thenApply(historicalCostData -> {
             if (historicalCostData == null || historicalCostData.getLabels() == null || historicalCostData.getLabels().isEmpty()) {
                 logger.warn("No historical cost data found for account {} to generate a forecast.", accountId);

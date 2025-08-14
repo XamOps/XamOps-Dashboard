@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -28,8 +27,10 @@ public class RightsizingController {
     }
 
     @GetMapping("/recommendations")
-    public CompletableFuture<ResponseEntity<List<DashboardData.OptimizationRecommendation>>> getRecommendations(@RequestParam String accountId) {
-        return optimizationService.getAllOptimizationRecommendations(accountId)
+    public CompletableFuture<ResponseEntity<List<DashboardData.OptimizationRecommendation>>> getRecommendations(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return optimizationService.getAllOptimizationRecommendations(accountId, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching optimization recommendations for account {}", accountId, ex);

@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.ByteArrayInputStream;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -48,8 +47,8 @@ public class SecurityController {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
-        return cloudListService.getRegionStatusForAccount(account)
-                .thenCompose(activeRegions -> securityService.getComprehensiveSecurityFindings(account, activeRegions))
+        return cloudListService.getRegionStatusForAccount(account, true)
+                .thenCompose((List<DashboardData.RegionStatus> activeRegions) -> securityService.getComprehensiveSecurityFindings(account, activeRegions, true))
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching security findings for account {}", accountId, ex);
@@ -62,8 +61,8 @@ public class SecurityController {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
-        return cloudListService.getRegionStatusForAccount(account)
-                .thenCompose(activeRegions -> securityService.getComprehensiveSecurityFindings(account, activeRegions))
+        return cloudListService.getRegionStatusForAccount(account, true)
+                .thenCompose((List<DashboardData.RegionStatus> activeRegions) -> securityService.getComprehensiveSecurityFindings(account, activeRegions, true))
                 .thenApply(findings -> {
                     ByteArrayInputStream in = excelExportService.exportSecurityFindingsToExcel(findings);
                     HttpHeaders headers = new HttpHeaders();

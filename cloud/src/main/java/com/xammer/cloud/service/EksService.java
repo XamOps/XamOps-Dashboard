@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.k8s.*;
@@ -17,7 +18,6 @@ import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -40,14 +40,17 @@ public class EksService {
 
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
-    private final CloudListService cloudListService; // ADDED
+    private final CloudListService cloudListService;
     private final String configuredRegion;
 
     @Autowired
-    public EksService(CloudAccountRepository cloudAccountRepository, AwsClientProvider awsClientProvider, @Lazy CloudListService cloudListService) { // MODIFIED
+    private DatabaseCacheService dbCache; // Inject the new database cache service
+
+    @Autowired
+    public EksService(CloudAccountRepository cloudAccountRepository, AwsClientProvider awsClientProvider, @Lazy CloudListService cloudListService) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
-        this.cloudListService = cloudListService; // ADDED
+        this.cloudListService = cloudListService;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
     }
 
@@ -62,15 +65,20 @@ public class EksService {
     }
 
     @Async
-    @Cacheable(value = "eksClusters", key = "#accountId")
-    public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId) {
+    public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId, boolean forceRefresh) {
+        String cacheKey = "eksClusters-" + accountId;
+        if (!forceRefresh) {
+            Optional<List<K8sClusterInfo>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
         logger.info("Fetching EKS cluster list across all active regions for account {}...", account.getAwsAccountId());
 
-        // CORRECTED LOGIC: First, find all active regions for the account
-        return cloudListService.getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions -> {
             
-            // Create a parallel task for each active region
             List<CompletableFuture<List<K8sClusterInfo>>> futures = activeRegions.stream()
                 .map(region -> CompletableFuture.supplyAsync(() -> {
                     try {
@@ -95,12 +103,15 @@ public class EksService {
                 }))
                 .collect(Collectors.toList());
 
-            // Combine the results from all regional scans
             return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> futures.stream()
-                    .map(CompletableFuture::join)
-                    .flatMap(List::stream)
-                    .collect(Collectors.toList()));
+                .thenApply(v -> {
+                    List<K8sClusterInfo> result = futures.stream()
+                        .map(CompletableFuture::join)
+                        .flatMap(List::stream)
+                        .collect(Collectors.toList());
+                    dbCache.put(cacheKey, result); // Save to database cache
+                    return result;
+                });
         });
     }
 
@@ -213,12 +224,16 @@ public class EksService {
         }
     }
 
-    // --- Existing methods remain unchanged ---
-
-    // 2. Fetch nodes and metrics (CPU %, Memory %)
     @Async
-    @Cacheable(value = "k8sNodes", key = "#accountId + '-' + #clusterName")
-    public CompletableFuture<List<K8sNodeInfo>> getK8sNodes(String accountId, String clusterName) {
+    public CompletableFuture<List<K8sNodeInfo>> getK8sNodes(String accountId, String clusterName, boolean forceRefresh) {
+        String cacheKey = "k8sNodes-" + accountId + "-" + clusterName;
+        if (!forceRefresh) {
+            Optional<List<K8sNodeInfo>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         logger.info("Fetching nodes for cluster: {} in account: {}", clusterName, accountId);
         CloudAccount account = getAccount(accountId);
         String region;
@@ -237,21 +252,17 @@ public class EksService {
         List<K8sNodeInfo> nodeInfos = nodeNames.stream().map(nodeName -> {
             Map<String, Double> cpuMemory = fetchCpuMemoryMetrics(account, clusterName, nodeName, region);
             return new K8sNodeInfo(
-                    nodeName,
-                    "Ready",
-                    "unknown",
-                    "unknown",
-                    "unknown",
-                    "unknown",
+                    nodeName, "Ready", "unknown", "unknown",
+                    "unknown", "unknown",
                     formatPercentage(cpuMemory.getOrDefault("cpu", 0.0)),
                     formatPercentage(cpuMemory.getOrDefault("memory", 0.0))
             );
         }).collect(Collectors.toList());
-
+        
+        dbCache.put(cacheKey, nodeInfos); // Save to database cache
         return CompletableFuture.completedFuture(nodeInfos);
     }
     
-    // Add this new method
     @Async
     public CompletableFuture<ClusterUsageDto> getClusterUsageFromKubeconfig(String kubeConfigYaml) {
         if (kubeConfigYaml == null || kubeConfigYaml.isBlank()) {
@@ -260,7 +271,6 @@ public class EksService {
         }
         ClusterUsageDto dto = new ClusterUsageDto();
         try (KubernetesClient client = getClientFromKubeconfig(kubeConfigYaml)) {
-            // 1. Fetch Nodes and sum CPU/Memory capacity
             List<Node> nodes = client.nodes().list().getItems();
             double cpuTotal = 0;
             double memTotal = 0;
@@ -273,13 +283,9 @@ public class EksService {
             dto.setMemoryTotal(memTotal);
             dto.setNodeCount(nodes.size());
 
-            // 2. Fetch Pods and count, sum requests and limits
             List<Pod> pods = client.pods().inAnyNamespace().list().getItems();
             dto.setPodCount(pods.size());
-            double cpuRequests = 0;
-            double cpuLimits = 0;
-            double memRequests = 0;
-            double memLimits = 0;
+            double cpuRequests = 0, cpuLimits = 0, memRequests = 0, memLimits = 0;
             for (Pod pod : pods) {
                 if (pod.getSpec() == null) continue;
                 for (Container container : pod.getSpec().getContainers()) {
@@ -297,17 +303,12 @@ public class EksService {
             dto.setMemoryRequests(memRequests);
             dto.setMemoryLimits(memLimits);
 
-            // 3. Fetch live CPU/Memory usage from metrics.k8s.io API via raw custom resources
             try {
                 ResourceDefinitionContext nodeMetricsContext = new ResourceDefinitionContext.Builder()
-                        .withGroup("metrics.k8s.io")
-                        .withVersion("v1beta1")
-                        .withPlural("nodes")
-                        .build();
+                        .withGroup("metrics.k8s.io").withVersion("v1beta1").withPlural("nodes").build();
                 var genericResource = client.genericKubernetesResources(nodeMetricsContext);
                 var nodeMetricsList = genericResource.list();
-                double cpuUsage = 0;
-                double memUsage = 0;
+                double cpuUsage = 0, memUsage = 0;
                 if (nodeMetricsList != null && nodeMetricsList.getItems() != null) {
                     for (var item : nodeMetricsList.getItems()) {
                         Map<String, Object> usage = (Map<String, Object>) item.getAdditionalProperties().get("usage");
@@ -320,13 +321,10 @@ public class EksService {
                 dto.setCpuUsage(cpuUsage);
                 dto.setMemoryUsage(memUsage);
             } catch (Exception e) {
-                // If metrics API is missing or error occurs, usage remains zero
                 dto.setCpuUsage(0);
                 dto.setMemoryUsage(0);
             }
         } catch (Exception e) {
-            // Log error and return empty dto or null
-            // logger.error("Error fetching cluster usage", e);
             return CompletableFuture.completedFuture(null);
         }
         return CompletableFuture.completedFuture(dto);
@@ -350,9 +348,6 @@ public class EksService {
         else return Double.parseDouble(s)/1024/1024;
     }
 
-    // --- Utilities ---
-
-    // Fetch node names from CloudWatch ContainerInsights metrics
     private List<String> fetchNodeNames(CloudAccount account, String clusterName, String region) {
         try {
             CloudWatchClient cloudWatch = awsClientProvider.getCloudWatchClient(account, region);
@@ -374,56 +369,28 @@ public class EksService {
         }
     }
 
-    // Fetch CPU and Memory utilization percentages for a node
     private Map<String, Double> fetchCpuMemoryMetrics(CloudAccount account, String clusterName, String nodeName, String region) {
         try {
             CloudWatchClient cloudWatch = awsClientProvider.getCloudWatchClient(account, region);
-
             Instant now = Instant.now();
             Instant start = now.minus(5, ChronoUnit.MINUTES);
 
             MetricDataQuery cpuQuery = MetricDataQuery.builder()
-                    .id("cpu")
-                    .metricStat(MetricStat.builder()
-                            .metric(Metric.builder()
-                                    .namespace("ContainerInsights")
-                                    .metricName("node_cpu_utilization")
-                                    .dimensions(
-                                            Dimension.builder().name("ClusterName").value(clusterName).build(),
-                                            Dimension.builder().name("NodeName").value(nodeName).build()
-                                    )
-                                    .build())
-                            .period(60)
-                            .stat("Average")
-                            .build())
-                    .returnData(true)
-                    .build();
-
+                    .id("cpu").metricStat(MetricStat.builder()
+                            .metric(Metric.builder().namespace("ContainerInsights").metricName("node_cpu_utilization")
+                                    .dimensions(Dimension.builder().name("ClusterName").value(clusterName).build(),
+                                                Dimension.builder().name("NodeName").value(nodeName).build()).build())
+                            .period(60).stat("Average").build()).returnData(true).build();
             MetricDataQuery memQuery = MetricDataQuery.builder()
-                    .id("memory")
-                    .metricStat(MetricStat.builder()
-                            .metric(Metric.builder()
-                                    .namespace("ContainerInsights")
-                                    .metricName("node_memory_utilization")
-                                    .dimensions(
-                                            Dimension.builder().name("ClusterName").value(clusterName).build(),
-                                            Dimension.builder().name("NodeName").value(nodeName).build()
-                                    )
-                                    .build())
-                            .period(60)
-                            .stat("Average")
-                            .build())
-                    .returnData(true)
-                    .build();
+                    .id("memory").metricStat(MetricStat.builder()
+                            .metric(Metric.builder().namespace("ContainerInsights").metricName("node_memory_utilization")
+                                    .dimensions(Dimension.builder().name("ClusterName").value(clusterName).build(),
+                                                Dimension.builder().name("NodeName").value(nodeName).build()).build())
+                            .period(60).stat("Average").build()).returnData(true).build();
 
             GetMetricDataRequest request = GetMetricDataRequest.builder()
-                    .startTime(start)
-                    .endTime(now)
-                    .metricDataQueries(cpuQuery, memQuery)
-                    .build();
-
+                    .startTime(start).endTime(now).metricDataQueries(cpuQuery, memQuery).build();
             GetMetricDataResponse response = cloudWatch.getMetricData(request);
-
             Map<String, Double> results = new HashMap<>();
             for (MetricDataResult result : response.metricDataResults()) {
                 if (result.values() != null && !result.values().isEmpty()) {
@@ -437,7 +404,6 @@ public class EksService {
         }
     }
 
-    // Check if Container Insights logs exist for cluster -> determines connection state
     private boolean checkContainerInsightsStatus(CloudAccount account, String clusterName, String region) {
         logger.info("Checking Container Insights status for cluster {} in region {}", clusterName, region);
         try {

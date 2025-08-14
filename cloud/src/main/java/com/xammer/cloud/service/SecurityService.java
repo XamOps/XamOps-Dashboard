@@ -1,12 +1,12 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -44,13 +45,16 @@ public class SecurityService {
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
     private final String configuredRegion;
+    private final DatabaseCacheService dbCache;
 
     @Autowired
     public SecurityService(
             CloudAccountRepository cloudAccountRepository,
-            AwsClientProvider awsClientProvider) {
+            AwsClientProvider awsClientProvider,
+            DatabaseCacheService dbCache) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
+        this.dbCache = dbCache;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
     }
 
@@ -60,8 +64,15 @@ public class SecurityService {
     }
     
     @Async("awsTaskExecutor")
-    @Cacheable(value = "securityFindings", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.SecurityFinding>> getComprehensiveSecurityFindings(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "securityFindings-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.SecurityFinding>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         logger.info("Starting comprehensive security scan for account {}...", account.getAwsAccountId());
         List<CompletableFuture<List<DashboardData.SecurityFinding>>> futures = List.of(
             findUsersWithoutMfa(account), findPublicS3Buckets(account), findUnrestrictedSecurityGroups(account, activeRegions),
@@ -69,7 +80,11 @@ public class SecurityService {
             findSoc2ComplianceFindings(account, activeRegions)
         );
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-            .thenApply(v -> futures.stream().map(CompletableFuture::join).flatMap(List::stream).collect(Collectors.toList()));
+            .thenApply(v -> {
+                List<DashboardData.SecurityFinding> result = futures.stream().map(CompletableFuture::join).flatMap(List::stream).collect(Collectors.toList());
+                dbCache.put(cacheKey, result);
+                return result;
+            });
     }
 
     private CompletableFuture<List<DashboardData.SecurityFinding>> findUsersWithoutMfa(CloudAccount account) {
@@ -288,13 +303,9 @@ public class SecurityService {
             List<DashboardData.SecurityFinding> findings = new ArrayList<>();
             
             findings.addAll(checkSoc2AccessControls(account));
-            
             findings.addAll(checkSoc2DataTransmission(account, activeRegions));
-            
             findings.addAll(checkSoc2SystemMonitoring(account, activeRegions));
-            
             findings.addAll(checkSoc2DataClassification(account));
-            
             findings.addAll(checkSoc2LogicalAccessSecurity(account));
             
             return findings;
@@ -306,9 +317,6 @@ public class SecurityService {
         IamClient iam = awsClientProvider.getIamClient(account);
         
         try {
-            // FIX: This check is for the 'root' user, which is a special account
-            // and not an IAM user. The listAccessKeys API will throw a NoSuchEntityException.
-            // We wrap this specific call in a try-catch to prevent a crash and log a warning.
             try {
                 ListAccessKeysResponse rootKeys = iam.listAccessKeys(r -> r.userName("root"));
                 if (rootKeys.hasAccessKeyMetadata() && !rootKeys.accessKeyMetadata().isEmpty()) {
@@ -486,7 +494,6 @@ public class SecurityService {
                                     "KMS key does not have automatic rotation enabled, violating SOC2 key management requirements.", "SOC2", "CC6.8"));
                             }
                         } catch (Exception e) {
-                            // This catch block handles potential permissions errors for getKeyRotationStatus
                             logger.warn("Could not get key rotation status for KMS key {}: {}", key.keyId(), e.getMessage());
                         }
                     }

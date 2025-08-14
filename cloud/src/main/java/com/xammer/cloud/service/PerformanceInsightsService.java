@@ -1,11 +1,11 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.PerformanceInsightDto;
 import com.xammer.cloud.dto.WhatIfScenarioDto;
 import com.xammer.cloud.dto.k8s.K8sClusterInfo;
-import com.xammer.cloud.dto.k8s.K8sNodeInfo;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -20,8 +20,6 @@ import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.elasticloadbalancingv2.model.LoadBalancer;
-import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetGroup;
-import software.amazon.awssdk.services.elasticloadbalancingv2.model.TargetHealthStateEnum;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.lambda.model.FunctionConfiguration;
 import software.amazon.awssdk.services.rds.RdsClient;
@@ -48,6 +46,7 @@ public class PerformanceInsightsService {
     private final PricingService pricingService;
     private final CloudListService cloudListService;
     private final EksService eksService;
+    private final DatabaseCacheService dbCache;
     private final Map<String, PerformanceInsightDto> archivedInsights = new HashMap<>();
 
     @Autowired
@@ -55,21 +54,31 @@ public class PerformanceInsightsService {
                                       AwsClientProvider awsClientProvider,
                                       PricingService pricingService,
                                       @Lazy CloudListService cloudListService,
-                                      @Lazy EksService eksService) {
+                                      @Lazy EksService eksService,
+                                      DatabaseCacheService dbCache) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.pricingService = pricingService;
         this.cloudListService = cloudListService;
         this.eksService = eksService;
+        this.dbCache = dbCache;
     }
 
-    public List<PerformanceInsightDto> getInsights(String accountId, String severity) {
+    public List<PerformanceInsightDto> getInsights(String accountId, String severity, boolean forceRefresh) {
+        String cacheKey = "performanceInsights-" + accountId + "-" + severity;
+        if (!forceRefresh) {
+            Optional<List<PerformanceInsightDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return cachedData.get();
+            }
+        }
+
         logger.info("Starting multi-region performance insights scan for account: {}", accountId);
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
         try {
-            List<DashboardData.RegionStatus> activeRegions = cloudListService.getRegionStatusForAccount(account).get();
+            List<DashboardData.RegionStatus> activeRegions = cloudListService.getRegionStatusForAccount(account, forceRefresh).get();
             logger.info("Found {} active regions to scan for performance insights.", activeRegions.size());
 
             List<CompletableFuture<List<PerformanceInsightDto>>> futures = new ArrayList<>();
@@ -98,7 +107,8 @@ public class PerformanceInsightsService {
             List<PerformanceInsightDto> allInsights = futures.stream()
                     .flatMap(future -> future.join().stream())
                     .collect(Collectors.toList());
-
+            
+            dbCache.put(cacheKey, allInsights); // Save to database cache
             logger.info("Total insights generated across all regions before filtering: {}", allInsights.size());
 
             if (severity != null && !severity.isEmpty() && !"ALL".equalsIgnoreCase(severity)) {
@@ -140,7 +150,15 @@ public class PerformanceInsightsService {
     }
 
 
-     public CompletableFuture<WhatIfScenarioDto> getWhatIfScenario(String accountId, String resourceId, String targetInstanceType) {
+     public CompletableFuture<WhatIfScenarioDto> getWhatIfScenario(String accountId, String resourceId, String targetInstanceType, boolean forceRefresh) {
+        String cacheKey = "whatIfScenario-" + accountId + "-" + resourceId + "-" + targetInstanceType;
+        if (!forceRefresh) {
+            Optional<WhatIfScenarioDto> cachedData = dbCache.get(cacheKey, WhatIfScenarioDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         return CompletableFuture.supplyAsync(() -> {
             CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                     .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
@@ -162,18 +180,20 @@ public class PerformanceInsightsService {
 
             double projectedPeakCpu = peakCpu / 2;
 
-            return new WhatIfScenarioDto(
+            WhatIfScenarioDto result = new WhatIfScenarioDto(
                     resourceId, currentInstanceType, targetInstanceType,
                     currentCost, targetCost, targetCost - currentCost,
                     peakCpu, projectedPeakCpu,
                     "Projected peak CPU utilization would be approximately " + String.format("%.1f", projectedPeakCpu) + "%."
             );
+            dbCache.put(cacheKey, result);
+            return result;
         });
     }
 
     private String findInstanceRegion(CloudAccount account, String instanceId) {
         try {
-            List<DashboardData.RegionStatus> activeRegions = cloudListService.getRegionStatusForAccount(account).get();
+            List<DashboardData.RegionStatus> activeRegions = cloudListService.getRegionStatusForAccount(account, false).get();
             for (DashboardData.RegionStatus region : activeRegions) {
                 Ec2Client ec2Client = awsClientProvider.getEc2Client(account, region.getRegionId());
                 DescribeInstancesResponse response = ec2Client.describeInstances(r -> r.instanceIds(instanceId));
@@ -196,7 +216,7 @@ public class PerformanceInsightsService {
                     .namespace("AWS/EC2")
                     .metricName("CPUUtilization")
                     .dimensions(Dimension.builder().name("InstanceId").value(instanceId).build())
-                    .startTime(startTime).endTime(endTime).period(3600) // Hourly
+                    .startTime(startTime).endTime(endTime).period(3600)
                     .statistics(Statistic.MAXIMUM).build();
 
             GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
@@ -216,21 +236,14 @@ public class PerformanceInsightsService {
 
         for (PerformanceInsightDto insight : insights) {
             switch (insight.getSeverity()) {
-                case CRITICAL:
-                    score -= criticalWeight;
-                    break;
-                case WARNING:
-                    score -= warningWeight;
-                    break;
-                case WEAK_WARNING:
-                    score -= weakWarningWeight;
-                    break;
+                case CRITICAL: score -= criticalWeight; break;
+                case WARNING: score -= warningWeight; break;
+                case WEAK_WARNING: score -= weakWarningWeight; break;
             }
         }
         return Math.max(0, score);
     }
 
-    // ... (getEC2InsightsForRegion, getRDSInsightsForRegion, getLambdaInsightsForRegion, getELBInsightsForRegion remain the same)
 private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account, String regionId) {
         logger.info("Checking for EC2 performance insights in region {}...", regionId);
         List<PerformanceInsightDto> insights = new ArrayList<>();
@@ -301,7 +314,7 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
             for (FunctionConfiguration function : lambdaClient.listFunctions().functions()) {
                 long activeVersions = lambdaClient.listVersionsByFunction(v -> v.functionName(function.functionName()))
                         .versions().stream().filter(v -> !"$LATEST".equals(v.version())).count();
-                if (activeVersions > 5) { // Example threshold
+                if (activeVersions > 5) {
                     insights.add(new PerformanceInsightDto(
                             "lambda-" + function.functionName() + "-versions",
                             "Lambda function " + function.functionName() + " has a high number of versions.",
@@ -393,7 +406,7 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
         logger.info("Checking for Container performance insights in region {}...", regionId);
         List<PerformanceInsightDto> insights = new ArrayList<>();
         try {
-            List<K8sClusterInfo> clusters = eksService.getEksClusterInfo(account.getAwsAccountId()).get();
+            List<K8sClusterInfo> clusters = eksService.getEksClusterInfo(account.getAwsAccountId(), false).get();
             for (K8sClusterInfo cluster : clusters) {
                 if (!"ACTIVE".equalsIgnoreCase(cluster.getStatus())) {
                     insights.add(new PerformanceInsightDto(
@@ -413,36 +426,23 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
         return insights;
     }
     
-
-    // ... (rest of the service file remains the same)
     private double getP95LatencyForALB(CloudWatchClient cloudWatchClient, String loadBalancerArn, int timeRangeHours) {
         try {
             Instant endTime = Instant.now();
             Instant startTime = endTime.minus(timeRangeHours, ChronoUnit.HOURS);
-
-            int period = 300; // 5 minutes in seconds
+            int period = 300;
 
             GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                    .namespace("AWS/ApplicationELB")
-                    .metricName("TargetResponseTime")
-                    .dimensions(Dimension.builder()
-                            .name("LoadBalancer")
-                            .value(extractLoadBalancerName(loadBalancerArn))
-                            .build())
-                    .startTime(startTime)
-                    .endTime(endTime)
-                    .period(period)
-                    .extendedStatistics("p95")
-                    .build();
-
+                    .namespace("AWS/ApplicationELB").metricName("TargetResponseTime")
+                    .dimensions(Dimension.builder().name("LoadBalancer").value(extractLoadBalancerName(loadBalancerArn)).build())
+                    .startTime(startTime).endTime(endTime).period(period).extendedStatistics("p95").build();
             GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
 
             return response.datapoints().stream()
                     .filter(dp -> dp.extendedStatistics().containsKey("p95"))
                     .max(Comparator.comparing(Datapoint::timestamp))
-                    .map(dp -> dp.extendedStatistics().get("p95") * 1000) // Convert to milliseconds
+                    .map(dp -> dp.extendedStatistics().get("p95") * 1000)
                     .orElse(0.0);
-
         } catch (Exception e) {
             logger.error("Could not fetch p95 latency for {}", loadBalancerArn, e);
             return 0.0;
@@ -463,125 +463,16 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
             Instant startTime = endTime.minus(24, ChronoUnit.HOURS);
 
             GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                    .namespace("AWS/ApplicationELB")
-                    .metricName("RequestCount")
-                    .dimensions(Dimension.builder()
-                            .name("LoadBalancer")
-                            .value(extractLoadBalancerName(loadBalancerArn))
-                            .build())
-                    .startTime(startTime)
-                    .endTime(endTime)
-                    .period(86400) // 24 hours
-                    .statistics(Statistic.SUM)
-                    .build();
-
+                    .namespace("AWS/ApplicationELB").metricName("RequestCount")
+                    .dimensions(Dimension.builder().name("LoadBalancer").value(extractLoadBalancerName(loadBalancerArn)).build())
+                    .startTime(startTime).endTime(endTime).period(86400).statistics(Statistic.SUM).build();
             GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
-
-            return response.datapoints().stream()
-                    .mapToDouble(Datapoint::sum)
-                    .sum();
+            return response.datapoints().stream().mapToDouble(Datapoint::sum).sum();
         } catch (Exception e) {
             logger.debug("Could not fetch request count for {}", loadBalancerArn, e);
             return 0.0;
         }
     }
-
-    // private List<PerformanceInsightDto> getEBSInsightsForRegion(CloudAccount account, String regionId) {
-    //     logger.info("Checking for EBS performance insights in region {}...", regionId);
-    //     List<PerformanceInsightDto> insights = new ArrayList<>();
-    //     try {
-    //         Ec2Client ec2Client = awsDataService.getEc2Client(account.getAwsAccountId(), regionId);
-    //         CloudWatchClient cloudWatchClient = awsDataService.getCloudWatchClient(account.getAwsAccountId(), regionId);
-
-    //         DescribeVolumesResponse volumesResponse = ec2Client
-    //                 .describeVolumes(req -> req.filters(f -> f.name("status").values("in-use")));
-
-    //         for (Volume volume : volumesResponse.volumes()) {
-    //             double readOps = getSumMetric(cloudWatchClient, "AWS/EBS", "VolumeReadOps", "VolumeId",
-    //                     volume.volumeId());
-    //             double writeOps = getSumMetric(cloudWatchClient, "AWS/EBS", "VolumeWriteOps", "VolumeId",
-    //                     volume.volumeId());
-
-    //             if (readOps < 100 && writeOps < 100) {
-    //                 insights.add(new PerformanceInsightDto(
-    //                         "ebs-" + volume.volumeId() + "-low-iops",
-    //                         "EBS Volume " + volume.volumeId() + " has very low activity.",
-    //                         "This volume may be over-provisioned for its workload.",
-    //                         PerformanceInsightDto.InsightSeverity.WARNING,
-    //                         PerformanceInsightDto.InsightCategory.COST,
-    //                         account.getAwsAccountId(), 1, "EBS", volume.volumeId(),
-    //                         "Consider switching to a lower-cost volume type (e.g., gp2 to gp3) or reducing provisioned IOPS.",
-    //                         "/docs/ebs-optimization",
-    //                         calculateEBSSavings(volume),
-    //                         regionId, Instant.now().toString()));
-    //             }
-    //         }
-    //     } catch (Exception e) {
-    //         logger.error("Error fetching EBS insights for account: {} in region {}", account.getAwsAccountId(),
-    //                 regionId, e);
-    //     }
-    //     return insights;
-    // }
-
-    // private List<PerformanceInsightDto> getS3Insights(CloudAccount account) {
-    //     logger.info("Checking for all S3 performance insights...");
-    //     List<PerformanceInsightDto> insights = new ArrayList<>();
-    //     S3Client s3Client = awsClientProvider.getS3Client(account, "us-east-1");
-    //     Map<String, String> bucketRegionCache = new HashMap<>();
-
-    //     try {
-    //         List<Bucket> buckets = s3Client.listBuckets().buckets();
-    //         for (Bucket bucket : buckets) {
-    //             try {
-    //                 String bucketRegion = getBucketRegion(bucket.name(), s3Client, bucketRegionCache);
-    //                 S3Client regionalS3Client = awsClientProvider.getS3Client(account, bucketRegion);
-    //                 CloudWatchClient regionalCloudWatchClient = awsClientProvider.getCloudWatchClient(account, bucketRegion);
-
-    //                 try {
-    //                     regionalS3Client.getBucketLifecycleConfiguration(r -> r.bucket(bucket.name()));
-    //                 } catch (S3Exception e) {
-    //                     if ("NoSuchLifecycleConfiguration".equals(e.awsErrorDetails().errorCode())) {
-    //                         double bucketSize = getBucketSize(regionalCloudWatchClient, bucket.name());
-    //                         if (bucketSize > 1_000_000_000) {
-    //                             insights.add(new PerformanceInsightDto(
-    //                                     "s3-" + bucket.name() + "-no-lifecycle",
-    //                                     "S3 Bucket " + bucket.name() + " does not have a lifecycle policy configured.",
-    //                                     "Objects may not be transitioned to more cost-effective storage tiers automatically.",
-    //                                     PerformanceInsightDto.InsightSeverity.WEAK_WARNING,
-    //                                     PerformanceInsightDto.InsightCategory.COST,
-    //                                     account.getAwsAccountId(), 1, "S3", bucket.name(),
-    //                                     "Consider adding a lifecycle policy to transition or expire objects.",
-    //                                     "/docs/s3-lifecycle",
-    //                                     calculateS3Savings(bucketSize), "Global", Instant.now().toString()));
-    //                         }
-    //                     } else {
-    //                         throw e;
-    //                     }
-    //                 }
-
-    //                 double bucketSize = getBucketSize(regionalCloudWatchClient, bucket.name());
-    //                 if (bucketSize > 1000000) {
-    //                     insights.add(new PerformanceInsightDto(
-    //                             "s3-" + bucket.name() + "-storage-class",
-    //                             "Consider S3 Intelligent-Tiering for bucket " + bucket.name(),
-    //                             "Potential savings by optimizing storage classes.",
-    //                             PerformanceInsightDto.InsightSeverity.WEAK_WARNING,
-    //                             PerformanceInsightDto.InsightCategory.COST,
-    //                             account.getAwsAccountId(), 1, "S3", bucket.name(),
-    //                             "Move objects to Intelligent-Tiering to save on storage costs.",
-    //                             "/docs/s3-intelligent-tiering",
-    //                             calculateS3Savings(bucketSize), "Global", Instant.now().toString()));
-    //                 }
-
-    //             } catch (Exception e) {
-    //                 logger.error("Failed to process S3 bucket insights for {}: {}", bucket.name(), e.getMessage());
-    //             }
-    //         }
-    //     } catch (Exception e) {
-    //         logger.error("Failed to list S3 buckets for account {}: {}", account.getAwsAccountId(), e);
-    //     }
-    //     return insights;
-    // }
 
     private String getBucketRegion(String bucketName, S3Client s3Client, Map<String, String> bucketRegionCache) {
         if (bucketRegionCache.containsKey(bucketName)) {
@@ -618,16 +509,11 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
             Instant startTime = endTime.minus(24, ChronoUnit.HOURS);
 
             GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                    .namespace(namespace)
-                    .metricName(metricName)
+                    .namespace(namespace).metricName(metricName)
                     .dimensions(Dimension.builder().name(dimensionName).value(dimensionValue).build())
-                    .startTime(startTime).endTime(endTime).period(86400)
-                    .statistics(Statistic.AVERAGE).build();
-
+                    .startTime(startTime).endTime(endTime).period(86400).statistics(Statistic.AVERAGE).build();
             GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
-
-            return response.datapoints().stream()
-                    .mapToDouble(Datapoint::average).average().orElse(0.0);
+            return response.datapoints().stream().mapToDouble(Datapoint::average).average().orElse(0.0);
         } catch (Exception e) {
             logger.debug("Could not fetch metric {} for {}", metricName, dimensionValue, e);
             return 0.0;
@@ -641,16 +527,11 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
             Instant startTime = endTime.minus(24, ChronoUnit.HOURS);
 
             GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                    .namespace(namespace)
-                    .metricName(metricName)
+                    .namespace(namespace).metricName(metricName)
                     .dimensions(Dimension.builder().name(dimensionName).value(dimensionValue).build())
-                    .startTime(startTime).endTime(endTime).period(86400)
-                    .statistics(Statistic.SUM).build();
-
+                    .startTime(startTime).endTime(endTime).period(86400).statistics(Statistic.SUM).build();
             GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
-
-            return response.datapoints().stream()
-                    .mapToDouble(Datapoint::sum).sum();
+            return response.datapoints().stream().mapToDouble(Datapoint::sum).sum();
         } catch (Exception e) {
             logger.debug("Could not fetch metric {} for {}", metricName, dimensionValue, e);
             return 0.0;
@@ -663,24 +544,12 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
             Instant startTime = endTime.minus(1, ChronoUnit.DAYS);
 
             GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                    .namespace("AWS/S3")
-                    .metricName("BucketSizeBytes")
-                    .dimensions(
-                            Dimension.builder().name("BucketName").value(bucketName).build(),
-                            Dimension.builder().name("StorageType").value("StandardStorage").build())
-                    .startTime(startTime)
-                    .endTime(endTime)
-                    .period(86400)
-                    .statistics(Statistic.AVERAGE)
-                    .build();
-
+                    .namespace("AWS/S3").metricName("BucketSizeBytes")
+                    .dimensions(Dimension.builder().name("BucketName").value(bucketName).build(),
+                                Dimension.builder().name("StorageType").value("StandardStorage").build())
+                    .startTime(startTime).endTime(endTime).period(86400).statistics(Statistic.AVERAGE).build();
             GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
-
-            return response.datapoints().stream()
-                    .mapToDouble(Datapoint::average)
-                    .max()
-                    .orElse(0.0);
-
+            return response.datapoints().stream().mapToDouble(Datapoint::average).max().orElse(0.0);
         } catch (Exception e) {
             logger.debug("Could not fetch bucket size for {}", bucketName);
             return 0.0;
@@ -698,26 +567,18 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
     }
 
     private double calculateEC2Savings(String instanceType) {
-        Map<String, Double> costs = Map.of(
-                "t2.micro", 8.5, "t2.small", 17.0, "t3.medium", 30.0,
-                "t3.large", 60.0, "m5.large", 70.0, "m5.xlarge", 140.0);
+        Map<String, Double> costs = Map.of("t2.micro", 8.5, "t2.small", 17.0, "t3.medium", 30.0, "t3.large", 60.0, "m5.large", 70.0, "m5.xlarge", 140.0);
         return costs.getOrDefault(instanceType, 50.0);
     }
 
     private double calculateRDSSavings(String instanceClass) {
-        Map<String, Double> costs = Map.of(
-                "db.t3.micro", 15.0, "db.t3.small", 30.0, "db.t3.medium", 60.0,
-                "db.m5.large", 120.0, "db.m5.xlarge", 240.0);
+        Map<String, Double> costs = Map.of("db.t3.micro", 15.0, "db.t3.small", 30.0, "db.t3.medium", 60.0, "db.m5.large", 120.0, "db.m5.xlarge", 240.0);
         return costs.getOrDefault(instanceClass, 80.0);
     }
 
     private double calculateEBSSavings(Volume volume) {
-        if (volume.volumeTypeAsString().equals("gp2")) {
-            return volume.size() * 0.01;
-        }
-        if (volume.volumeTypeAsString().equals("io1") || volume.volumeTypeAsString().equals("io2")) {
-            return volume.size() * 0.05;
-        }
+        if (volume.volumeTypeAsString().equals("gp2")) return volume.size() * 0.01;
+        if (volume.volumeTypeAsString().equals("io1") || volume.volumeTypeAsString().equals("io2")) return volume.size() * 0.05;
         return volume.size() * 0.02;
     }
 
@@ -725,8 +586,16 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
         return 17.0;
     }
 
-    public Map<String, Object> getInsightsSummary(String accountId) {
-        List<PerformanceInsightDto> allInsights = getInsights(accountId, "ALL");
+    public Map<String, Object> getInsightsSummary(String accountId, boolean forceRefresh) {
+        String cacheKey = "insightsSummary-" + accountId;
+        if (!forceRefresh) {
+            Optional<Map<String, Object>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return cachedData.get();
+            }
+        }
+        
+        List<PerformanceInsightDto> allInsights = getInsights(accountId, "ALL", forceRefresh);
         List<PerformanceInsightDto> insightsForSummary = allInsights.stream()
                 .filter(insight -> insight.getCategory() != PerformanceInsightDto.InsightCategory.BEST_PRACTICE)
                 .collect(Collectors.toList());
@@ -738,12 +607,19 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
         summary.put("weakWarning", insightsForSummary.stream().filter(i -> i.getSeverity() == PerformanceInsightDto.InsightSeverity.WEAK_WARNING).count());
         summary.put("potentialSavings", allInsights.stream().mapToDouble(PerformanceInsightDto::getPotentialSavings).sum());
         summary.put("performanceScore", calculatePerformanceScore(allInsights));
+        
+        dbCache.put(cacheKey, summary);
         return summary;
     }
 
     public void archiveInsight(String insightId) {
         archivedInsights.put(insightId, null);
         logger.info("Archived insight: {}", insightId);
+        // Evicting all insights caches for simplicity, could be more granular
+        cloudAccountRepository.findAll().forEach(account -> {
+            dbCache.evict("performanceInsights-" + account.getAwsAccountId() + "-ALL");
+            dbCache.evict("insightsSummary-" + account.getAwsAccountId());
+        });
     }
 
     public void bulkArchiveInsights(List<String> insightIds) {
@@ -752,7 +628,7 @@ private List<PerformanceInsightDto> getEC2InsightsForRegion(CloudAccount account
     }
 
     public void exportInsightsToExcel(String accountId, String severity, HttpServletResponse response) {
-        List<PerformanceInsightDto> insights = getInsights(accountId, severity);
+        List<PerformanceInsightDto> insights = getInsights(accountId, severity, true); // Always fresh for export
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Performance Insights");
             Row headerRow = sheet.createRow(0);

@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -20,19 +19,19 @@ public class CloudlistController {
 
     private static final Logger logger = LoggerFactory.getLogger(CloudlistController.class);
 
-    // Dependencies are now on the new, focused services
     private final CloudListService cloudListService;
     private final ResourceDetailService resourceDetailService;
 
-    // The constructor now correctly injects the new services
     public CloudlistController(CloudListService cloudListService, ResourceDetailService resourceDetailService) {
         this.cloudListService = cloudListService;
         this.resourceDetailService = resourceDetailService;
     }
 
     @GetMapping("/resources")
-    public CompletableFuture<ResponseEntity<List<DashboardData.ServiceGroupDto>>> getAllResources(@RequestParam String accountId) {
-        return cloudListService.getAllResourcesGrouped(accountId)
+    public CompletableFuture<ResponseEntity<List<DashboardData.ServiceGroupDto>>> getAllResources(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return cloudListService.getAllResourcesGrouped(accountId, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching grouped resources for account {}", accountId, ex);
@@ -44,10 +43,10 @@ public class CloudlistController {
     public CompletableFuture<ResponseEntity<ResourceDetailDto>> getResourceDetails(
             @RequestParam String accountId,
             @PathVariable String service,
-            @PathVariable String resourceId) {
-        // Service names can have spaces, which are URL encoded.
+            @PathVariable String resourceId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
         String decodedService = service.replace("%20", " ");
-        return resourceDetailService.getResourceDetails(accountId, decodedService, resourceId)
+        return resourceDetailService.getResourceDetails(accountId, decodedService, resourceId, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Failed to get details for resource {}/{} in account {}", service, resourceId, accountId, ex);

@@ -43,7 +43,7 @@ public class AiAdvisorService {
     public CompletableFuture<AiAdvisorSummaryDto> getDashboardSummary(String accountId) {
         logger.info("Generating AI dashboard summary for account: {}", accountId);
 
-        return finOpsService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
+        return finOpsService.getFinOpsReport(accountId, false).thenCompose(finOpsReport -> {
             try {
                 Map<String, Object> promptData = preparePromptData(finOpsReport);
                 String jsonData = objectMapper.writeValueAsString(promptData);
@@ -102,7 +102,7 @@ public class AiAdvisorService {
     public CompletableFuture<Map<String, String>> getInteractiveResponse(String question, String accountId) {
         logger.info("Generating interactive AI response for account: {}, question: {}", accountId, question);
 
-        return finOpsService.getFinOpsReport(accountId).thenCompose(finOpsReport -> {
+        return finOpsService.getFinOpsReport(accountId, false).thenCompose(finOpsReport -> {
             try {
                 String contextData = objectMapper.writeValueAsString(finOpsReport);
                 String prompt = buildInteractivePrompt(question, contextData);

@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.FinOpsReportDto;
@@ -9,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -45,7 +45,7 @@ public class FinOpsService {
     private final CloudListService cloudListService;
     private final OptimizationService optimizationService;
     private final List<String> requiredTags;
-    private final CacheService cacheService; 
+    private final DatabaseCacheService dbCache;
 
     @Autowired
     public FinOpsService(
@@ -54,13 +54,13 @@ public class FinOpsService {
             @Lazy CloudListService cloudListService,
             @Lazy OptimizationService optimizationService,
             @Value("${tagging.compliance.required-tags}") List<String> requiredTags,
-            CacheService cacheService) { 
+            DatabaseCacheService dbCache) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.cloudListService = cloudListService;
         this.optimizationService = optimizationService;
         this.requiredTags = requiredTags;
-        this.cacheService = cacheService; 
+        this.dbCache = dbCache;
     }
 
     private CloudAccount getAccount(String accountId) {
@@ -69,20 +69,27 @@ public class FinOpsService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "finopsReport", key = "#accountId")
-    public CompletableFuture<FinOpsReportDto> getFinOpsReport(String accountId) {
+    public CompletableFuture<FinOpsReportDto> getFinOpsReport(String accountId, boolean forceRefresh) {
+        String cacheKey = "finopsReport-" + accountId;
+        if (!forceRefresh) {
+            Optional<FinOpsReportDto> cachedData = dbCache.get(cacheKey, FinOpsReportDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
-        return cloudListService.getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions -> {
             logger.info("--- LAUNCHING ASYNC DATA FETCH FOR FINOPS REPORT for account {}---", account.getAwsAccountId());
 
-            CompletableFuture<List<DashboardData.BillingSummary>> billingSummaryFuture = getBillingSummary(account);
-            CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = optimizationService.getWastedResources(account, activeRegions);
-            CompletableFuture<List<DashboardData.OptimizationRecommendation>> rightsizingFuture = optimizationService.getAllOptimizationRecommendations(accountId);
-            CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account);
-            CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account);
-            CompletableFuture<DashboardData.TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account);
-            CompletableFuture<List<DashboardData.BudgetDetails>> budgetsFuture = getAccountBudgets(account);
-            CompletableFuture<List<Map<String, Object>>> costByRegionFuture = getCostByRegion(account);
+            CompletableFuture<List<DashboardData.BillingSummary>> billingSummaryFuture = getBillingSummary(account, forceRefresh);
+            CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = optimizationService.getWastedResources(account, activeRegions, forceRefresh);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> rightsizingFuture = optimizationService.getAllOptimizationRecommendations(accountId, forceRefresh);
+            CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = getCostAnomalies(account, forceRefresh);
+            CompletableFuture<DashboardData.CostHistory> costHistoryFuture = getCostHistory(account, forceRefresh);
+            CompletableFuture<DashboardData.TaggingCompliance> taggingComplianceFuture = getTaggingCompliance(account, forceRefresh);
+            CompletableFuture<List<DashboardData.BudgetDetails>> budgetsFuture = getAccountBudgets(account, forceRefresh);
+            CompletableFuture<List<Map<String, Object>>> costByRegionFuture = getCostByRegion(account, forceRefresh);
 
             return CompletableFuture.allOf(billingSummaryFuture, wastedResourcesFuture, rightsizingFuture, anomaliesFuture, costHistoryFuture, taggingComplianceFuture, budgetsFuture, costByRegionFuture)
                     .thenApply(v -> {
@@ -112,30 +119,35 @@ public class FinOpsService {
                         
                         FinOpsReportDto.CostBreakdown costBreakdown = new FinOpsReportDto.CostBreakdown(costByService, costByRegionFuture.join());
 
-                        return new FinOpsReportDto(kpis, costBreakdown, rightsizingFuture.join(), wastedResourcesFuture.join(), anomaliesFuture.join(), taggingComplianceFuture.join(), budgetsFuture.join());
+                        FinOpsReportDto report = new FinOpsReportDto(kpis, costBreakdown, rightsizingFuture.join(), wastedResourcesFuture.join(), anomaliesFuture.join(), taggingComplianceFuture.join(), budgetsFuture.join());
+                        dbCache.put(cacheKey, report);
+                        return report;
                     });
         });
     }
 
-    // Methods for getAccountBudgets, createBudget, getTaggingCompliance, getCostByTag, 
-    // getCostByRegion, getBillingSummary, getCostHistory, and getCostAnomalies remain the same...
-
     @Async("awsTaskExecutor")
-    @Cacheable(value = "budgets", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.BudgetDetails>> getAccountBudgets(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.BudgetDetails>> getAccountBudgets(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "budgets-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.BudgetDetails>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         BudgetsClient budgetsClient = awsClientProvider.getBudgetsClient(account);
         logger.info("FinOps Scan: Fetching account budgets for account {}...", account.getAwsAccountId());
         try {
             DescribeBudgetsRequest request = DescribeBudgetsRequest.builder().accountId(account.getAwsAccountId()).build();
             List<Budget> budgets = budgetsClient.describeBudgets(request).budgets();
-
-            return CompletableFuture.completedFuture(
-                    budgets.stream().map(b -> new DashboardData.BudgetDetails(
+            List<DashboardData.BudgetDetails> result = budgets.stream().map(b -> new DashboardData.BudgetDetails(
                             b.budgetName(), b.budgetLimit().amount(), b.budgetLimit().unit(),
                             b.calculatedSpend() != null ? b.calculatedSpend().actualSpend().amount() : BigDecimal.ZERO,
                             b.calculatedSpend() != null && b.calculatedSpend().forecastedSpend() != null ? b.calculatedSpend().forecastedSpend().amount() : BigDecimal.ZERO
-                    )).collect(Collectors.toList())
-            );
+                    )).collect(Collectors.toList());
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Failed to fetch AWS Budgets for account {}", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -153,7 +165,7 @@ public class FinOpsService {
                     .budgetLimit(Spend.builder().amount(budgetDetails.getBudgetLimit()).unit(budgetDetails.getBudgetUnit()).build()).build();
             CreateBudgetRequest request = CreateBudgetRequest.builder().accountId(account.getAwsAccountId()).budget(budget).build();
             budgetsClient.createBudget(request);
-            cacheService.evictFinOpsReportCache(accountId); 
+            dbCache.evict("budgets-" + accountId); 
         } catch (Exception e) {
             logger.error("Failed to create AWS Budget '{}' for account {}", budgetDetails.getBudgetName(), account.getAwsAccountId(), e);
             throw new RuntimeException("Failed to create budget", e);
@@ -161,17 +173,22 @@ public class FinOpsService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "taggingCompliance", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.TaggingCompliance> getTaggingCompliance(CloudAccount account) {
-        logger.info("FinOps Scan: Checking tagging compliance for account {}...", account.getAwsAccountId());
+    public CompletableFuture<DashboardData.TaggingCompliance> getTaggingCompliance(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "taggingCompliance-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<DashboardData.TaggingCompliance> cachedData = dbCache.get(cacheKey, DashboardData.TaggingCompliance.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
 
-        return cloudListService.getAllResources(account).thenApply(allResources -> {
+        logger.info("FinOps Scan: Checking tagging compliance for account {}...", account.getAwsAccountId());
+        return cloudListService.getAllResources(account, forceRefresh).thenApply(allResources -> {
             List<DashboardData.UntaggedResource> untaggedList = new ArrayList<>();
             int taggedCount = 0;
 
             for (ResourceDto resource : allResources) {
                 List<String> missingTags = new ArrayList<>(this.requiredTags);
-                
                 Map<String, String> resourceTags = new HashMap<>();
                 if (resource.getDetails() != null) {
                      resource.getDetails().forEach((key, value) -> {
@@ -180,9 +197,7 @@ public class FinOpsService {
                         }
                     });
                 }
-               
                 missingTags.removeAll(resourceTags.keySet());
-
                 if (missingTags.isEmpty()) {
                     taggedCount++;
                 } else {
@@ -192,13 +207,22 @@ public class FinOpsService {
 
             int totalScanned = allResources.size();
             double percentage = (totalScanned > 0) ? ((double) taggedCount / totalScanned) * 100.0 : 100.0;
-            return new DashboardData.TaggingCompliance(percentage, totalScanned, untaggedList.size(), untaggedList.stream().limit(20).collect(Collectors.toList()));
+            DashboardData.TaggingCompliance result = new DashboardData.TaggingCompliance(percentage, totalScanned, untaggedList.size(), untaggedList.stream().limit(20).collect(Collectors.toList()));
+            dbCache.put(cacheKey, result);
+            return result;
         });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "costByTag", key = "#accountId + '-' + #tagKey")
-    public CompletableFuture<List<Map<String, Object>>> getCostByTag(String accountId, String tagKey) {
+    public CompletableFuture<List<Map<String, Object>>> getCostByTag(String accountId, String tagKey, boolean forceRefresh) {
+        String cacheKey = "costByTag-" + accountId + "-" + tagKey;
+        if (!forceRefresh) {
+            Optional<List<Map<String, Object>>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         CloudAccount account = getAccount(accountId);
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching month-to-date cost by tag: {} for account {}", tagKey, accountId);
@@ -209,8 +233,8 @@ public class FinOpsService {
                             .end(LocalDate.now().plusDays(1).toString()).build())
                     .granularity(Granularity.MONTHLY).metrics("UnblendedCost")
                     .groupBy(GroupDefinition.builder().type(GroupDefinitionType.TAG).key(tagKey).build()).build();
-
-            return CompletableFuture.completedFuture(ce.getCostAndUsage(request).resultsByTime()
+            
+            List<Map<String, Object>> result = ce.getCostAndUsage(request).resultsByTime()
                 .stream().flatMap(r -> r.groups().stream())
                 .map(g -> {
                     String tagValue = g.keys().get(0).isEmpty() ? "Untagged" : g.keys().get(0);
@@ -218,7 +242,9 @@ public class FinOpsService {
                     return Map.<String, Object>of("tagValue", tagValue, "cost", cost);
                 })
                 .filter(map -> (double) map.get("cost") > 0.01)
-                .collect(Collectors.toList()));
+                .collect(Collectors.toList());
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch cost by tag key '{}' for account {}. This tag may not be activated in the billing console.", tagKey, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -226,8 +252,15 @@ public class FinOpsService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "costByRegion", key = "#account.awsAccountId")
-    public CompletableFuture<List<Map<String, Object>>> getCostByRegion(CloudAccount account) {
+    public CompletableFuture<List<Map<String, Object>>> getCostByRegion(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "costByRegion-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<Map<String, Object>>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching month-to-date cost by region for account {}...", account.getAwsAccountId());
         try {
@@ -244,6 +277,7 @@ public class FinOpsService {
                     })
                     .filter(map -> (double) map.get("cost") > 0.01)
                     .collect(Collectors.toList());
+            dbCache.put(cacheKey, result);
             return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch cost by region for account {}", account.getAwsAccountId(), e);
@@ -252,8 +286,15 @@ public class FinOpsService {
     }
     
     @Async("awsTaskExecutor")
-    @Cacheable(value = "billingSummary", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.BillingSummary>> getBillingSummary(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.BillingSummary>> getBillingSummary(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "billingSummary-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.BillingSummary>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching billing summary for account {}...", account.getAwsAccountId());
         try {
@@ -261,10 +302,12 @@ public class FinOpsService {
                     .timePeriod(DateInterval.builder().start(LocalDate.now().withDayOfMonth(1).toString()).end(LocalDate.now().plusDays(1).toString()).build())
                     .granularity(Granularity.MONTHLY).metrics("UnblendedCost")
                     .groupBy(GroupDefinition.builder().type(GroupDefinitionType.DIMENSION).key("SERVICE").build()).build();
-            return CompletableFuture.completedFuture(ce.getCostAndUsage(request).resultsByTime()
+            List<DashboardData.BillingSummary> result = ce.getCostAndUsage(request).resultsByTime()
                     .stream().flatMap(r -> r.groups().stream())
                     .map(g -> new DashboardData.BillingSummary(g.keys().get(0), Double.parseDouble(g.metrics().get("UnblendedCost").amount())))
-                    .filter(s -> s.getMonthToDateCost() > 0.01).collect(Collectors.toList()));
+                    .filter(s -> s.getMonthToDateCost() > 0.01).collect(Collectors.toList());
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch billing summary for account {}", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(new ArrayList<>());
@@ -272,8 +315,15 @@ public class FinOpsService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "costHistory", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.CostHistory> getCostHistory(CloudAccount account) {
+    public CompletableFuture<DashboardData.CostHistory> getCostHistory(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "costHistory-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<DashboardData.CostHistory> cachedData = dbCache.get(cacheKey, DashboardData.CostHistory.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching cost history for account {}...", account.getAwsAccountId());
         List<String> labels = new ArrayList<>();
@@ -305,12 +355,21 @@ public class FinOpsService {
             logger.error("Could not fetch cost history for account {}", account.getAwsAccountId(), e);
         }
         
-        return CompletableFuture.completedFuture(new DashboardData.CostHistory(labels, costs, anomalies));
+        DashboardData.CostHistory result = new DashboardData.CostHistory(labels, costs, anomalies);
+        dbCache.put(cacheKey, result);
+        return CompletableFuture.completedFuture(result);
     }
     
     @Async("awsTaskExecutor")
-    @Cacheable(value = "costAnomalies", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "costAnomalies-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.CostAnomaly>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching cost anomalies for account {}...", account.getAwsAccountId());
         try {
@@ -319,13 +378,15 @@ public class FinOpsService {
                     .endDate(LocalDate.now().minusDays(1).toString()).build();
             GetAnomaliesRequest request = GetAnomaliesRequest.builder().dateInterval(dateInterval).build();
             List<Anomaly> anomalies = ce.getAnomalies(request).anomalies();
-            return CompletableFuture.completedFuture(anomalies.stream()
+            List<DashboardData.CostAnomaly> result = anomalies.stream()
                     .map(a -> new DashboardData.CostAnomaly(
                             a.anomalyId(), getServiceNameFromAnomaly(a), a.impact().totalImpact(),
                             LocalDate.parse(a.anomalyStartDate().substring(0, 10)),
                             a.anomalyEndDate() != null ? LocalDate.parse(a.anomalyEndDate().substring(0, 10)) : LocalDate.now()
                     ))
-                    .collect(Collectors.toList()));
+                    .collect(Collectors.toList());
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch Cost Anomalies for account {}. This might be a permissions issue or the service is not enabled.", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -339,5 +400,4 @@ public class FinOpsService {
         }
         return "Unknown Service";
     }
-
 }

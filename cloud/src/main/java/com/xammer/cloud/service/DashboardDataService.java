@@ -1,18 +1,17 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.gcp.GcpDashboardData;
 import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import com.xammer.cloud.service.gcp.GcpDataService;
-import com.xammer.cloud.service.gcp.GcpCostService;
-import com.xammer.cloud.service.gcp.GcpOptimizationService;
-import com.xammer.cloud.service.gcp.GcpSecurityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.iam.IamClient;
@@ -23,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -41,18 +41,21 @@ public class DashboardDataService {
     private final SecurityService securityService;
     private final FinOpsService finOpsService;
     private final ReservationService reservationService;
+    private final DatabaseCacheService dbCache;
+    private final ObjectMapper objectMapper;
 
-    // ... constructor remains the same ...
     @Autowired
     public DashboardDataService(
             CloudAccountRepository cloudAccountRepository,
             AwsClientProvider awsClientProvider,
             GcpDataService gcpDataService,
-            CloudListService cloudListService,
-            OptimizationService optimizationService,
-            SecurityService securityService,
-            FinOpsService finOpsService,
-            ReservationService reservationService) {
+            @Lazy CloudListService cloudListService,
+            @Lazy OptimizationService optimizationService,
+            @Lazy SecurityService securityService,
+            @Lazy FinOpsService finOpsService,
+            @Lazy ReservationService reservationService,
+            DatabaseCacheService dbCache,
+            ObjectMapper objectMapper) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.gcpDataService = gcpDataService;
@@ -61,6 +64,8 @@ public class DashboardDataService {
         this.securityService = securityService;
         this.finOpsService = finOpsService;
         this.reservationService = reservationService;
+        this.dbCache = dbCache;
+        this.objectMapper = objectMapper;
     }
 
 
@@ -69,9 +74,18 @@ public class DashboardDataService {
                 .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
     }
 
-    @Cacheable(value = "dashboardData", key = "#accountId")
-    public DashboardData getDashboardData(String accountId) throws ExecutionException, InterruptedException, IOException {
+    public DashboardData getDashboardData(String accountId, boolean forceRefresh) throws ExecutionException, InterruptedException, IOException {
+        String cacheKey = "dashboardData-" + accountId;
+
+        if (!forceRefresh) {
+            Optional<DashboardData> cachedData = dbCache.get(cacheKey, DashboardData.class);
+            if (cachedData.isPresent()) {
+                return cachedData.get();
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
+        DashboardData freshData;
 
         if ("GCP".equals(account.getProvider())) {
             GcpDashboardData gcpData = gcpDataService.getDashboardData(account.getGcpProjectId())
@@ -80,20 +94,22 @@ public class DashboardDataService {
                     return new GcpDashboardData(); // Return empty DTO on failure
                 })
                 .get();
-            return mapGcpDataToDashboardData(gcpData, account);
+            freshData = mapGcpDataToDashboardData(gcpData, account);
         } else {
-            return getAwsDashboardData(account);
+            freshData = getAwsDashboardData(account, forceRefresh);
         }
+
+        dbCache.put(cacheKey, freshData);
+        return freshData;
     }
 
-private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudAccount account) {
+    private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudAccount account) {
         DashboardData data = new DashboardData();
         
         DashboardData.Account mainAccount = new DashboardData.Account();
         mainAccount.setId(account.getGcpProjectId());
         mainAccount.setName(account.getAccountName());
         
-        // --- Populating with REAL GCP Data ---
         mainAccount.setResourceInventory(gcpData.getResourceInventory());
         mainAccount.setIamResources(gcpData.getIamResources());
         mainAccount.setSecurityScore(gcpData.getSecurityScore());
@@ -103,11 +119,8 @@ private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudA
         mainAccount.setForecastedSpend(gcpData.getForecastedSpend());
         mainAccount.setLastMonthSpend(gcpData.getLastMonthSpend());
         mainAccount.setOptimizationSummary(gcpData.getOptimizationSummary());
-        
-        // NEW: Map Region Status for the world map
         mainAccount.setRegionStatus(gcpData.getRegionStatus());
         
-        // ... (rest of the mapping logic remains the same)
         List<String> costLabels = gcpData.getCostHistory().stream().map(c -> c.getName()).collect(Collectors.toList());
         List<Double> costValues = gcpData.getCostHistory().stream().map(c -> c.getAmount()).collect(Collectors.toList());
         List<Boolean> costAnomalies = gcpData.getCostHistory().stream().map(c -> c.isAnomaly()).collect(Collectors.toList());
@@ -148,27 +161,27 @@ private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudA
     }
 
 
-    private DashboardData getAwsDashboardData(CloudAccount account) throws ExecutionException, InterruptedException {
+    private DashboardData getAwsDashboardData(CloudAccount account, boolean forceRefresh) throws ExecutionException, InterruptedException {
         logger.info("--- LAUNCHING OPTIMIZED ASYNC DATA FETCH FROM AWS for account {} ---", account.getAwsAccountId());
 
-        CompletableFuture<List<DashboardData.ServiceGroupDto>> groupedResourcesFuture = cloudListService.getAllResourcesGrouped(account.getAwsAccountId());
-        CompletableFuture<List<DashboardData.RegionStatus>> activeRegionsFuture = cloudListService.getRegionStatusForAccount(account);
+        CompletableFuture<List<DashboardData.ServiceGroupDto>> groupedResourcesFuture = cloudListService.getAllResourcesGrouped(account.getAwsAccountId(), forceRefresh);
+        CompletableFuture<List<DashboardData.RegionStatus>> activeRegionsFuture = cloudListService.getRegionStatusForAccount(account, forceRefresh);
         List<DashboardData.RegionStatus> activeRegions = activeRegionsFuture.get();
 
         CompletableFuture<DashboardData.ResourceInventory> inventoryFuture = getResourceInventory(groupedResourcesFuture);
-        CompletableFuture<DashboardData.CloudWatchStatus> cwStatusFuture = getCloudWatchStatus(account, activeRegions);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = optimizationService.getEc2InstanceRecommendations(account, activeRegions);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = optimizationService.getEbsVolumeRecommendations(account, activeRegions);
-        CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture = optimizationService.getLambdaFunctionRecommendations(account, activeRegions);
-        CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = optimizationService.getWastedResources(account, activeRegions);
-        CompletableFuture<List<DashboardData.SecurityFinding>> securityFindingsFuture = securityService.getComprehensiveSecurityFindings(account, activeRegions);
-        CompletableFuture<List<ReservationInventoryDto>> reservationInventoryFuture = reservationService.getReservationInventory(account, activeRegions);
-        CompletableFuture<DashboardData.CostHistory> costHistoryFuture = finOpsService.getCostHistory(account);
-        CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = finOpsService.getBillingSummary(account);
-        CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account);
-        CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = finOpsService.getCostAnomalies(account);
-        CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = reservationService.getReservationAnalysis(account);
-        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = reservationService.getReservationPurchaseRecommendations(account);
+        CompletableFuture<DashboardData.CloudWatchStatus> cwStatusFuture = getCloudWatchStatus(account, activeRegions, forceRefresh);
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2RecsFuture = optimizationService.getEc2InstanceRecommendations(account, activeRegions, forceRefresh);
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebsRecsFuture = optimizationService.getEbsVolumeRecommendations(account, activeRegions, forceRefresh);
+        CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambdaRecsFuture = optimizationService.getLambdaFunctionRecommendations(account, activeRegions, forceRefresh);
+        CompletableFuture<List<DashboardData.WastedResource>> wastedResourcesFuture = optimizationService.getWastedResources(account, activeRegions, forceRefresh);
+        CompletableFuture<List<DashboardData.SecurityFinding>> securityFindingsFuture = securityService.getComprehensiveSecurityFindings(account, activeRegions, forceRefresh);
+        CompletableFuture<List<ReservationInventoryDto>> reservationInventoryFuture = reservationService.getReservationInventory(account, activeRegions, forceRefresh);
+        CompletableFuture<DashboardData.CostHistory> costHistoryFuture = finOpsService.getCostHistory(account, forceRefresh);
+        CompletableFuture<List<DashboardData.BillingSummary>> billingFuture = finOpsService.getBillingSummary(account, forceRefresh);
+        CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account, forceRefresh);
+        CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = finOpsService.getCostAnomalies(account, forceRefresh);
+        CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = reservationService.getReservationAnalysis(account, forceRefresh);
+        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = reservationService.getReservationPurchaseRecommendations(account, forceRefresh);
         
         CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(
             wastedResourcesFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture
@@ -261,14 +274,30 @@ private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudA
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "cloudwatchStatus", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
-        return CompletableFuture.completedFuture(new DashboardData.CloudWatchStatus(0, 0, 0));
+    public CompletableFuture<DashboardData.CloudWatchStatus> getCloudWatchStatus(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "cloudwatchStatus-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<DashboardData.CloudWatchStatus> cachedData = dbCache.get(cacheKey, DashboardData.CloudWatchStatus.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
+        DashboardData.CloudWatchStatus status = new DashboardData.CloudWatchStatus(0, 0, 0);
+        dbCache.put(cacheKey, status);
+        return CompletableFuture.completedFuture(status);
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "iamResources", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.IamResources> getIamResources(CloudAccount account) {
+    public CompletableFuture<DashboardData.IamResources> getIamResources(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "iamResources-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<DashboardData.IamResources> cachedData = dbCache.get(cacheKey, DashboardData.IamResources.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         IamClient iam = awsClientProvider.getIamClient(account);
         logger.info("Fetching IAM resources for account {}...", account.getAwsAccountId());
         int users = 0, groups = 0, policies = 0, roles = 0;
@@ -276,7 +305,10 @@ private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudA
         try { groups = iam.listGroups().groups().size(); } catch (Exception e) { logger.error("IAM check failed for Groups on account {}", account.getAwsAccountId(), e); }
         try { policies = iam.listPolicies(r -> r.scope(PolicyScopeType.LOCAL)).policies().size(); } catch (Exception e) { logger.error("IAM check failed for Policies on account {}", account.getAwsAccountId(), e); }
         try { roles = iam.listRoles().roles().size(); } catch (Exception e) { logger.error("IAM check failed for Roles on account {}", account.getAwsAccountId(), e); }
-        return CompletableFuture.completedFuture(new DashboardData.IamResources(users, groups, policies, roles));
+        
+        DashboardData.IamResources resources = new DashboardData.IamResources(users, groups, policies, roles);
+        dbCache.put(cacheKey, resources);
+        return CompletableFuture.completedFuture(resources);
     }
 
     @Async("awsTaskExecutor")

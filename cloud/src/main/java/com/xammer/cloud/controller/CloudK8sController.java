@@ -38,7 +38,7 @@ public class CloudK8sController {
     // This endpoint remains to list available EKS clusters
     @GetMapping("/clusters")
     public CompletableFuture<ResponseEntity<List<K8sClusterInfo>>> getClusters(@RequestParam String accountId) {
-        return eksService.getEksClusterInfo(accountId)
+        return eksService.getEksClusterInfo(accountId, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> ResponseEntity.status(500).body(Collections.emptyList()));
     }
@@ -46,7 +46,7 @@ public class CloudK8sController {
     // This endpoint remains to show basic node information
     @GetMapping("/clusters/{clusterName}/nodes")
     public CompletableFuture<ResponseEntity<List<K8sNodeInfo>>> getNodes(@RequestParam String accountId, @PathVariable String clusterName) {
-        return eksService.getK8sNodes(accountId, clusterName)
+        return eksService.getK8sNodes(accountId, clusterName, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> ResponseEntity.status(500).body(Collections.emptyList()));
     }

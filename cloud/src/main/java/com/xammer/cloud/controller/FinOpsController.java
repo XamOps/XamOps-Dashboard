@@ -2,7 +2,7 @@ package com.xammer.cloud.controller;
 
 import com.xammer.cloud.dto.DashboardData.BudgetDetails;
 import com.xammer.cloud.dto.FinOpsReportDto;
-import com.xammer.cloud.service.CacheService; // Import the new service
+import com.xammer.cloud.service.CacheService;
 import com.xammer.cloud.service.FinOpsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,21 +22,21 @@ public class FinOpsController {
     private static final Logger logger = LoggerFactory.getLogger(FinOpsController.class);
 
     private final FinOpsService finOpsService;
-    private final CacheService cacheService; // Add the new service
+    private final CacheService cacheService;
 
-    // Update the constructor to inject CacheService
     public FinOpsController(FinOpsService finOpsService, CacheService cacheService) {
         this.finOpsService = finOpsService;
         this.cacheService = cacheService;
     }
 
     @GetMapping("/report")
-    public CompletableFuture<ResponseEntity<FinOpsReportDto>> getFinOpsReport(@RequestParam String accountId, @RequestParam(required = false) boolean forceRefresh) {
+    public CompletableFuture<ResponseEntity<FinOpsReportDto>> getFinOpsReport(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
         if (forceRefresh) {
-            // Use the centralized cache service
             cacheService.evictFinOpsReportCache(accountId);
         }
-        return finOpsService.getFinOpsReport(accountId)
+        return finOpsService.getFinOpsReport(accountId, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching FinOps report for account {}", accountId, ex);
@@ -45,8 +45,11 @@ public class FinOpsController {
     }
 
     @GetMapping("/cost-by-tag")
-    public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> getCostByTag(@RequestParam String accountId, @RequestParam String tagKey) {
-        return finOpsService.getCostByTag(accountId, tagKey)
+    public CompletableFuture<ResponseEntity<List<Map<String, Object>>>> getCostByTag(
+            @RequestParam String accountId,
+            @RequestParam String tagKey,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return finOpsService.getCostByTag(accountId, tagKey, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching cost by tag for account {}", accountId, ex);

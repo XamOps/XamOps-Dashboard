@@ -28,7 +28,8 @@ public class MetricsController {
     public CompletableFuture<ResponseEntity<Map<String, List<MetricDto>>>> getEc2Metrics(
             @RequestParam String accountId,
             @PathVariable String instanceId) {
-        return metricsService.getEc2InstanceMetrics(accountId, instanceId)
+        // Pass the required boolean argument (e.g., true or false)
+        return metricsService.getEc2InstanceMetrics(accountId, instanceId, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching EC2 metrics for instance {} in account {}", instanceId, accountId, ex);
@@ -40,7 +41,7 @@ public class MetricsController {
     public CompletableFuture<ResponseEntity<Map<String, List<MetricDto>>>> getRdsMetrics(
             @RequestParam String accountId,
             @PathVariable String instanceId) {
-        return metricsService.getRdsInstanceMetrics(accountId, instanceId)
+        return metricsService.getRdsInstanceMetrics(accountId, instanceId, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching RDS metrics for instance {} in account {}", instanceId, accountId, ex);
@@ -53,7 +54,7 @@ public class MetricsController {
             @RequestParam String accountId,
             @PathVariable String bucketName,
             @RequestParam String region) {
-        return metricsService.getS3BucketMetrics(accountId, bucketName, region)
+        return metricsService.getS3BucketMetrics(accountId, bucketName, region, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching S3 metrics for bucket {} in account {}", bucketName, accountId, ex);
@@ -66,7 +67,7 @@ public class MetricsController {
             @RequestParam String accountId,
             @PathVariable String functionName,
             @RequestParam String region) {
-        return metricsService.getLambdaFunctionMetrics(accountId, functionName, region)
+        return metricsService.getLambdaFunctionMetrics(accountId, functionName, region, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching Lambda metrics for function {} in account {}", functionName, accountId, ex);

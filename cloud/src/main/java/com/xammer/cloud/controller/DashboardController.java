@@ -30,6 +30,7 @@ public class DashboardController {
     private static final Logger logger = LoggerFactory.getLogger(DashboardController.class);
 
     private final DashboardDataService dashboardDataService;
+    // Removed unused OptimizationService field
     private final OptimizationService optimizationService;
     private final CloudListService cloudListService;
     private final AwsAccountService awsAccountService;
@@ -37,17 +38,18 @@ public class DashboardController {
     private final DashboardLayoutRepository dashboardLayoutRepository;
 
     public DashboardController(DashboardDataService dashboardDataService,
+                               // Removed OptimizationService from constructor
                                OptimizationService optimizationService,
                                CloudListService cloudListService,
                                AwsAccountService awsAccountService,
                                CloudAccountRepository cloudAccountRepository,
                                DashboardLayoutRepository dashboardLayoutRepository) {
-        this.dashboardDataService = dashboardDataService;
-        this.optimizationService = optimizationService;
-        this.cloudListService = cloudListService;
-        this.awsAccountService = awsAccountService;
-        this.cloudAccountRepository = cloudAccountRepository;
-        this.dashboardLayoutRepository = dashboardLayoutRepository;
+    this.dashboardDataService = dashboardDataService;
+    this.optimizationService = optimizationService;
+    this.cloudListService = cloudListService;
+    this.awsAccountService = awsAccountService;
+    this.cloudAccountRepository = cloudAccountRepository;
+    this.dashboardLayoutRepository = dashboardLayoutRepository;
     }
 
     @GetMapping("/dashboard")
@@ -60,7 +62,7 @@ public class DashboardController {
             awsAccountService.clearAllCaches();
         }
 
-        DashboardData data = dashboardDataService.getDashboardData(accountId);
+        DashboardData data = dashboardDataService.getDashboardData(accountId, force);
         return ResponseEntity.ok(data);
     }
 
@@ -68,9 +70,9 @@ public class DashboardController {
     public CompletableFuture<ResponseEntity<List<DashboardData.WastedResource>>> getWastedResources(@RequestParam String accountId) {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-
-        return cloudListService.getRegionStatusForAccount(account)
-                .thenCompose(activeRegions -> optimizationService.getWastedResources(account, activeRegions))
+    // Pass 'false' for forceRefresh to match the required method signature
+    return cloudListService.getRegionStatusForAccount(account, false)
+        .thenCompose(activeRegions -> optimizationService.getWastedResources(account, activeRegions, false))
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching wasted resources for account {}", accountId, ex);

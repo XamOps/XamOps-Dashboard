@@ -1,12 +1,12 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -37,6 +37,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -51,17 +52,20 @@ public class OptimizationService {
     private final AwsClientProvider awsClientProvider;
     private final PricingService pricingService;
     private final CloudListService cloudListService;
+    private final DatabaseCacheService dbCache;
 
     @Autowired
     public OptimizationService(
             CloudAccountRepository cloudAccountRepository,
             AwsClientProvider awsClientProvider,
             PricingService pricingService,
-            @Lazy CloudListService cloudListService) {
+            @Lazy CloudListService cloudListService,
+            DatabaseCacheService dbCache) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.pricingService = pricingService;
         this.cloudListService = cloudListService;
+        this.dbCache = dbCache;
     }
 
     private CloudAccount getAccount(String accountId) {
@@ -70,25 +74,40 @@ public class OptimizationService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "allRecommendations", key = "#accountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getAllOptimizationRecommendations(String accountId) {
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getAllOptimizationRecommendations(String accountId, boolean forceRefresh) {
+        String cacheKey = "allRecommendations-" + accountId;
+        if (!forceRefresh) {
+            Optional<List<DashboardData.OptimizationRecommendation>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
-        return cloudListService.getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions -> {
             logger.info("Fetching all optimization recommendations for account {}...", account.getAwsAccountId());
-            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2 = getEc2InstanceRecommendations(account, activeRegions);
-            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebs = getEbsVolumeRecommendations(account, activeRegions);
-            CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambda = getLambdaFunctionRecommendations(account, activeRegions);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ec2 = getEc2InstanceRecommendations(account, activeRegions, forceRefresh);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> ebs = getEbsVolumeRecommendations(account, activeRegions, forceRefresh);
+            CompletableFuture<List<DashboardData.OptimizationRecommendation>> lambda = getLambdaFunctionRecommendations(account, activeRegions, forceRefresh);
             return CompletableFuture.allOf(ec2, ebs, lambda).thenApply(v -> {
                 List<DashboardData.OptimizationRecommendation> allRecs = Stream.of(ec2.join(), ebs.join(), lambda.join()).flatMap(List::stream).collect(Collectors.toList());
                 logger.debug("Fetched a total of {} optimization recommendations for account {}", allRecs.size(), accountId);
+                dbCache.put(cacheKey, allRecs);
                 return allRecs;
             });
         });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "ec2Recs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEc2InstanceRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEc2InstanceRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "ec2Recs-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.OptimizationRecommendation>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
             GetEc2InstanceRecommendationsRequest request = GetEc2InstanceRecommendationsRequest.builder().build();
@@ -102,25 +121,29 @@ public class OptimizationService {
                         double recommendedCost = pricingService.getEc2InstanceMonthlyPrice(opt.instanceType(), regionId);
                         double currentCost = recommendedCost + savings;
 
-                        // CORRECTED CONSTRUCTOR CALL
                         return new DashboardData.OptimizationRecommendation(
-                                "EC2", // service
-                                r.instanceArn().split("/")[1], // resourceId
-                                r.currentInstanceType(), // currentType
-                                opt.instanceType(), // recommendedType
-                                savings, // estimatedMonthlySavings
-                                r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")), // recommendationReason
-                                currentCost, // currentMonthlyCost
-                                recommendedCost // recommendedMonthlyCost
+                                "EC2", r.instanceArn().split("/")[1], r.currentInstanceType(), opt.instanceType(),
+                                savings, r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
+                                currentCost, recommendedCost
                         );
                     })
                     .collect(Collectors.toList());
-        }, "EC2 Recommendations");
+        }, "EC2 Recommendations").thenApply(result -> {
+            dbCache.put(cacheKey, result);
+            return result;
+        });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "ebsRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEbsVolumeRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getEbsVolumeRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "ebsRecs-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.OptimizationRecommendation>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
             GetEbsVolumeRecommendationsRequest request = GetEbsVolumeRecommendationsRequest.builder().build();
@@ -133,25 +156,30 @@ public class OptimizationService {
                         double recommendedCost = pricingService.getEbsGbMonthPrice(regionId, opt.configuration().volumeType()) * opt.configuration().volumeSize();
                         double currentCost = savings + recommendedCost;
 
-                        // CORRECTED CONSTRUCTOR CALL
                         return new DashboardData.OptimizationRecommendation(
-                                "EBS", // service
-                                r.volumeArn().split("/")[1], // resourceId
-                                r.currentConfiguration().volumeType() + " - " + r.currentConfiguration().volumeSize() + "GiB", // currentType
-                                opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB", // recommendedType
-                                savings, // estimatedMonthlySavings
-                                r.finding().toString(), // recommendationReason
-                                currentCost, // currentMonthlyCost
-                                recommendedCost // recommendedMonthlyCost
+                                "EBS", r.volumeArn().split("/")[1],
+                                r.currentConfiguration().volumeType() + " - " + r.currentConfiguration().volumeSize() + "GiB",
+                                opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB",
+                                savings, r.finding().toString(), currentCost, recommendedCost
                         );
                     })
                     .collect(Collectors.toList());
-        }, "EBS Recommendations");
+        }, "EBS Recommendations").thenApply(result -> {
+            dbCache.put(cacheKey, result);
+            return result;
+        });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "lambdaRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getLambdaFunctionRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.OptimizationRecommendation>> getLambdaFunctionRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "lambdaRecs-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.OptimizationRecommendation>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         try {
             return fetchAllRegionalResources(account, activeRegions, regionId -> {
                 ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
@@ -164,20 +192,18 @@ public class OptimizationService {
                             double recommendedCost = savings > 0 ? savings * 1.5 : 0; // Simplified cost
                             double currentCost = recommendedCost + savings;
 
-                            // CORRECTED CONSTRUCTOR CALL
                             return new DashboardData.OptimizationRecommendation(
-                                    "Lambda", // service
-                                    r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1), // resourceId
-                                    r.currentMemorySize() + " MB", // currentType
-                                    opt.memorySize() + " MB", // recommendedType
-                                    savings, // estimatedMonthlySavings
-                                    r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")), // recommendationReason
-                                    currentCost, // currentMonthlyCost
-                                    recommendedCost // recommendedMonthlyCost
+                                    "Lambda", r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1),
+                                    r.currentMemorySize() + " MB", opt.memorySize() + " MB",
+                                    savings, r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
+                                    currentCost, recommendedCost
                             );
                         })
                         .collect(Collectors.toList());
-            }, "Lambda Recommendations");
+            }, "Lambda Recommendations").thenApply(result -> {
+                dbCache.put(cacheKey, result);
+                return result;
+            });
         } catch (Exception e) {
             logger.error("Could not fetch Lambda Recommendations for account {}. This might be a permissions issue or Compute Optimizer is not enabled.", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -185,24 +211,24 @@ public class OptimizationService {
     }
     
     @Async("awsTaskExecutor")
-    @Cacheable(value = "wastedResources", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.WastedResource>> getWastedResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.WastedResource>> getWastedResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "wastedResources-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.WastedResource>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         logger.info("Fetching wasted resources for account {}...", account.getAwsAccountId());
         List<CompletableFuture<List<DashboardData.WastedResource>>> futures = List.of(
-                findUnattachedEbsVolumes(account, activeRegions),
-                findUnusedElasticIps(account, activeRegions),
-                findOldSnapshots(account, activeRegions),
-                findDeregisteredAmis(account, activeRegions),
-                findIdleRdsInstances(account, activeRegions),
-                findIdleLoadBalancers(account, activeRegions),
-                findUnusedSecurityGroups(account, activeRegions),
-                findIdleEc2Instances(account, activeRegions),
-                findUnattachedEnis(account, activeRegions),
-                findIdleEksClusters(account, activeRegions),
-                findIdleEcsClusters(account, activeRegions),
-                findUnderutilizedLambdaFunctions(account, activeRegions),
-                findOldDbSnapshots(account, activeRegions),
-                findUnusedCloudWatchLogGroups(account, activeRegions)
+                findUnattachedEbsVolumes(account, activeRegions), findUnusedElasticIps(account, activeRegions),
+                findOldSnapshots(account, activeRegions), findDeregisteredAmis(account, activeRegions),
+                findIdleRdsInstances(account, activeRegions), findIdleLoadBalancers(account, activeRegions),
+                findUnusedSecurityGroups(account, activeRegions), findIdleEc2Instances(account, activeRegions),
+                findUnattachedEnis(account, activeRegions), findIdleEksClusters(account, activeRegions),
+                findIdleEcsClusters(account, activeRegions), findUnderutilizedLambdaFunctions(account, activeRegions),
+                findOldDbSnapshots(account, activeRegions), findUnusedCloudWatchLogGroups(account, activeRegions)
         );
 
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
@@ -212,6 +238,7 @@ public class OptimizationService {
                             .flatMap(List::stream)
                             .collect(Collectors.toList());
                     logger.debug("... found {} total wasted resources for account {}.", allWasted.size(), account.getAwsAccountId());
+                    dbCache.put(cacheKey, allWasted);
                     return allWasted;
                 });
     }
@@ -257,7 +284,7 @@ public class OptimizationService {
             DescribeImagesRequest imagesRequest = DescribeImagesRequest.builder().owners("self").build();
             return ec2.describeImages(imagesRequest).images().stream()
                     .filter(image -> image.state() != ImageState.AVAILABLE)
-                    .map(image -> new DashboardData.WastedResource(image.imageId(), image.name(), "AMI", regionId, 0.5, "Deregistered or Failed State")) // Nominal cost
+                    .map(image -> new DashboardData.WastedResource(image.imageId(), image.name(), "AMI", regionId, 0.5, "Deregistered or Failed State"))
                     .collect(Collectors.toList());
         }, "Deregistered AMIs");
     }
@@ -307,7 +334,7 @@ public class OptimizationService {
                             .allMatch(tg -> elbv2.describeTargetHealth(req -> req.targetGroupArn(tg.targetGroupArn())).targetHealthDescriptions().isEmpty());
                     return isIdle;
                 })
-                .map(lb -> new DashboardData.WastedResource(lb.loadBalancerArn(), lb.loadBalancerName(), "Load Balancer", regionId, 17.0, "Idle Load Balancer (no targets)")) // Approx cost
+                .map(lb -> new DashboardData.WastedResource(lb.loadBalancerArn(), lb.loadBalancerName(), "Load Balancer", regionId, 17.0, "Idle Load Balancer (no targets)"))
                 .collect(Collectors.toList());
         }, "Idle Load Balancers");
     }
@@ -324,18 +351,11 @@ public class OptimizationService {
                             .startTime(Instant.now().minus(14, ChronoUnit.DAYS))
                             .endTime(Instant.now())
                             .metricDataQueries(MetricDataQuery.builder()
-                                .id("cpu")
-                                .metricStat(MetricStat.builder()
+                                .id("cpu").metricStat(MetricStat.builder()
                                         .metric(software.amazon.awssdk.services.cloudwatch.model.Metric.builder()
-                                                .namespace("ContainerInsights")
-                                                .metricName("node_cpu_utilization")
-                                                .dimensions(software.amazon.awssdk.services.cloudwatch.model.Dimension.builder().name("ClusterName").value(clusterName).build())
-                                                .build())
-                                        .period(86400) // Daily average
-                                        .stat("Average")
-                                        .build())
-                                .returnData(true)
-                                .build())
+                                                .namespace("ContainerInsights").metricName("node_cpu_utilization")
+                                                .dimensions(software.amazon.awssdk.services.cloudwatch.model.Dimension.builder().name("ClusterName").value(clusterName).build()).build())
+                                        .period(86400).stat("Average").build()).returnData(true).build())
                             .build();
 
                     List<MetricDataResult> results = cw.getMetricData(request).metricDataResults();
@@ -373,14 +393,10 @@ public class OptimizationService {
             lambda.listFunctions().functions().forEach(func -> {
                 try {
                     GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                            .namespace("AWS/Lambda")
-                            .metricName("Invocations")
+                            .namespace("AWS/Lambda").metricName("Invocations")
                             .dimensions(software.amazon.awssdk.services.cloudwatch.model.Dimension.builder().name("FunctionName").value(func.functionName()).build())
-                            .startTime(Instant.now().minus(30, ChronoUnit.DAYS))
-                            .endTime(Instant.now())
-                            .period(2592000)
-                            .statistics(Statistic.SUM)
-                            .build();
+                            .startTime(Instant.now().minus(30, ChronoUnit.DAYS)).endTime(Instant.now())
+                            .period(2592000).statistics(Statistic.SUM).build();
                     
                     List<Datapoint> datapoints = cw.getMetricStatistics(request).datapoints();
                     if (datapoints.isEmpty() || datapoints.get(0).sum() < 10) {
@@ -410,7 +426,6 @@ public class OptimizationService {
             CloudWatchLogsClient logs = awsClientProvider.getCloudWatchLogsClient(account, regionId);
             long sixtyDaysAgoMillis = Instant.now().minus(60, ChronoUnit.DAYS).toEpochMilli();
             List<DashboardData.WastedResource> findings = new ArrayList<>();
-
             List<LogGroup> logGroups = logs.describeLogGroups().logGroups();
             
             for (LogGroup lg : logGroups) {
@@ -418,14 +433,9 @@ public class OptimizationService {
                     findings.add(new DashboardData.WastedResource(lg.logGroupName(), lg.logGroupName(), "Log Group", regionId, 0.0, "Empty and created over 60 days ago"));
                     continue;
                 }
-
                 try {
                     DescribeLogStreamsResponse response = logs.describeLogStreams(req -> req
-                        .logGroupName(lg.logGroupName())
-                        .orderBy("LastEventTime")
-                        .descending(true)
-                        .limit(1));
-
+                        .logGroupName(lg.logGroupName()).orderBy("LastEventTime").descending(true).limit(1));
                     if (response.logStreams().isEmpty() || response.logStreams().get(0).lastEventTimestamp() == null || response.logStreams().get(0).lastEventTimestamp() < sixtyDaysAgoMillis) {
                          findings.add(new DashboardData.WastedResource(lg.logGroupName(), lg.logGroupName(), "Log Group", regionId, 0.0, "No new events in 60+ days"));
                     }

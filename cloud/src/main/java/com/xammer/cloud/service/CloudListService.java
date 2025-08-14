@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.domain.CloudAccount;
@@ -9,7 +10,6 @@ import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -42,7 +42,7 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.CompletableFuture; // <-- MISSING IMPORT ADDED HERE
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -57,6 +57,8 @@ public class CloudListService {
     private final Map<String, double[]> regionCoordinates = new HashMap<>();
     private static final Set<String> SUSTAINABLE_REGIONS = Set.of("eu-west-1", "eu-north-1", "ca-central-1", "us-west-2");
 
+    @Autowired
+    private DatabaseCacheService dbCache; // Inject the new database cache service
 
     @Autowired
     public CloudListService(
@@ -99,10 +101,17 @@ public class CloudListService {
 
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "groupedCloudlistResources", key = "#accountId")
-    public CompletableFuture<List<DashboardData.ServiceGroupDto>> getAllResourcesGrouped(String accountId) {
+    public CompletableFuture<List<DashboardData.ServiceGroupDto>> getAllResourcesGrouped(String accountId, boolean forceRefresh) {
+        String cacheKey = "groupedCloudlistResources-" + accountId;
+        if (!forceRefresh) {
+            Optional<List<DashboardData.ServiceGroupDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         CloudAccount account = getAccount(accountId);
-        return getAllResources(account).thenApply(flatList -> {
+        return getAllResources(account, forceRefresh).thenApply(flatList -> {
             List<DashboardData.ServiceGroupDto> groupedList = flatList.stream()
                     .collect(Collectors.groupingBy(ResourceDto::getType))
                     .entrySet().stream()
@@ -110,14 +119,22 @@ public class CloudListService {
                     .sorted(Comparator.comparing(DashboardData.ServiceGroupDto::getServiceType))
                     .collect(Collectors.toList());
             logger.debug("Grouped Cloudlist resources into {} service groups for account {}", groupedList.size(), accountId);
+            dbCache.put(cacheKey, groupedList);
             return groupedList;
         });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "cloudlistResources", key = "#account.awsAccountId")
-    public CompletableFuture<List<ResourceDto>> getAllResources(CloudAccount account) {
-        return getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+    public CompletableFuture<List<ResourceDto>> getAllResources(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "cloudlistResources-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<ResourceDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
+        return getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions -> {
             logger.info("Fetching all resources for Cloudlist (flat list) for account {}...", account.getAwsAccountId());
 
             List<CompletableFuture<List<ResourceDto>>> resourceFutures = List.of(
@@ -141,14 +158,22 @@ public class CloudListService {
                                 .flatMap(Collection::stream)
                                 .collect(Collectors.toList());
                         logger.debug("Fetched a total of {} resources for Cloudlist for account {}", allResources.size(), account.getAwsAccountId());
+                        dbCache.put(cacheKey, allResources);
                         return allResources;
                     });
         });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "regionStatus", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForAccount(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForAccount(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "regionStatus-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.RegionStatus>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         logger.info("Fetching status for all available and active AWS regions for account {}...", account.getAwsAccountId());
         Ec2Client ec2 = awsClientProvider.getEc2Client(account, configuredRegion);
         try {
@@ -194,6 +219,7 @@ public class CloudListService {
                     .collect(Collectors.toList());
 
             logger.debug("Successfully fetched {} active region statuses for account {}", regionStatuses.size(), account.getAwsAccountId());
+            dbCache.put(cacheKey, regionStatuses);
             return CompletableFuture.completedFuture(regionStatuses);
 
         } catch (Exception e) {

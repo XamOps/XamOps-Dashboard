@@ -33,7 +33,8 @@ public class CostingController {
             @RequestParam String accountId,
             @RequestParam String groupBy,
             @RequestParam(required = false) String tagKey) {
-        return costService.getCostBreakdown(accountId, groupBy, tagKey)
+        // Pass 'false' as the fourth argument, or set as needed
+        return costService.getCostBreakdown(accountId, groupBy, tagKey, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching cost breakdown for account {}", accountId, ex);
@@ -47,7 +48,8 @@ public class CostingController {
             @RequestParam(required = false) String serviceName,
             @RequestParam(required = false) String regionName,
             @RequestParam(defaultValue = "30") int days) {
-        return costService.getHistoricalCost(accountId, serviceName, regionName, days)
+        // Pass 'false' as the fifth argument, or set as needed
+        return costService.getHistoricalCost(accountId, serviceName, regionName, days, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching historical cost for account {}", accountId, ex);
@@ -61,7 +63,8 @@ public class CostingController {
             @RequestParam String groupBy,
             @RequestParam String dimensionValue,
             @RequestParam(required = false) String tagKey) {
-        return costService.getHistoricalCostForDimension(accountId, groupBy, dimensionValue, tagKey)
+        // Pass 'false' as the fifth argument, or set as needed
+        return costService.getHistoricalCostForDimension(accountId, groupBy, dimensionValue, tagKey, false)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching historical cost for dimension {} in account {}", dimensionValue, accountId, ex);

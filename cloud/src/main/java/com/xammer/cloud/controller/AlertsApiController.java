@@ -44,7 +44,7 @@ public class AlertsApiController {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
-        return cloudListService.getRegionStatusForAccount(account)
+        return cloudListService.getRegionStatusForAccount(account, true)
             .thenCompose(activeRegions -> {
                 CompletableFuture<List<AlertDto>> quotaAlertsFuture = cloudGuardService.getServiceQuotaInfo(account, activeRegions)
                     .thenApply(quotas -> quotas.stream()
@@ -64,7 +64,7 @@ public class AlertsApiController {
                         return Collections.emptyList();
                     });
 
-                CompletableFuture<List<AlertDto>> anomalyAlertsFuture = finOpsService.getCostAnomalies(account)
+                CompletableFuture<List<AlertDto>> anomalyAlertsFuture = finOpsService.getCostAnomalies(account, true)
                     .thenApply(anomalies -> anomalies.stream()
                         .map(a -> new AlertDto(
                                 a.getAnomalyId(),

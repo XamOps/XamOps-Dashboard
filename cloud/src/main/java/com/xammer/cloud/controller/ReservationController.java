@@ -27,8 +27,10 @@ public class ReservationController {
     }
 
     @GetMapping
-    public CompletableFuture<ResponseEntity<ReservationDto>> getReservationData(@RequestParam String accountId) {
-        return reservationService.getReservationPageData(accountId)
+    public CompletableFuture<ResponseEntity<ReservationDto>> getReservationData(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return reservationService.getReservationPageData(accountId, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching reservation data for account {}", accountId, ex);
@@ -39,8 +41,9 @@ public class ReservationController {
     @GetMapping("/cost-by-tag")
     public CompletableFuture<ResponseEntity<List<CostByTagDto>>> getReservationCostByTag(
             @RequestParam String accountId,
-            @RequestParam String tagKey) {
-        return reservationService.getReservationCostByTag(accountId, tagKey)
+            @RequestParam String tagKey,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return reservationService.getReservationCostByTag(accountId, tagKey, forceRefresh)
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching reservation cost by tag for account {}", accountId, ex);

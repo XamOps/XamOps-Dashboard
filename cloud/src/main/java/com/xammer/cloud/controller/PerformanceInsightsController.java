@@ -28,14 +28,17 @@ public class PerformanceInsightsController {
     @GetMapping
     public ResponseEntity<List<PerformanceInsightDto>> getInsights(
             @RequestParam String accountId,
-            @RequestParam(required = false) String severity) {
-        List<PerformanceInsightDto> insights = performanceInsightsService.getInsights(accountId, severity);
+            @RequestParam(required = false) String severity,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        List<PerformanceInsightDto> insights = performanceInsightsService.getInsights(accountId, severity, forceRefresh);
         return ResponseEntity.ok(insights);
     }
 
     @GetMapping("/summary")
-    public ResponseEntity<Map<String, Object>> getInsightsSummary(@RequestParam String accountId) {
-        Map<String, Object> summary = performanceInsightsService.getInsightsSummary(accountId);
+    public ResponseEntity<Map<String, Object>> getInsightsSummary(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        Map<String, Object> summary = performanceInsightsService.getInsightsSummary(accountId, forceRefresh);
         return ResponseEntity.ok(summary);
     }
 
@@ -43,8 +46,9 @@ public class PerformanceInsightsController {
     public CompletableFuture<ResponseEntity<WhatIfScenarioDto>> getWhatIfScenario(
             @RequestParam String accountId,
             @RequestParam String resourceId,
-            @RequestParam String targetInstanceType) {
-        return performanceInsightsService.getWhatIfScenario(accountId, resourceId, targetInstanceType)
+            @RequestParam String targetInstanceType,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+        return performanceInsightsService.getWhatIfScenario(accountId, resourceId, targetInstanceType, forceRefresh)
                 .thenApply(result -> ResponseEntity.ok(result))
                 .exceptionally(ex -> {
                     logger.error("Error generating what-if scenario for resource {}", resourceId, ex);

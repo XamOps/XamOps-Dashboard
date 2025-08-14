@@ -1,11 +1,13 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.CostDto;
 import com.xammer.cloud.dto.HistoricalCostDto;
 import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
@@ -23,6 +25,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -33,18 +36,27 @@ public class CostService {
     private final AwsClientProvider awsClientProvider;
     private final CloudAccountRepository cloudAccountRepository;
 
+    @Autowired
+    private DatabaseCacheService dbCache; // Inject the new database cache service
+
     public CostService(AwsClientProvider awsClientProvider, CloudAccountRepository cloudAccountRepository) {
         this.awsClientProvider = awsClientProvider;
         this.cloudAccountRepository = cloudAccountRepository;
     }
 
     @Async("awsTaskExecutor")
-    public CompletableFuture<List<CostDto>> getCostBreakdown(String accountId, String groupBy, String tagKey) {
-        logger.info("Fetching cost breakdown for account {}, grouped by: {}", accountId, groupBy);
+    public CompletableFuture<List<CostDto>> getCostBreakdown(String accountId, String groupBy, String tagKey, boolean forceRefresh) {
+        String cacheKey = "costBreakdown-" + accountId + "-" + groupBy + "-" + tagKey;
+        if (!forceRefresh) {
+            Optional<List<CostDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
 
+        logger.info("Fetching cost breakdown for account {}, grouped by: {}", accountId, groupBy);
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-
         CostExplorerClient costExplorerClient = awsClientProvider.getCostExplorerClient(account);
 
         try {
@@ -63,37 +75,36 @@ public class CostService {
                     .groupBy(groupDefinition)
                     .build();
 
-            return CompletableFuture.completedFuture(costExplorerClient.getCostAndUsage(request).resultsByTime()
+            List<CostDto> result = costExplorerClient.getCostAndUsage(request).resultsByTime()
                     .stream().flatMap(r -> r.groups().stream())
                     .map(g -> new CostDto(g.keys().get(0),
                             Double.parseDouble(g.metrics().get("UnblendedCost").amount())))
                     .filter(s -> s.getAmount() > 0.01)
-                    .collect(Collectors.toList()));
+                    .collect(Collectors.toList());
+            
+            dbCache.put(cacheKey, result); // Save to database cache
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch cost breakdown for account {}.", accountId, e);
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
     }
 
-    /**
-     * Fetches historical cost data for a specific service and region over a given number of days.
-     *
-     * @param accountId The AWS Account ID.
-     * @param serviceName The AWS service name (e.g., "AmazonEC2", "Amazon S3").
-     * @param regionName The AWS region name (e.g., "us-east-1"). Can be null or empty for all regions.
-     * @param days The number of past days to fetch data for.
-     * @return A CompletableFuture containing a HistoricalCostDto with labels (dates) and costs.
-     */
     @Async("awsTaskExecutor")
     public CompletableFuture<HistoricalCostDto> getHistoricalCost(
-            String accountId, String serviceName, String regionName, int days) {
+            String accountId, String serviceName, String regionName, int days, boolean forceRefresh) {
+        String cacheKey = "historicalCost-" + accountId + "-" + serviceName + "-" + regionName + "-" + days;
+        if (!forceRefresh) {
+            Optional<HistoricalCostDto> cachedData = dbCache.get(cacheKey, HistoricalCostDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
 
         logger.info("Fetching historical cost for account {}, service: {}, region: {}, days: {}",
                 accountId, serviceName, regionName, days);
-
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-
         CostExplorerClient ceClient = awsClientProvider.getCostExplorerClient(account);
 
         List<String> labels = new ArrayList<>();
@@ -102,19 +113,14 @@ public class CostService {
         try {
             LocalDate endDate = LocalDate.now();
             LocalDate startDate = endDate.minusDays(days);
-
-            // Build filters
             Expression.Builder filterBuilder = Expression.builder();
             List<Expression> andExpressions = new ArrayList<>();
 
-            // Filter by Service
             if (serviceName != null && !serviceName.isBlank()) {
                 andExpressions.add(Expression.builder()
                         .dimensions(DimensionValues.builder().key(Dimension.SERVICE).values(serviceName).build())
                         .build());
             }
-
-            // Filter by Region
             if (regionName != null && !regionName.isBlank()) {
                 andExpressions.add(Expression.builder()
                         .dimensions(DimensionValues.builder().key(Dimension.REGION).values(regionName).build())
@@ -123,28 +129,21 @@ public class CostService {
 
             Expression finalFilter = null;
             if (!andExpressions.isEmpty()) {
-                if (andExpressions.size() == 1) {
-                    finalFilter = andExpressions.get(0);
-                } else {
-                    finalFilter = Expression.builder().and(andExpressions).build();
-                }
+                finalFilter = andExpressions.size() == 1 ? andExpressions.get(0) : Expression.builder().and(andExpressions).build();
             }
 
             GetCostAndUsageRequest.Builder requestBuilder = GetCostAndUsageRequest.builder()
                     .timePeriod(DateInterval.builder().start(startDate.toString()).end(endDate.plusDays(1).toString()).build())
-                    .granularity(Granularity.DAILY) // Daily granularity as per the 'days' parameter
+                    .granularity(Granularity.DAILY)
                     .metrics("UnblendedCost");
 
             if (finalFilter != null) {
                 requestBuilder.filter(finalFilter);
             }
-
             GetCostAndUsageRequest request = requestBuilder.build();
 
-            // Iterate through results to populate labels and costs
             for (ResultByTime result : ceClient.getCostAndUsage(request).resultsByTime()) {
-                // *** IMPORTANT CHANGE HERE: Format date to YYYY-MM-DD ***
-                labels.add(LocalDate.parse(result.timePeriod().start()).format(DateTimeFormatter.ISO_LOCAL_DATE)); // Use ISO_LOCAL_DATE
+                labels.add(LocalDate.parse(result.timePeriod().start()).format(DateTimeFormatter.ISO_LOCAL_DATE));
                 double cost = Double.parseDouble(result.total().get("UnblendedCost").amount());
                 costs.add(cost);
             }
@@ -154,12 +153,22 @@ public class CostService {
                     accountId, serviceName, regionName, days, e);
         }
 
-        return CompletableFuture.completedFuture(new HistoricalCostDto(labels, costs));
+        HistoricalCostDto result = new HistoricalCostDto(labels, costs);
+        dbCache.put(cacheKey, result); // Save to database cache
+        return CompletableFuture.completedFuture(result);
     }
 
 
     @Async("awsTaskExecutor")
-    public CompletableFuture<HistoricalCostDto> getHistoricalCostForDimension(String accountId, String groupBy, String dimensionValue, String tagKey) {
+    public CompletableFuture<HistoricalCostDto> getHistoricalCostForDimension(String accountId, String groupBy, String dimensionValue, String tagKey, boolean forceRefresh) {
+        String cacheKey = "historicalCostForDimension-" + accountId + "-" + groupBy + "-" + dimensionValue + "-" + tagKey;
+        if (!forceRefresh) {
+            Optional<HistoricalCostDto> cachedData = dbCache.get(cacheKey, HistoricalCostDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         logger.info("Fetching historical cost for account {}, dimension: {}, value: {}", accountId, groupBy, dimensionValue);
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
@@ -176,7 +185,6 @@ public class CostService {
                     .key("TAG".equalsIgnoreCase(groupBy) ? tagKey : groupBy)
                     .values(dimensionValue)
                     .build();
-
             Expression filter = Expression.builder().dimensions(dimension).build();
 
             GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
@@ -190,11 +198,12 @@ public class CostService {
                 labels.add(LocalDate.parse(result.timePeriod().start()).format(DateTimeFormatter.ofPattern("MMM yyyy")));
                 costs.add(Double.parseDouble(result.total().get("UnblendedCost").amount()));
             });
-
         } catch (Exception e) {
             logger.error("Could not fetch historical cost for dimension value '{}'", dimensionValue, e);
         }
-
-        return CompletableFuture.completedFuture(new HistoricalCostDto(labels, costs));
+        
+        HistoricalCostDto result = new HistoricalCostDto(labels, costs);
+        dbCache.put(cacheKey, result); // Save to database cache
+        return CompletableFuture.completedFuture(result);
     }
 }

@@ -200,6 +200,6 @@ public class CloudGuardService {
     @Async("awsTaskExecutor")
 @Cacheable(value = "costAnomalies", key = "#account.awsAccountId")
 public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies(CloudAccount account) {
-    return finOpsService.getCostAnomalies(account);
+    return finOpsService.getCostAnomalies(account, true);
 }
 }

@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.*;
 import com.xammer.cloud.repository.CloudAccountRepository;
@@ -7,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -40,17 +40,20 @@ public class ReservationService {
     private final CloudListService cloudListService;
     private final List<String> instanceSizeOrder;
     private final String configuredRegion;
+    private final DatabaseCacheService dbCache;
 
     @Autowired
     public ReservationService(
             CloudAccountRepository cloudAccountRepository,
             AwsClientProvider awsClientProvider,
             @Lazy CloudListService cloudListService,
-            @Value("${rightsizing.instance-size-order}") List<String> instanceSizeOrder) {
+            @Value("${rightsizing.instance-size-order}") List<String> instanceSizeOrder,
+            DatabaseCacheService dbCache) {
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.cloudListService = cloudListService;
         this.instanceSizeOrder = instanceSizeOrder;
+        this.dbCache = dbCache;
         this.configuredRegion = System.getenv().getOrDefault("AWS_REGION", "us-east-1");
     }
 
@@ -60,32 +63,43 @@ public class ReservationService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "reservationPageData", key = "#accountId")
-    public CompletableFuture<ReservationDto> getReservationPageData(String accountId) {
+    public CompletableFuture<ReservationDto> getReservationPageData(String accountId, boolean forceRefresh) {
+        String cacheKey = "reservationPageData-" + accountId;
+        if (!forceRefresh) {
+            Optional<ReservationDto> cachedData = dbCache.get(cacheKey, ReservationDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
-        return cloudListService.getRegionStatusForAccount(account).thenCompose(activeRegions -> {
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions -> {
             logger.info("--- LAUNCHING ASYNC DATA FETCH FOR RESERVATION PAGE for account {}---", account.getAwsAccountId());
-            CompletableFuture<DashboardData.ReservationAnalysis> analysisFuture = getReservationAnalysis(account);
-            CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations(account);
-            CompletableFuture<List<ReservationInventoryDto>> inventoryFuture = getReservationInventory(account, activeRegions);
-            CompletableFuture<HistoricalReservationDataDto> historicalDataFuture = getHistoricalReservationData(account);
-            CompletableFuture<List<ReservationModificationRecommendationDto>> modificationRecsFuture = getReservationModificationRecommendations(account, activeRegions);
+            CompletableFuture<DashboardData.ReservationAnalysis> analysisFuture = getReservationAnalysis(account, forceRefresh);
+            CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations(account, forceRefresh);
+            CompletableFuture<List<ReservationInventoryDto>> inventoryFuture = getReservationInventory(account, activeRegions, forceRefresh);
+            CompletableFuture<HistoricalReservationDataDto> historicalDataFuture = getHistoricalReservationData(account, forceRefresh);
+            CompletableFuture<List<ReservationModificationRecommendationDto>> modificationRecsFuture = getReservationModificationRecommendations(account, activeRegions, forceRefresh);
 
             return CompletableFuture.allOf(analysisFuture, purchaseRecsFuture, inventoryFuture, historicalDataFuture, modificationRecsFuture).thenApply(v -> {
                 logger.info("--- RESERVATION PAGE DATA FETCH COMPLETE, COMBINING NOW ---");
-                DashboardData.ReservationAnalysis analysis = analysisFuture.join();
-                List<DashboardData.ReservationPurchaseRecommendation> recommendations = purchaseRecsFuture.join();
-                List<ReservationInventoryDto> inventory = inventoryFuture.join();
-                HistoricalReservationDataDto historicalData = historicalDataFuture.join();
-                List<ReservationModificationRecommendationDto> modificationRecs = modificationRecsFuture.join();
-                return new ReservationDto(analysis, recommendations, inventory, historicalData, modificationRecs);
+                ReservationDto result = new ReservationDto(analysisFuture.join(), purchaseRecsFuture.join(), inventoryFuture.join(), historicalDataFuture.join(), modificationRecsFuture.join());
+                dbCache.put(cacheKey, result);
+                return result;
             });
         });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "reservationAnalysis", key = "#account.awsAccountId")
-    public CompletableFuture<DashboardData.ReservationAnalysis> getReservationAnalysis(CloudAccount account) {
+    public CompletableFuture<DashboardData.ReservationAnalysis> getReservationAnalysis(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "reservationAnalysis-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<DashboardData.ReservationAnalysis> cachedData = dbCache.get(cacheKey, DashboardData.ReservationAnalysis.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching reservation analysis for account {}...", account.getAwsAccountId());
         try {
@@ -98,10 +112,10 @@ public class ReservationService {
             List<CoverageByTime> coverages = ce.getReservationCoverage(covRequest).coveragesByTime();
             double utilizationPercentage = utilizations.isEmpty() || utilizations.get(0).total() == null ? 0.0 : Double.parseDouble(utilizations.get(0).total().utilizationPercentage());
             double coveragePercentage = coverages.isEmpty() || coverages.get(0).total() == null ? 0.0 : Double.parseDouble(coverages.get(0).total().coverageHours().coverageHoursPercentage());
-            return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(
-                    utilizationPercentage,
-                    coveragePercentage
-            ));
+            
+            DashboardData.ReservationAnalysis result = new DashboardData.ReservationAnalysis(utilizationPercentage, coveragePercentage);
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch reservation analysis data for account {}", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(new DashboardData.ReservationAnalysis(0.0, 0.0));
@@ -109,8 +123,15 @@ public class ReservationService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "reservationPurchaseRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> getReservationPurchaseRecommendations(CloudAccount account) {
+    public CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> getReservationPurchaseRecommendations(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "reservationPurchaseRecs-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.ReservationPurchaseRecommendation>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching RI purchase recommendations for account {}...", account.getAwsAccountId());
         try {
@@ -118,12 +139,11 @@ public class ReservationService {
                     .lookbackPeriodInDays(LookbackPeriodInDays.SIXTY_DAYS).service("Amazon Elastic Compute Cloud - Compute").build();
             GetReservationPurchaseRecommendationResponse response = ce.getReservationPurchaseRecommendation(request);
 
-            return CompletableFuture.completedFuture(response.recommendations().stream()
+            List<DashboardData.ReservationPurchaseRecommendation> result = response.recommendations().stream()
                 .filter(rec -> rec.recommendationDetails() != null && !rec.recommendationDetails().isEmpty())
                 .flatMap(rec -> rec.recommendationDetails().stream()
                     .map(details -> {
                         try {
-                            // CORRECTED MAPPING LOGIC
                             return new DashboardData.ReservationPurchaseRecommendation(
                                 details.instanceDetails().ec2InstanceDetails().family(),
                                 String.valueOf(details.recommendedNumberOfInstancesToPurchase()),
@@ -140,7 +160,9 @@ public class ReservationService {
                         }
                     }))
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList()));
+                .collect(Collectors.toList());
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch reservation purchase recommendations.", e);
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -148,70 +170,62 @@ public class ReservationService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "reservationInventory", key = "#account.awsAccountId")
-    public CompletableFuture<List<ReservationInventoryDto>> getReservationInventory(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<ReservationInventoryDto>> getReservationInventory(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "reservationInventory-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<ReservationInventoryDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
             Filter activeFilter = Filter.builder().name("state").values("active").build();
-            DescribeReservedInstancesRequest request = DescribeReservedInstancesRequest.builder()
-                    .filters(activeFilter)
-                    .build();
+            DescribeReservedInstancesRequest request = DescribeReservedInstancesRequest.builder().filters(activeFilter).build();
             return ec2.describeReservedInstances(request).reservedInstances().stream()
                     .map(ri -> new ReservationInventoryDto(
-                            ri.reservedInstancesId(),
-                            ri.offeringTypeAsString(),
-                            ri.instanceTypeAsString(),
-                            ri.scopeAsString(),
-                            ri.availabilityZone(),
-                            ri.duration(),
-                            ri.start(),
-                            ri.end(),
-                            ri.instanceCount(),
-                            ri.stateAsString()
+                            ri.reservedInstancesId(), ri.offeringTypeAsString(), ri.instanceTypeAsString(),
+                            ri.scopeAsString(), ri.availabilityZone(), ri.duration(), ri.start(), ri.end(),
+                            ri.instanceCount(), ri.stateAsString()
                     ))
                     .collect(Collectors.toList());
-        }, "Reservation Inventory");
+        }, "Reservation Inventory").thenApply(result -> {
+            dbCache.put(cacheKey, result);
+            return result;
+        });
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "historicalReservationData", key = "#account.awsAccountId")
-    public CompletableFuture<HistoricalReservationDataDto> getHistoricalReservationData(CloudAccount account) {
+    public CompletableFuture<HistoricalReservationDataDto> getHistoricalReservationData(CloudAccount account, boolean forceRefresh) {
+        String cacheKey = "historicalReservationData-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<HistoricalReservationDataDto> cachedData = dbCache.get(cacheKey, HistoricalReservationDataDto.class);
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching historical reservation data for the last 6 months for account {}...", account.getAwsAccountId());
         try {
             LocalDate endDate = LocalDate.now();
             LocalDate startDate = endDate.minusMonths(6).withDayOfMonth(1);
-            DateInterval period = DateInterval.builder()
-                    .start(startDate.toString())
-                    .end(endDate.toString())
-                    .build();
+            DateInterval period = DateInterval.builder().start(startDate.toString()).end(endDate.toString()).build();
 
-            GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder()
-                    .timePeriod(period)
-                    .granularity(Granularity.MONTHLY)
-                    .build();
+            GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder().timePeriod(period).granularity(Granularity.MONTHLY).build();
             List<UtilizationByTime> utilizations = ce.getReservationUtilization(utilRequest).utilizationsByTime();
 
-            GetReservationCoverageRequest covRequest = GetReservationCoverageRequest.builder()
-                    .timePeriod(period)
-                    .granularity(Granularity.MONTHLY)
-                    .build();
+            GetReservationCoverageRequest covRequest = GetReservationCoverageRequest.builder().timePeriod(period).granularity(Granularity.MONTHLY).build();
             List<CoverageByTime> coverages = ce.getReservationCoverage(covRequest).coveragesByTime();
 
-            List<String> labels = utilizations.stream()
-                    .map(u -> LocalDate.parse(u.timePeriod().start()).format(DateTimeFormatter.ofPattern("MMM uuuu")))
-                    .collect(Collectors.toList());
-
-            List<Double> utilPercentages = utilizations.stream()
-                    .map(u -> Double.parseDouble(u.total().utilizationPercentage()))
-                    .collect(Collectors.toList());
-
-            List<Double> covPercentages = coverages.stream()
-                    .map(c -> Double.parseDouble(c.total().coverageHours().coverageHoursPercentage()))
-                    .collect(Collectors.toList());
-
-            return CompletableFuture.completedFuture(new HistoricalReservationDataDto(labels, utilPercentages, covPercentages));
-
+            List<String> labels = utilizations.stream().map(u -> LocalDate.parse(u.timePeriod().start()).format(DateTimeFormatter.ofPattern("MMM uuuu"))).collect(Collectors.toList());
+            List<Double> utilPercentages = utilizations.stream().map(u -> Double.parseDouble(u.total().utilizationPercentage())).collect(Collectors.toList());
+            List<Double> covPercentages = coverages.stream().map(c -> Double.parseDouble(c.total().coverageHours().coverageHoursPercentage())).collect(Collectors.toList());
+            
+            HistoricalReservationDataDto result = new HistoricalReservationDataDto(labels, utilPercentages, covPercentages);
+            dbCache.put(cacheKey, result);
+            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             logger.error("Could not fetch historical reservation data for account {}", account.getAwsAccountId(), e);
             return CompletableFuture.completedFuture(new HistoricalReservationDataDto(Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
@@ -219,11 +233,17 @@ public class ReservationService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "reservationModificationRecs", key = "#account.awsAccountId")
-    public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
-        logger.info("Fetching reservation modification recommendations for account {}...", account.getAwsAccountId());
+    public CompletableFuture<List<ReservationModificationRecommendationDto>> getReservationModificationRecommendations(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "reservationModificationRecs-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<ReservationModificationRecommendationDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
 
-        return getReservationInventory(account, activeRegions).thenCompose(activeReservations -> {
+        logger.info("Fetching reservation modification recommendations for account {}...", account.getAwsAccountId());
+        return getReservationInventory(account, activeRegions, forceRefresh).thenCompose(activeReservations -> {
             if (activeReservations.isEmpty()) {
                 return CompletableFuture.completedFuture(Collections.emptyList());
             }
@@ -232,17 +252,9 @@ public class ReservationService {
                     .collect(Collectors.toMap(ReservationInventoryDto::getReservationId, Function.identity()));
 
             CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
-            DateInterval last30Days = DateInterval.builder()
-                    .start(LocalDate.now().minusDays(30).toString())
-                    .end(LocalDate.now().toString())
-                    .build();
-
+            DateInterval last30Days = DateInterval.builder().start(LocalDate.now().minusDays(30).toString()).end(LocalDate.now().toString()).build();
             GroupDefinition groupByRiId = GroupDefinition.builder().type(GroupDefinitionType.DIMENSION).key("RESERVATION_ID").build();
-
-            GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder()
-                    .timePeriod(last30Days)
-                    .groupBy(groupByRiId)
-                    .build();
+            GetReservationUtilizationRequest utilRequest = GetReservationUtilizationRequest.builder().timePeriod(last30Days).groupBy(groupByRiId).build();
 
             try {
                 List<ReservationUtilizationGroup> utilizationGroups = ce.getReservationUtilization(utilRequest).utilizationsByTime().get(0).groups();
@@ -259,13 +271,13 @@ public class ReservationService {
                             if (recommendedType != null && !recommendedType.equals(currentType)) {
                                 recommendations.add(new ReservationModificationRecommendationDto(
                                         ri.getReservationId(), currentType, recommendedType,
-                                        String.format("Low Utilization (%.1f%%)", utilizationPercentage),
-                                        50.0 // Placeholder savings
+                                        String.format("Low Utilization (%.1f%%)", utilizationPercentage), 50.0 // Placeholder
                                 ));
                             }
                         }
                     }
                 }
+                dbCache.put(cacheKey, recommendations);
                 return CompletableFuture.completedFuture(recommendations);
             } catch (Exception e) {
                 logger.error("Could not generate reservation modification recommendations for account {}", account.getAwsAccountId(), e);
@@ -301,10 +313,10 @@ public class ReservationService {
                 .reservedInstancesIds(request.getReservationId())
                 .targetConfigurations(targetConfig)
                 .build();
-
         try {
             ModifyReservedInstancesResponse modifyResponse = ec2.modifyReservedInstances(modifyRequest);
             logger.info("Successfully submitted modification request for RI {}. Transaction ID: {}", request.getReservationId(), modifyResponse.reservedInstancesModificationId());
+            dbCache.evict("reservationModificationRecs-" + accountId); // Evict cache after modification
             return modifyResponse.reservedInstancesModificationId();
         } catch (Exception e) {
             logger.error("Failed to execute RI modification for ID {}: {}", request.getReservationId(), e.getMessage());
@@ -313,8 +325,15 @@ public class ReservationService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "reservationCostByTag", key = "#accountId + '-' + #tagKey")
-    public CompletableFuture<List<CostByTagDto>> getReservationCostByTag(String accountId, String tagKey) {
+    public CompletableFuture<List<CostByTagDto>> getReservationCostByTag(String accountId, String tagKey, boolean forceRefresh) {
+        String cacheKey = "reservationCostByTag-" + accountId + "-" + tagKey;
+        if (!forceRefresh) {
+            Optional<List<CostByTagDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+        
         CloudAccount account = getAccount(accountId);
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
         logger.info("Fetching reservation cost by tag: {} for account {}", tagKey, accountId);
@@ -327,31 +346,24 @@ public class ReservationService {
             DateInterval period = DateInterval.builder().start(start.toString()).end(end.toString()).build();
 
             Expression filter = Expression.builder().dimensions(DimensionValues.builder()
-                    .key(Dimension.PURCHASE_TYPE)
-                    .values("Reserved Instances")
-                    .build()).build();
-
+                    .key(Dimension.PURCHASE_TYPE).values("Reserved Instances").build()).build();
             GetCostAndUsageRequest request = GetCostAndUsageRequest.builder()
-                    .timePeriod(period)
-                    .granularity(Granularity.MONTHLY)
-                    .metrics("AmortizedCost")
+                    .timePeriod(period).granularity(Granularity.MONTHLY).metrics("AmortizedCost")
                     .filter(filter)
-                    .groupBy(GroupDefinition.builder().type(GroupDefinitionType.TAG).key(tagKey).build())
-                    .build();
+                    .groupBy(GroupDefinition.builder().type(GroupDefinitionType.TAG).key(tagKey).build()).build();
 
             List<ResultByTime> results = ce.getCostAndUsage(request).resultsByTime();
-
-            return CompletableFuture.completedFuture(
-                results.stream()
-                    .flatMap(r -> r.groups().stream())
-                    .map(g -> {
-                        String tagValue = g.keys().isEmpty() || g.keys().get(0).isEmpty() ? "Untagged" : g.keys().get(0);
-                        double cost = Double.parseDouble(g.metrics().get("AmortizedCost").amount());
-                        return new CostByTagDto(tagValue, cost);
-                    })
-                    .filter(dto -> dto.getCost() > 0.01)
-                    .collect(Collectors.toList())
-            );
+            List<CostByTagDto> resultList = results.stream()
+                .flatMap(r -> r.groups().stream())
+                .map(g -> {
+                    String tagValue = g.keys().isEmpty() || g.keys().get(0).isEmpty() ? "Untagged" : g.keys().get(0);
+                    double cost = Double.parseDouble(g.metrics().get("AmortizedCost").amount());
+                    return new CostByTagDto(tagValue, cost);
+                })
+                .filter(dto -> dto.getCost() > 0.01)
+                .collect(Collectors.toList());
+            dbCache.put(cacheKey, resultList);
+            return CompletableFuture.completedFuture(resultList);
         } catch (Exception e) {
             logger.error("Could not fetch reservation cost by tag key '{}' for account {}", tagKey, e);
             return CompletableFuture.completedFuture(Collections.emptyList());

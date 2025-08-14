@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.dto.ResourceDto;
@@ -7,12 +8,10 @@ import com.xammer.cloud.repository.CloudAccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
-import software.amazon.awssdk.services.autoscaling.AutoScalingClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
@@ -31,8 +30,11 @@ public class CloudMapService {
 
     private final CloudAccountRepository cloudAccountRepository;
     private final AwsClientProvider awsClientProvider;
-    private final CloudListService cloudListService; // Used for fetching active regions
+    private final CloudListService cloudListService;
     private final String configuredRegion;
+
+    @Autowired
+    private DatabaseCacheService dbCache; // Inject the new database cache service
 
     @Autowired
     public CloudMapService(
@@ -51,25 +53,41 @@ public class CloudMapService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "vpcListForCloudmap", key = "#accountId")
-    public CompletableFuture<List<ResourceDto>> getVpcListForCloudmap(String accountId) {
+    public CompletableFuture<List<ResourceDto>> getVpcListForCloudmap(String accountId, boolean forceRefresh) {
+        String cacheKey = "vpcListForCloudmap-" + accountId;
+        if (!forceRefresh) {
+            Optional<List<ResourceDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         CloudAccount account = getAccount(accountId);
         logger.info("Fetching list of VPCs for Cloudmap for account {}...", accountId);
-        return cloudListService.getRegionStatusForAccount(account).thenCompose(activeRegions ->
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions ->
                 fetchAllRegionalResources(account, activeRegions, regionId -> {
                     Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
                     return ec2.describeVpcs().vpcs().stream()
                             .map(v -> new ResourceDto(v.vpcId(), getTagName(v.tags(), v.vpcId()), "VPC", regionId, v.stateAsString(), null, Map.of("CIDR Block", v.cidrBlock(), "Is Default", v.isDefault().toString())))
                             .collect(Collectors.toList());
-                }, "VPCs List for Cloudmap")
+                }, "VPCs List for Cloudmap").thenApply(vpcList -> {
+                    dbCache.put(cacheKey, vpcList);
+                    return vpcList;
+                })
         );
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "graphData", key = "#accountId + '-' + #vpcId")
-    public CompletableFuture<List<Map<String, Object>>> getGraphData(String accountId, String vpcId, String region) {
-        CloudAccount account = getAccount(accountId);
+    public CompletableFuture<List<Map<String, Object>>> getGraphData(String accountId, String vpcId, String region, boolean forceRefresh) {
+        String cacheKey = "graphData-" + accountId + "-" + vpcId + "-" + region;
+        if (!forceRefresh) {
+            Optional<List<Map<String, Object>>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
 
+        CloudAccount account = getAccount(accountId);
         String effectiveRegion = (region != null && !region.isBlank()) ? region : this.configuredRegion;
 
         Ec2Client ec2 = awsClientProvider.getEc2Client(account, effectiveRegion);
@@ -93,6 +111,7 @@ public class CloudMapService {
                         bucketNode.put("data", bucketData);
                         elements.add(bucketNode);
                     });
+                    dbCache.put(cacheKey, elements); // Cache the result
                     return elements;
                 }
 
@@ -223,7 +242,7 @@ public class CloudMapService {
                                 elements.add(dbNode);
                             }
                         });
-
+                dbCache.put(cacheKey, elements); // Cache the result
             } catch (Exception e) {
                 logger.error("Failed to build graph data for VPC {}", vpcId, e);
                 throw new RuntimeException("Failed to fetch graph data from AWS", e);
