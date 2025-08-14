@@ -13,9 +13,8 @@ import java.io.IOException;
 @Component
 public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-    private final CacheService cacheService; // Use the new CacheService
+    private final CacheService cacheService; 
 
-    // Update the constructor to inject CacheService
     public CustomAuthenticationSuccessHandler(CacheService cacheService) {
         this.cacheService = cacheService;
     }
@@ -23,13 +22,15 @@ public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                       Authentication authentication) throws IOException, ServletException {
-        // Clear all application data caches upon successful login
-        cacheService.evictAllCaches();
         
-        // Set the default target URL to redirect to after login
+        //
+        // REMOVE OR COMMENT OUT THIS LINE. This is the cause of the issue.
+        // By removing it, the cache will persist between user sessions.
+        // cacheService.evictAllCaches();
+        //
+        
         setDefaultTargetUrl("/");
         
-        // Proceed with the default Spring Security login success behavior
         super.onAuthenticationSuccess(request, response, authentication);
     }
 }

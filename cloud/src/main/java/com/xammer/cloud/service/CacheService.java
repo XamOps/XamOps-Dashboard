@@ -67,7 +67,7 @@ public class CacheService {
      * Scheduled task to automatically clear all caches every 2 hours.
      * The fixed rate is specified in milliseconds (2 hours = 7,200,000 ms).
      */
-    @Scheduled(fixedRate = 7200000)
+    // @Scheduled(fixedRate = 7200000)
     public void scheduledCacheEviction() {
         logger.info("Executing scheduled cache eviction...");
         evictAllCaches();
