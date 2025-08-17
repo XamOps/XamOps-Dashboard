@@ -46,7 +46,7 @@ public class AccountManagerController {
         ClientUserDetails userDetails = (ClientUserDetails) authentication.getPrincipal();
         Long clientId = userDetails.getClientId();
         try {
-            Map<String, Object> result = awsAccountService.generateCloudFormationUrl(request.getAccountName(), request.getAccessType(), "", clientId);
+        Map<String, Object> result = awsAccountService.generateCloudFormationUrl(request.getAccountName(), request.getAwsAccountId(), request.getAccessType(), clientId);
 
             Map<String, String> stackDetails = Map.of(
                 "url", result.get("url").toString(),
