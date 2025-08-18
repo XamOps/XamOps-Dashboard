@@ -730,7 +730,6 @@ function dashboardApp() {
                 });
         },
         
-        // --- All other helper functions remain unchanged ---
         showNotification(type, message) {
             const notification = document.getElementById(type + 'Notification');
             if (notification) {
@@ -774,7 +773,10 @@ function dashboardApp() {
             const kpiContainer = document.getElementById('kpi-cards');
             if (!kpiContainer) return;
             const costHistory = account.costHistory;
-            const mtdSpend = costHistory.costs.length > 0 ? costHistory.costs[costHistory.costs.length - 1] : 0;
+            
+            // ✅ FIX: Calculate MTD spend by summing the current month's billing summary for better accuracy.
+            const mtdSpend = account.billingSummary.reduce((sum, item) => sum + item.monthToDateCost, 0);
+            
             const lastMonthSpend = costHistory.costs.length > 1 ? costHistory.costs[costHistory.costs.length - 2] : 0;
             const forecastedSpend = (mtdSpend / new Date().getDate()) * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
 
@@ -804,15 +806,15 @@ function dashboardApp() {
                     icon: 'fa-calendar-alt', 
                     color: { iconClass: 'text-gray-500', chartColor: '#6b7280', gradientClass: 'from-gray-500 to-gray-600' }, 
                     trendData: costHistory.costs.slice(0, -1),
-                    change: costHistory.costs.length > 2 ? ((lastMonthSpend - costHistory.costs[costHistory.costs.length - 3]) / costHistory.costs[costHistory.costs.length - 3] * 100).toFixed(1) : 0
+                    change: costHistory.costs.length > 2 && costHistory.costs[costHistory.costs.length - 3] > 0 ? ((lastMonthSpend - costHistory.costs[costHistory.costs.length - 3]) / costHistory.costs[costHistory.costs.length - 3] * 100).toFixed(1) : 0
                 },
                 { 
                     id: 'potentialSavings', 
                     title: 'Potential Savings', 
-                    value: this.formatCurrency(account.optimizationSummary.totalPotentialSavings), 
+                    value: this.formatCurrency(account.optimizationSummary ? account.optimizationSummary.totalPotentialSavings : 0), 
                     icon: 'fa-piggy-bank', 
                     color: { iconClass: 'text-green-500', chartColor: '#22c55e', gradientClass: 'from-green-500 to-green-600' }, 
-                    trendData: [account.optimizationSummary.totalPotentialSavings],
+                    trendData: [account.optimizationSummary ? account.optimizationSummary.totalPotentialSavings : 0],
                     change: '+100.0'
                 }
             ];
@@ -855,8 +857,7 @@ function dashboardApp() {
                 { name: 'GKE Clusters', count: inv.kubernetes, type: 'GKE Cluster', icon: 'gcp-kubernetes-engine.png' },
                 { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'gcp-vpc.png' },
                 { name: 'Cloud DNS Zones', count: inv.route53Zones, type: 'Cloud DNS', icon: 'gcp-dns.png' },
-                { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'gcp-load-balancer.png' },
-                { name: 'EBS Volumes', count: inv.ebsVolumes, type: 'EBS Volume', icon: 'aws-ebs.png' },
+                { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'gcp-load-balancer.png' }
             ];
             
             container.innerHTML = resources.map(res => `
@@ -964,6 +965,7 @@ function dashboardApp() {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
                 `;
             };
 
@@ -991,8 +993,6 @@ function dashboardApp() {
                     </div>
                 </div>
                 ${recsHtml('GCE Instance Right-Sizing', ec2Recs, 'fa-server', 'orange', 'from-orange-500 to-orange-600')}
-                ${recsHtml('EBS Volume Optimization', ebsRecs, 'fa-hdd', 'purple', 'from-purple-500 to-purple-600')}
-                ${recsHtml('Lambda Function Optimization', lambdaRecs, 'fa-bolt', 'yellow', 'from-yellow-500 to-yellow-600')}
                 ${anomaliesHtml(anomalies)}
             `;
         },
@@ -1103,7 +1103,7 @@ function dashboardApp() {
             }); 
         },
         
-renderHighchartMap(regionStatus) {
+        renderHighchartMap(regionStatus) {
             if (!regionStatus || !document.getElementById('highcharts-map-container')) return;
             const statusColors = { 
                 'ACTIVE': '#3b82f6', 
@@ -1275,19 +1275,17 @@ renderHighchartMap(regionStatus) {
             }, 4000);
         },
 
-
-            formatCurrency(num) { 
-                return '$' + (num != null ? num.toLocaleString('en-US', {
-                    minimumFractionDigits: 2, 
-                    maximumFractionDigits: 2
-                }) : '0.00'); 
-            },
-        }
+        formatCurrency(num) { 
+            // ✅ FIX: Changed to Indian Rupee format
+            return (num != null ? num.toLocaleString('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2
+            }) : '₹0.00'); 
+        },
     }
-    
-    // document.addEventListener('DOMContentLoaded', () => {
-    //     Alpine.start();
-    // });
+}
     </script>
 </body>
 </html>

@@ -32,7 +32,6 @@ public class GcpCostService {
         this.cloudAccountRepository = cloudAccountRepository;
     }
 
-    // ✅ NEW HELPER METHOD
     private Optional<String> getBillingTableForProject(String gcpProjectId) {
         return cloudAccountRepository.findByGcpProjectId(gcpProjectId)
                 .map(CloudAccount::getBillingExportTable)
@@ -48,13 +47,13 @@ public class GcpCostService {
 
         return CompletableFuture.supplyAsync(() -> {
             try {
+                log.info("Executing BigQuery query for project {}: {}", gcpProjectId, query);
                 QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query).build();
                 TableResult results = bqOpt.get().query(queryConfig);
                 List<GcpCostDto> costList = new ArrayList<>();
                 for (FieldValueList row : results.iterateAll()) {
                     String name = row.get("name").getStringValue();
                     double totalCost = row.get("total_cost").getDoubleValue();
-                    // Anomaly detection is simplified here; a real implementation would use ML.
                     boolean isAnomaly = row.get("is_anomaly") != null && row.get("is_anomaly").getBooleanValue();
                     GcpCostDto dto = new GcpCostDto();
                     dto.setName(name);
@@ -85,11 +84,15 @@ public class GcpCostService {
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.withDayOfMonth(1);
 
+        // ✅ FIX: The query now calculates cost by adding up all credits and subtracting them from the usage cost.
         String query = String.format(
-            "SELECT service.description as name, SUM(cost) as total_cost, false as is_anomaly " +
+            "SELECT " +
+            "  service.description as name, " +
+            "  (SUM(cost) + SUM((SELECT SUM(c.amount) FROM UNNEST(credits) c))) as total_cost, " +
+            "  false as is_anomaly " +
             "FROM `%s` " +
             "WHERE DATE(usage_start_time) >= '%s' AND DATE(usage_start_time) <= '%s' " +
-            "GROUP BY name HAVING total_cost > 0 ORDER BY total_cost DESC",
+            "GROUP BY name HAVING total_cost > 0.01 ORDER BY total_cost DESC",
             billingTableOpt.get(), startDate.format(BQ_DATE_FORMATTER), endDate.format(BQ_DATE_FORMATTER)
         );
         return executeCostQuery(gcpProjectId, query);
@@ -105,24 +108,24 @@ public class GcpCostService {
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusMonths(6).withDayOfMonth(1);
         
-        // This query now includes a simplified anomaly check for demonstration.
+        // ✅ FIX: This query is also updated to correctly calculate the total cost including credits.
         String query = String.format(
             "WITH MonthlyCosts AS (" +
             "  SELECT" +
-            "    FORMAT_DATE('%%Y-%%m', usage_start_time) as name," +
-            "    SUM(cost) as total_cost" +
+            "    FORMAT_DATE('%%%%Y-%%%%m', usage_start_time) as name," +
+            "    (SUM(cost) + SUM((SELECT SUM(c.amount) FROM UNNEST(credits) c))) as total_cost " +
             "  FROM `%s`" +
-            "  WHERE DATE(usage_start_time) >= '%s' AND DATE(usage_start_time) <= '%s'" +
+            "  WHERE DATE(usage_start_time) >= '%s' AND DATE(usage_start_time) <= '%s' " +
             "  GROUP BY 1" +
-            ")," +
+            "), " +
             "MonthlyCostsWithLag AS (" +
             "  SELECT" +
             "    name," +
             "    total_cost," +
             "    LAG(total_cost, 1, 0) OVER (ORDER BY name) as prev_month_cost" +
             "  FROM MonthlyCosts" +
-            ")" +
-            "SELECT name, total_cost, (total_cost > prev_month_cost * 1.2 AND prev_month_cost > 0) as is_anomaly " +
+            ") " +
+            "SELECT name, total_cost, (total_cost > prev_month_cost * 1.2 AND prev_month_cost > 10) as is_anomaly " +
             "FROM MonthlyCostsWithLag ORDER BY name",
             billingTableOpt.get(), startDate.format(BQ_DATE_FORMATTER), endDate.format(BQ_DATE_FORMATTER)
         );
