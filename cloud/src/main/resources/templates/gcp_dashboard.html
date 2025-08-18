@@ -671,7 +671,6 @@ function dashboardApp() {
 
         fetchDashboardData(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            const selectedProvider = sessionStorage.getItem('selectedAccountProvider');
             
             if (!selectedAccountId) {
                 this.isLoading = false;
@@ -679,14 +678,13 @@ function dashboardApp() {
                 return;
             }
 
-            // Route to the correct backend endpoint based on provider
-            let endpoint = '';
-            if (selectedProvider === 'GCP') {
-                 endpoint = `/api/gcp/dashboard?accountId=${selectedAccountId}`;
-            } else {
-                 endpoint = `/api/dashboard?accountId=${selectedAccountId}`;
+            // THE FIX IS HERE: Always use the main dashboard endpoint.
+            // The backend's DashboardDataService will detect the provider and return the correct data structure.
+            let endpoint = `/api/dashboard?accountId=${selectedAccountId}`;
+
+            if (forceRefresh) {
+                endpoint += '&force=true';
             }
-            if (forceRefresh) endpoint += '&force=true';
 
             // Connect WebSocket for both providers, as backend handles it
             this.connectWebSocket();
@@ -722,6 +720,7 @@ function dashboardApp() {
                 })
                 .catch(error => {
                     console.error('Failed to fetch dashboard data:', error);
+                    const selectedProvider = sessionStorage.getItem('selectedAccountProvider');
                     document.getElementById('errorMessage').textContent = `Failed to load ${selectedProvider} data. Please check the backend logs or try again later.`;
                     document.getElementById('errorState').classList.remove('hidden');
                 })

@@ -126,17 +126,14 @@ private Map<String, double[]> loadRegionCoordinates() {
                 return Collections.emptyList();
             });
 
-        // FIX: The failing security call is temporarily commented out to prevent the dashboard from breaking.
-        // The security score and insights will not be populated.
-        // This will be a more complex fix involving the correct API version and organization-level access.
-        // CompletableFuture<List<GcpSecurityFinding>> securityFindingsFuture = gcpSecurityService.getSecurityFindings(gcpProjectId)
-        //     .exceptionally(ex -> {
-        //         log.error("Failed to get security findings for project {}: {}", gcpProjectId, ex.getMessage());
-        //         return Collections.emptyList();
-        //     });
+        // THE FIX IS HERE: Re-enable the security findings future.
+        // The underlying issue in GcpSecurityService has been resolved.
+        CompletableFuture<List<GcpSecurityFinding>> securityFindingsFuture = gcpSecurityService.getSecurityFindings(gcpProjectId)
+            .exceptionally(ex -> {
+                log.error("Failed to get security findings for project {}: {}", gcpProjectId, ex.getMessage());
+                return Collections.emptyList();
+            });
         
-        CompletableFuture<List<GcpSecurityFinding>> securityFindingsFuture = CompletableFuture.completedFuture(Collections.emptyList());
-
         CompletableFuture<DashboardData.IamResources> iamResourcesFuture = getIamResources(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get IAM resources for project {}: {}", gcpProjectId, ex.getMessage());
@@ -223,9 +220,7 @@ private Map<String, double[]> loadRegionCoordinates() {
                     .mapToDouble(GcpCostDto::getAmount)
                     .findFirst().orElse(0.0);
             data.setLastMonthSpend(lastMonthSpend);
-            // FIX: This call is now on an empty list, so it won't crash.
             data.setSecurityScore(gcpSecurityService.calculateSecurityScore(securityFindings));
-            // FIX: This list will also be empty.
             List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
                 .collect(Collectors.groupingBy(GcpSecurityFinding::getCategory, Collectors.counting()))
                 .entrySet().stream()
