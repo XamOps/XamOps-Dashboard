@@ -51,8 +51,9 @@ public class CloudAccount {
     @Column(nullable = false)
     private String provider; // AWS or GCP
 
+    // ✅ ADD THIS FIELD FOR GCP BILLING
     @Column
-    private String billingExportTable; // ADDED THIS FIELD FOR GCP
+    private String billingExportTable; 
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +32,7 @@ public class GcpCostService {
         this.cloudAccountRepository = cloudAccountRepository;
     }
 
+    // ✅ NEW HELPER METHOD
     private Optional<String> getBillingTableForProject(String gcpProjectId) {
         return cloudAccountRepository.findByGcpProjectId(gcpProjectId)
                 .map(CloudAccount::getBillingExportTable)
@@ -52,7 +54,8 @@ public class GcpCostService {
                 for (FieldValueList row : results.iterateAll()) {
                     String name = row.get("name").getStringValue();
                     double totalCost = row.get("total_cost").getDoubleValue();
-                    boolean isAnomaly = row.get("is_anomaly") != null && row.get("is_anomaly").getBooleanValue(); // Read anomaly flag
+                    // Anomaly detection is simplified here; a real implementation would use ML.
+                    boolean isAnomaly = row.get("is_anomaly") != null && row.get("is_anomaly").getBooleanValue();
                     GcpCostDto dto = new GcpCostDto();
                     dto.setName(name);
                     dto.setAmount(totalCost);
@@ -63,7 +66,7 @@ public class GcpCostService {
             } catch (JobException | InterruptedException e) {
                 log.error("BigQuery job failed for project {}: {}", gcpProjectId, e.getMessage());
                 Thread.currentThread().interrupt();
-                return List.of();
+                return Collections.emptyList();
             }
         });
     }
@@ -75,8 +78,8 @@ public class GcpCostService {
     public CompletableFuture<List<GcpCostDto>> getBillingSummary(String gcpProjectId) {
         Optional<String> billingTableOpt = getBillingTableForProject(gcpProjectId);
         if (billingTableOpt.isEmpty()) {
-             log.warn("Billing export table not configured for project {}", gcpProjectId);
-            return CompletableFuture.completedFuture(List.of());
+             log.warn("Billing export table not configured for project {}. Cannot fetch cost data.", gcpProjectId);
+            return CompletableFuture.completedFuture(Collections.emptyList());
         }
         
         LocalDate endDate = LocalDate.now();
@@ -95,41 +98,34 @@ public class GcpCostService {
     public CompletableFuture<List<GcpCostDto>> getHistoricalCosts(String gcpProjectId) {
         Optional<String> billingTableOpt = getBillingTableForProject(gcpProjectId);
         if (billingTableOpt.isEmpty()) {
-             log.warn("Billing export table not configured for project {}", gcpProjectId);
-            return CompletableFuture.completedFuture(List.of());
+             log.warn("Billing export table not configured for project {}. Cannot fetch historical cost data.", gcpProjectId);
+            return CompletableFuture.completedFuture(Collections.emptyList());
         }
         
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusMonths(6).withDayOfMonth(1);
         
+        // This query now includes a simplified anomaly check for demonstration.
         String query = String.format(
-            "WITH DailyCosts AS (" +
+            "WITH MonthlyCosts AS (" +
             "  SELECT" +
-            "    DATE(usage_start_time) AS day," +
-            "    SUM(cost) AS daily_cost" +
+            "    FORMAT_DATE('%%Y-%%m', usage_start_time) as name," +
+            "    SUM(cost) as total_cost" +
             "  FROM `%s`" +
             "  WHERE DATE(usage_start_time) >= '%s' AND DATE(usage_start_time) <= '%s'" +
             "  GROUP BY 1" +
-            "), AnomalyModel AS (" +
-            "  SELECT *" +
-            "  FROM ML.DETECT_ANOMALIES(MODEL `bqml_models.daily_cost_arima_plus`," + // Assuming a pre-trained model
-            "    (SELECT day as time_series_timestamp, daily_cost as time_series_data FROM DailyCosts)," +
-            "    STRUCT(0.95 AS anomaly_prob_threshold))" +
-            "), MonthlyCosts AS (" +
+            ")," +
+            "MonthlyCostsWithLag AS (" +
             "  SELECT" +
-            "    FORMAT_DATE('%%Y-%%m', day) as name," +
-            "    SUM(daily_cost) as total_cost," +
-            "    MAX(CASE WHEN is_anomaly THEN 1 ELSE 0 END) as is_anomaly_flag" +
-            "  FROM AnomalyModel" +
-            "  GROUP BY 1" +
+            "    name," +
+            "    total_cost," +
+            "    LAG(total_cost, 1, 0) OVER (ORDER BY name) as prev_month_cost" +
+            "  FROM MonthlyCosts" +
             ")" +
-            "SELECT name, total_cost, is_anomaly_flag as is_anomaly FROM MonthlyCosts ORDER BY name",
+            "SELECT name, total_cost, (total_cost > prev_month_cost * 1.2 AND prev_month_cost > 0) as is_anomaly " +
+            "FROM MonthlyCostsWithLag ORDER BY name",
             billingTableOpt.get(), startDate.format(BQ_DATE_FORMATTER), endDate.format(BQ_DATE_FORMATTER)
         );
-        
-        // This is a simplified anomaly detection to mirror the previous logic.
-        // A full implementation would require training a model first.
-        // The previous code had a hardcoded anomaly check. It is replaced here with a query that assumes a model exists.
         
         return executeCostQuery(gcpProjectId, query);
     }
