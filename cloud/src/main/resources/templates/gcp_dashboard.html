@@ -774,7 +774,6 @@ function dashboardApp() {
             if (!kpiContainer) return;
             const costHistory = account.costHistory;
             
-            // ✅ FIX: Calculate MTD spend by summing the current month's billing summary for better accuracy.
             const mtdSpend = account.billingSummary.reduce((sum, item) => sum + item.monthToDateCost, 0);
             
             const lastMonthSpend = costHistory.costs.length > 1 ? costHistory.costs[costHistory.costs.length - 2] : 0;
@@ -854,16 +853,16 @@ function dashboardApp() {
                 { name: 'GCE Instances', count: inv.ec2, type: 'GCE Instance', icon: 'gcp-compute-engine.png' },
                 { name: 'Cloud Storage Buckets', count: inv.s3Buckets, type: 'Cloud Storage', icon: 'gcp-cloud-storage.png' },
                 { name: 'Cloud SQL Instances', count: inv.rdsInstances, type: 'Cloud SQL', icon: 'gcp-cloud-sql.png' },
-                { name: 'GKE Clusters', count: inv.kubernetes, type: 'GKE Cluster', icon: 'gcp-kubernetes-engine.png' },
+                { name: 'GKE Clusters', count: inv.kubernetes, type: 'GKE Cluster', icon: 'gcp-gke.png' },
                 { name: 'VPC Networks', count: inv.vpc, type: 'VPC', icon: 'gcp-vpc.png' },
-                { name: 'Cloud DNS Zones', count: inv.route53Zones, type: 'Cloud DNS', icon: 'gcp-dns.png' },
+                { name: 'Cloud DNS Zones', count: inv.route53Zones, type: 'Cloud DNS', icon: 'gcp-cloud-dns.png' },
                 { name: 'Load Balancers', count: inv.loadBalancers, type: 'Load Balancer', icon: 'gcp-load-balancer.png' }
             ];
             
             container.innerHTML = resources.map(res => `
                 <a href="/gcp_cloudlist?service=${encodeURIComponent(res.type)}" class="resource-card flex items-center gap-4 p-4 rounded-xl hover:shadow-md transition-all group">
                     <div class="resource-icon w-10 h-10 flex-shrink-0">
-                        <img src="/images/icons/${res.icon}" alt="${res.name}" class="w-full h-full rounded-xl object-cover">
+                        <img src="/icons/${res.icon}" alt="${res.name}" class="w-full h-full rounded-xl object-cover">
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="font-semibold text-gray-800 truncate">${res.name}</p>
@@ -1276,7 +1275,6 @@ function dashboardApp() {
         },
 
         formatCurrency(num) { 
-            // ✅ FIX: Changed to Indian Rupee format
             return (num != null ? num.toLocaleString('en-IN', {
                 style: 'currency',
                 currency: 'INR',
