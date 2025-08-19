@@ -178,7 +178,7 @@
                             <i class="fas fa-file-excel text-green-600"></i>
                             <span class="text-sm font-medium text-gray-700">Save To Excel</span>
                         </button>
-                        <button @click="loadInsights(true)" class="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all" :disabled="isLoading">
+                        <button @click="loadInsights(true); loadSummary(true);" class="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all" :disabled="isLoading">
                             <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
                             <span x-text="isLoading ? 'Loading...' : 'Refresh'"></span>
                         </button>
@@ -249,31 +249,6 @@
                         </div>
                     </template>
                 </div>
-
-                <!-- <div class="glass-card rounded-2xl p-8">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">"What-If" Scenario Modeling</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                        <div>
-                            <label for="whatif-resource" class="text-sm font-medium text-gray-700 block mb-1">Resource ID</label>
-                            <input type="text" id="whatif-resource" x-model="whatIf.resourceId" placeholder="i-0123456789abcdef" class="w-full border-gray-300 rounded-md shadow-sm">
-                        </div>
-                        <div>
-                            <label for="whatif-target" class="text-sm font-medium text-gray-700 block mb-1">Target Instance Type</label>
-                            <input type="text" id="whatif-target" x-model="whatIf.targetInstanceType" placeholder="m5.large" class="w-full border-gray-300 rounded-md shadow-sm">
-                        </div>
-                        <button @click="runWhatIfScenario()" :disabled="whatIf.isLoading" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
-                            <span x-show="!whatIf.isLoading">Analyze</span>
-                            <span x-show="whatIf.isLoading">Analyzing...</span>
-                        </button>
-                    </div>
-                    <div x-show="whatIf.result" x-cloak class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h3 class="font-semibold text-blue-800">Scenario Result:</h3>
-                        <p class="text-sm text-blue-700" x-text="whatIf.result.performanceChangeSummary"></p>
-                        <p class="text-sm" :class="whatIf.result.costDifference > 0 ? 'text-red-700' : 'text-green-700'">
-                            Cost difference: <span x-text="whatIf.result.costDifference.toFixed(2)"></span> USD/month
-                        </p>
-                    </div>
-                </div> -->
 
                 <div class="glass-card rounded-2xl p-8">
                     <div class="mb-6 border-b border-gray-200">
@@ -493,7 +468,8 @@
                 this.isLoading = true;
                 const severity = this.currentSeverity === 'ALL' ? '' : this.currentSeverity;
 
-                fetch(`/api/metrics/insights?accountId=${selectedAccountId}&severity=${severity}`)
+                // --- THIS IS THE FIX ---
+                fetch(`/api/metrics/insights?accountId=${selectedAccountId}&severity=${severity}&forceRefresh=${forceRefresh}`)
                     .then(res => res.json())
                     .then(data => {
                         this.insights = data;
@@ -507,11 +483,12 @@
                     });
             },
 
-            loadSummary() {
+            loadSummary(forceRefresh = false) {
                 const selectedAccountId = sessionStorage.getItem('selectedAccountId');
                 if (!selectedAccountId) return;
 
-                fetch(`/api/metrics/insights/summary?accountId=${selectedAccountId}`)
+                // --- THIS IS THE FIX ---
+                fetch(`/api/metrics/insights/summary?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
                     .then(res => res.json())
                     .then(data => {
                         this.summary = data;

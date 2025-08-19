@@ -42,14 +42,13 @@ public class AlertsApiController {
     @GetMapping("/alerts")
     public CompletableFuture<ResponseEntity<List<AlertDto>>> getAlerts(
             @RequestParam String accountId,
-            @RequestParam(defaultValue = "false") boolean forceRefresh) { // Add forceRefresh parameter
+            @RequestParam(defaultValue = "false") boolean forceRefresh) { 
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
-        // Pass the forceRefresh parameter to the service call
         return cloudListService.getRegionStatusForAccount(account, forceRefresh) 
             .thenCompose(activeRegions -> {
-                CompletableFuture<List<AlertDto>> quotaAlertsFuture = cloudGuardService.getServiceQuotaInfo(account, activeRegions)
+                CompletableFuture<List<AlertDto>> quotaAlertsFuture = cloudGuardService.getServiceQuotaInfo(account, activeRegions, forceRefresh)
                     .thenApply(quotas -> quotas.stream()
                         .map(q -> new AlertDto(
                                 q.getQuotaName(),
