@@ -2,89 +2,250 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>XamOps - GCP Cloudmap</title>
+    <title>XamOps - GCP Cloud Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.0.4/leader-line.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+
     <style>
-        #network-map {
-            width: 100%;
-            height: 100%;
-            border: 1px solid #e5e7eb;
-            background-color: #f9fafb;
+        .resource-node {
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .selected-node {
+            border-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+            transform: scale(1.05);
         }
     </style>
 </head>
-<body class="bg-gray-100">
-    <div class="flex h-screen">
-        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
-        <main class="flex-1 flex flex-col p-6" x-data="gcpCloudmap()">
-            <header class="flex-shrink-0 mb-6">
-                <h1 class="text-2xl font-bold text-gray-800">GCP Network Cloudmap</h1>
-            </header>
-            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden" x-ref="mapContainer">
-                <div x-show="isLoading" class="flex items-center justify-center h-full">
-                    <div class="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                </div>
-                 <div id="network-map" x-show="!isLoading"></div>
+<body class="bg-gray-100 font-sans">
+
+<div class="flex h-screen">
+    <div th:insert="~{fragments/_sidebar :: sidebar}"></div>
+
+    <div class="flex-1 flex flex-col overflow-hidden" x-data="cloudMap()">
+        <header class="bg-white shadow-md p-4 flex justify-between items-center z-20">
+            <h1 class="text-2xl font-semibold text-gray-800">GCP Cloud Map</h1>
+            <div class="flex items-center space-x-4">
+                <button @click="autoLayout" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">
+                    <i class="fas fa-project-diagram mr-2"></i>Auto-Layout
+                </button>
+                <button @click="fetchTopology(true)" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+                    <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isLoading}"></i>Refresh
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 flex overflow-hidden relative">
+            <div id="canvas" class="flex-1 relative bg-gray-200 overflow-auto" @click.self="selectedNode = null">
+                <template x-if="isLoading">
+                    <div class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-75 z-30">
+                        <div class="flex flex-col items-center">
+                            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+                            <span class="mt-4 text-lg text-gray-700">Loading Cloud Topology...</span>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-for="node in topology.nodes" :key="node.id">
+                    <div :id="node.id" class="resource-node absolute p-3 bg-white rounded-lg shadow-md flex items-center space-x-3 cursor-grab"
+                         :class="{ 'selected-node': selectedNode && selectedNode.id === node.id }"
+                         @click="selectNode(node)">
+                        <img :src="getResourceIcon(node.type)" class="w-8 h-8 flex-shrink-0" alt="">
+                        <div>
+                            <p class="font-bold text-sm text-gray-800" x-text="node.label"></p>
+                            <p class="text-xs text-gray-500" x-text="node.type"></p>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="w-80 bg-white border-l border-gray-300 overflow-y-auto p-4 transition-all duration-300 z-10"
+                 :class="selectedNode ? 'translate-x-0' : 'translate-x-full absolute right-0'">
+                <template x-if="selectedNode">
+                    <div>
+                        <div class="flex items-center space-x-3 mb-4">
+                            <img :src="getResourceIcon(selectedNode.type)" class="w-10 h-10" alt="">
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-900" x-text="selectedNode.label"></h3>
+                                <p class="text-sm text-gray-500" x-text="selectedNode.type"></p>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <h4 class="font-semibold text-gray-700 border-b pb-2">Details</h4>
+                            <template x-for="(value, key) in selectedNode.properties" :key="key">
+                                <div class="text-sm">
+                                    <p class="font-semibold text-gray-600 capitalize" x-text="key.replace(/_/g, ' ')"></p>
+                                    <p class="text-gray-800 break-words" x-text="value"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="!selectedNode">
+                    <div class="text-center text-gray-500 mt-10">
+                        <i class="fas fa-mouse-pointer text-3xl mb-2"></i>
+                        <p>Select a resource to see its details.</p>
+                    </div>
+                </template>
             </div>
         </main>
     </div>
-    <script>
-        function gcpCloudmap() {
-            return {
-                isLoading: true,
-                accountId: sessionStorage.getItem('selectedAccountId'),
-                network: null,
-                init() {
-                    this.fetchTopology();
-                },
-                fetchTopology() {
-                    this.isLoading = true;
-                    fetch(`/api/gcp/cloudmap/topology?accountId=${this.accountId}`)
-                        .then(res => res.json())
-                        .then(data => {
-                            this.renderMap(data);
-                        })
-                        .catch(err => console.error('Failed to load GCP topology:', err))
-                        .finally(() => this.isLoading = false);
-                },
-                renderMap(data) {
-                    const nodes = [];
-                    const edges = [];
+</div>
 
-                    // Add VPC nodes
-                    data.networks.forEach(vpc => {
-                        nodes.push({ id: vpc.selfLink, label: vpc.name, group: 'vpc', shape: 'box', color: '#6366f1'});
-                    });
+<script>
+    function getResourceIcon(resourceType) {
+        const iconMap = {
+            'VM Instance': '/icons/gcp-compute-engine.png',
+            'Cloud Storage Bucket': '/icons/gcp-cloud-storage.png',
+            'VPC Network': '/icons/gcp-vpc.png',
+            'Subnetwork': '/icons/gcp-vpc.png',
+            'Firewall Rule': '/icons/gcp-firewall.png',
+            'Cloud SQL Instance': '/icons/gcp-cloud-sql.png',
+            'Kubernetes Engine Cluster': '/icons/gcp-gke.png',
+            'Cloud DNS Zone': '/icons/gcp-cloud-dns.png',
+            'Cloud IAM Service Account': '/icons/gcp-iam.png',
+            'Load Balancer': '/icons/gcp-load-balancer.png',
+            'Cloud Run Service': '/icons/gcp-cloud-run.png',
+            'Cloud Function': '/icons/gcp-cloud-functions.png'
+        };
+        return iconMap[resourceType] || '/icons/default-icon.png';
+    }
+    
+    function cloudMap() {
+        return {
+            isLoading: true,
+            topology: { nodes: [], links: [] },
+            selectedNode: null,
+            lines: [],
+            
+            init() {
+                this.fetchTopology();
+            },
 
-                    // Add Subnet and Instance nodes and connect them
-                    data.subnetworks.forEach(subnet => {
-                        nodes.push({ id: subnet.selfLink, label: subnet.name, group: 'subnet', shape: 'box', color: '#3b82f6' });
-                        edges.push({ from: subnet.network, to: subnet.selfLink });
-
-                        // Find instances in this subnet
-                        data.instances.forEach(instance => {
-                           instance.networkInterfacesList.forEach(nic => {
-                               if (nic.subnetwork === subnet.selfLink) {
-                                   nodes.push({ id: instance.selfLink, label: instance.name, group: 'instance', shape: 'image', image: '/images/gcp-compute-engine.png' });
-                                   edges.push({ from: subnet.selfLink, to: instance.selfLink });
-                               }
-                           });
-                        });
-                    });
-
-                    const container = document.getElementById('network-map');
-                    const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
-                    const options = {
-                        layout: { hierarchical: false },
-                        edges: { color: '#d1d5db' },
-                        physics: { stabilization: true }
-                    };
-                    this.network = new vis.Network(container, graphData, options);
+            fetchTopology(isManualRefresh = false) {
+                this.isLoading = true;
+                const accountId = sessionStorage.getItem('selectedAccountId');
+                if (!accountId) {
+                    this.isLoading = false;
+                    console.error('No account selected');
+                    return;
                 }
+                
+                this.clearLines();
+                
+                fetch(`/api/gcp/vpc-topology?accountId=${accountId}&forceRefresh=${isManualRefresh}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.topology = data;
+                        this.$nextTick(() => {
+                            this.initDraggables();
+                            this.autoLayout();
+                        });
+                    })
+                    .catch(err => console.error('Failed to fetch topology:', err))
+                    .finally(() => this.isLoading = false);
+            },
+            
+            initDraggables() {
+                interact('.resource-node').draggable({
+                    listeners: {
+                        move: event => {
+                            const target = event.target;
+                            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+                            
+                            target.style.transform = `translate(${x}px, ${y}px)`;
+                            target.setAttribute('data-x', x);
+                            target.setAttribute('data-y', y);
+                            
+                            this.updateLines();
+                        }
+                    }
+                });
+            },
+
+            drawLines() {
+                this.clearLines();
+                this.topology.links.forEach(link => {
+                    const source = document.getElementById(link.source);
+                    const target = document.getElementById(link.target);
+                    if (source && target) {
+                        const line = new LeaderLine(source, target, {
+                            color: 'rgba(107, 114, 128, 0.7)',
+                            size: 2,
+                            path: 'grid',
+                            endPlug: 'arrow1'
+                        });
+                        this.lines.push(line);
+                    }
+                });
+            },
+            
+            updateLines() {
+                this.lines.forEach(line => line.position());
+            },
+
+            clearLines() {
+                this.lines.forEach(line => line.remove());
+                this.lines = [];
+            },
+            
+            selectNode(node) {
+                this.selectedNode = node;
+            },
+
+            autoLayout() {
+                if(this.topology.nodes.length === 0) return;
+
+                const canvas = document.getElementById('canvas');
+                const canvasWidth = canvas.clientWidth;
+                const columns = {};
+
+                // Group nodes by type
+                this.topology.nodes.forEach(node => {
+                    if (!columns[node.type]) {
+                        columns[node.type] = [];
+                    }
+                    columns[node.type].push(node);
+                });
+                
+                const columnOrder = ['VPC Network', 'Subnetwork', 'VM Instance', 'Kubernetes Engine Cluster', 'Cloud SQL Instance'];
+                const sortedColumnKeys = Object.keys(columns).sort((a,b) => {
+                    let indexA = columnOrder.indexOf(a);
+                    let indexB = columnOrder.indexOf(b);
+                    if(indexA === -1) indexA = columnOrder.length;
+                    if(indexB === -1) indexB = columnOrder.length;
+                    return indexA - indexB;
+                });
+                
+                const colWidth = canvasWidth / (sortedColumnKeys.length + 1);
+                
+                sortedColumnKeys.forEach((colKey, colIndex) => {
+                    const columnNodes = columns[colKey];
+                    const x = colWidth * (colIndex + 1);
+
+                    columnNodes.forEach((node, rowIndex) => {
+                        const y = 100 + rowIndex * 120;
+                        const el = document.getElementById(node.id);
+                        if(el) {
+                            el.style.left = '0px';
+                            el.style.top = '0px';
+                            el.style.transform = `translate(${x}px, ${y}px)`;
+                            el.setAttribute('data-x', x);
+                            el.setAttribute('data-y', y);
+                        }
+                    });
+                });
+                
+                this.$nextTick(() => this.drawLines());
             }
         }
-    </script>
+    }
+</script>
+
 </body>
 </html>

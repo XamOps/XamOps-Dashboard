@@ -2,112 +2,293 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>XamOps - GCP Cloudlist</title>
+    <title>XamOps - GCP Cloud List</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        .table-fixed-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+    </style>
 </head>
-<body class="bg-gray-100">
-    <div class="flex h-screen">
-        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
-        <main class="flex-1 flex flex-col p-6" x-data="gcpCloudlist()">
-            <header class="flex-shrink-0 mb-6">
-                <h1 class="text-2xl font-bold text-gray-800">GCP Cloudlist</h1>
-                <p class="text-sm text-gray-500">All discovered resources for Project ID: <span x-text="accountId" class="font-semibold text-gray-700"></span></p>
-            </header>
-            
-            <div class="w-full bg-white rounded-lg shadow-md overflow-hidden">
-                <div class="p-4 border-b">
-                     <input type="text" x-model="searchTerm" placeholder="Search resources..." class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+<body class="bg-gray-100 font-sans">
+
+<div class="flex h-screen">
+    <div th:insert="~{fragments/_sidebar :: sidebar}"></div>
+
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white shadow-md p-4 flex justify-between items-center">
+            <h1 class="text-2xl font-semibold text-gray-800">GCP Resource Inventory (Cloudlist)</h1>
+            <div>
+                <button id="refreshButton" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-300 flex items-center">
+                    <i class="fas fa-sync-alt mr-2"></i>
+                    <span id="refreshButtonText">Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6"
+              x-data="cloudlistData()">
+            <div class="bg-white p-6 rounded-2xl shadow-xl">
+                <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+                    <div class="relative flex-grow max-w-xs">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400"></i>
+                        </div>
+                        <input x-model="searchTerm" type="text" placeholder="Search by name, type, region..."
+                               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-4">
+                        <select x-model="selectedRegion" class="border border-gray-300 rounded-lg py-2 px-3 focus:ring-2 focus:ring-indigo-500">
+                            <option value="">All Regions</option>
+                            <template x-for="region in uniqueRegions" :key="region">
+                                <option :value="region" x-text="region"></option>
+                            </template>
+                        </select>
+
+                        <select x-model="selectedType" class="border border-gray-300 rounded-lg py-2 px-3 focus:ring-2 focus:ring-indigo-500">
+                            <option value="">All Types</option>
+                            <template x-for="type in uniqueTypes" :key="type">
+                                <option :value="type" x-text="type"></option>
+                            </template>
+                        </select>
+                    </div>
                 </div>
+
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th scope="col" class="px-6 py-3">Name</th>
-                                <th scope="col" class="px-6 py-3">Type</th>
-                                <th scope="col" class="px-6 py-3">Location</th>
-                                <th scope="col" class="px-6 py-3">Status</th>
-                            </tr>
+                    <table class="min-w-full bg-white">
+                        <thead class="bg-gray-50 table-fixed-header">
+                        <tr>
+                            <th @click="sortBy('name')" class="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider cursor-pointer">
+                                Name <i class="fas fa-sort ml-1"></i>
+                            </th>
+                            <th @click="sortBy('type')" class="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider cursor-pointer">
+                                Type <i class="fas fa-sort ml-1"></i>
+                            </th>
+                            <th @click="sortBy('region')" class="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider cursor-pointer">
+                                Region <i class="fas fa-sort ml-1"></i>
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                                Tags
+                            </th>
+                        </tr>
                         </thead>
-                        <tbody>
-                            <template x-if="isLoading">
-                                <tr class="bg-white border-b animate-pulse" x-ref="loading" x-init="$el.setAttribute('x-for', 'i in 5')">
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded"></div></td>
-                                </tr>
-                            </template>
-                            <template x-for="resource in filteredResources" :key="resource.id">
-                                <tr class="bg-white border-b hover:bg-gray-50">
-                                    <td class="px-6 py-4 font-medium text-gray-900" x-text="resource.name"></td>
-                                    <td class="px-6 py-4" x-text="resource.type"></td>
-                                    <td class="px-6 py-4" x-text="resource.location"></td>
-                                    <td class="px-6 py-4">
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full"
-                                              :class="{
-                                                  'bg-green-100 text-green-800': resource.status === 'RUNNING' || resource.status === 'ACTIVE',
-                                                  'bg-red-100 text-red-800': resource.status === 'TERMINATED',
-                                                  'bg-gray-100 text-gray-800': resource.status !== 'RUNNING' && resource.status !== 'ACTIVE' && resource.status !== 'TERMINATED'
-                                              }"
-                                              x-text="resource.status">
-                                        </span>
-                                    </td>
-                                </tr>
-                            </template>
-                             <template x-if="!isLoading && filteredResources.length === 0">
-                                <tr>
-                                    <td colspan="4" class="text-center py-12 text-gray-500">
-                                        <p class="font-semibold">No resources found.</p>
-                                        <p class="text-sm">No resources match your current search term or filters.</p>
-                                    </td>
-                                </tr>
-                            </template>
+                        <tbody class="divide-y divide-gray-200">
+                        <template x-if="isLoading">
+                            <tr>
+                                <td colspan="4" class="text-center py-10">
+                                    <div class="flex justify-center items-center">
+                                        <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+                                        <span class="ml-4 text-gray-600">Loading GCP Resources...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="!isLoading && filteredResources.length === 0">
+                            <tr>
+                                <td colspan="4" class="text-center py-10 text-gray-500">
+                                    No resources found.
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-for="resource in paginatedResources" :key="resource.id">
+                            <tr class="hover:bg-indigo-50 transition-colors duration-200">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <img :src="getResourceIcon(resource.type)" class="w-6 h-6 mr-3" alt="icon">
+                                        <span class="font-medium text-gray-900" x-text="resource.name"></span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600" x-text="resource.type"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600" x-text="resource.region"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                    <div class="flex flex-wrap gap-1">
+                                            <template x-for="(value, key) in resource.tags" :key="key">
+                                                <span class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full"
+                                                      x-text="`${key}: ${value}`"></span>
+                                            </template>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
                         </tbody>
                     </table>
                 </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <div class="text-sm text-gray-600">
+                        Showing <span x-text="(currentPage - 1) * itemsPerPage + 1"></span> to <span x-text="Math.min(currentPage * itemsPerPage, filteredResources.length)"></span> of <span x-text="filteredResources.length"></span> results
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button @click="prevPage" :disabled="currentPage === 1" class="px-3 py-1 border rounded-lg disabled:opacity-50">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span x-text="currentPage"></span>
+                        <button @click="nextPage" :disabled="currentPage === totalPages" class="px-3 py-1 border rounded-lg disabled:opacity-50">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </main>
     </div>
+</div>
 
-    <script>
-        function gcpCloudlist() {
-            return {
-                isLoading: true,
-                accountId: sessionStorage.getItem('selectedAccountId'),
-                resources: [],
-                searchTerm: '',
-                init() {
-                    if (!this.accountId) {
+<script>
+    function getResourceIcon(resourceType) {
+        const iconMap = {
+            'VM Instance': '/icons/gcp-compute-engine.png',
+            'Cloud Storage Bucket': '/icons/gcp-cloud-storage.png',
+            'VPC Network': '/icons/gcp-vpc.png',
+            'Subnetwork': '/icons/gcp-vpc.png',
+            'Firewall Rule': '/icons/gcp-firewall.png',
+            'Cloud SQL Instance': '/icons/gcp-cloud-sql.png',
+            'Kubernetes Engine Cluster': '/icons/gcp-gke.png',
+            'Cloud DNS Zone': '/icons/gcp-cloud-dns.png',
+            'Cloud IAM Service Account': '/icons/gcp-iam.png',
+            'Load Balancer': '/icons/gcp-load-balancer.png',
+            'Cloud Run Service': '/icons/gcp-cloud-run.png',
+            'Cloud Function': '/icons/gcp-cloud-functions.png'
+        };
+        return iconMap[resourceType] || '/icons/default-icon.png';
+    }
+
+    function cloudlistData() {
+        return {
+            resources: [],
+            isLoading: true,
+            searchTerm: '',
+            selectedRegion: '',
+            selectedType: '',
+            sortColumn: 'name',
+            sortDirection: 'asc',
+            currentPage: 1,
+            itemsPerPage: 15,
+
+            init() {
+                this.fetchResources();
+                document.getElementById('refreshButton').addEventListener('click', () => this.fetchResources(true));
+            },
+
+            fetchResources(isManualRefresh = false) {
+                this.isLoading = true;
+                const accountId = sessionStorage.getItem('selectedAccountId');
+                if (!accountId) {
+                    this.isLoading = false;
+                    console.error('No account selected');
+                    this.resources = [];
+                    return;
+                }
+                
+                if (isManualRefresh) {
+                    const button = document.getElementById('refreshButton');
+                    const icon = button.querySelector('i');
+                    const text = document.getElementById('refreshButtonText');
+                    
+                    text.textContent = 'Refreshing...';
+                    icon.classList.add('fa-spin');
+                    button.disabled = true;
+                }
+
+                fetch(`/api/gcp/cloudlist?accountId=${accountId}&forceRefresh=${isManualRefresh}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.resources = data;
+                    })
+                    .catch(err => {
+                        console.error('Error fetching resources:', err);
+                        this.resources = [];
+                    })
+                    .finally(() => {
                         this.isLoading = false;
-                        console.error("No GCP Project ID selected.");
-                        return;
-                    }
-                    this.fetchResources();
-                },
-                fetchResources() {
-                    this.isLoading = true;
-                    fetch(`/api/gcp/cloudlist/resources?accountId=${this.accountId}`)
-                        .then(res => res.json())
-                        .then(data => {
-                            this.resources = data;
-                        })
-                        .catch(err => console.error('Failed to load GCP resources:', err))
-                        .finally(() => this.isLoading = false);
-                },
-                get filteredResources() {
-                    if (this.searchTerm === '') {
-                        return this.resources;
-                    }
-                    return this.resources.filter(res => 
-                        (res.name && res.name.toLowerCase().includes(this.searchTerm.toLowerCase())) ||
-                        (res.type && res.type.toLowerCase().includes(this.searchTerm.toLowerCase())) ||
-                        (res.id && res.id.toLowerCase().includes(this.searchTerm.toLowerCase()))
+                        if (isManualRefresh) {
+                           const button = document.getElementById('refreshButton');
+                           const icon = button.querySelector('i');
+                           const text = document.getElementById('refreshButtonText');
+
+                           text.textContent = 'Refresh';
+                           icon.classList.remove('fa-spin');
+                           button.disabled = false;
+                        }
+                    });
+            },
+            
+            get filteredResources() {
+                let filtered = this.resources;
+
+                if (this.selectedRegion) {
+                    filtered = filtered.filter(r => r.region === this.selectedRegion);
+                }
+                if (this.selectedType) {
+                    filtered = filtered.filter(r => r.type === this.selectedType);
+                }
+                if (this.searchTerm) {
+                    const term = this.searchTerm.toLowerCase();
+                    filtered = filtered.filter(r =>
+                        r.name.toLowerCase().includes(term) ||
+                        r.type.toLowerCase().includes(term) ||
+                        (r.region && r.region.toLowerCase().includes(term))
                     );
+                }
+
+                return filtered.sort((a, b) => {
+                    let aVal = a[this.sortColumn] || '';
+                    let bVal = b[this.sortColumn] || '';
+                    if (this.sortDirection === 'asc') {
+                        return aVal.localeCompare(bVal);
+                    } else {
+                        return bVal.localeCompare(aVal);
+                    }
+                });
+            },
+            
+            get uniqueRegions() {
+                return [...new Set(this.resources.map(r => r.region).filter(Boolean))].sort();
+            },
+            
+            get uniqueTypes() {
+                return [...new Set(this.resources.map(r => r.type))].sort();
+            },
+
+            sortBy(column) {
+                if (this.sortColumn === column) {
+                    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortColumn = column;
+                    this.sortDirection = 'asc';
+                }
+            },
+
+            get totalPages() {
+                return Math.ceil(this.filteredResources.length / this.itemsPerPage);
+            },
+            
+            get paginatedResources() {
+                const start = (this.currentPage - 1) * this.itemsPerPage;
+                const end = start + this.itemsPerPage;
+                return this.filteredResources.slice(start, end);
+            },
+            
+            nextPage() {
+                if (this.currentPage < this.totalPages) {
+                    this.currentPage++;
+                }
+            },
+            
+            prevPage() {
+                if (this.currentPage > 1) {
+                    this.currentPage--;
                 }
             }
         }
-    </script>
+    }
+</script>
+
 </body>
 </html>
