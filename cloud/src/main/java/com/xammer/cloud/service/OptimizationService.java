@@ -36,6 +36,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -110,24 +111,44 @@ public class OptimizationService {
         
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
-            GetEc2InstanceRecommendationsRequest request = GetEc2InstanceRecommendationsRequest.builder().build();
-            return co.getEC2InstanceRecommendations(request).instanceRecommendations().stream()
+            List<DashboardData.OptimizationRecommendation> recommendations = new ArrayList<>();
+            String nextToken = null;
+
+            do {
+                GetEc2InstanceRecommendationsRequest.Builder requestBuilder = GetEc2InstanceRecommendationsRequest.builder();
+                if (nextToken != null) {
+                    requestBuilder.nextToken(nextToken);
+                }
+                GetEc2InstanceRecommendationsResponse response = co.getEC2InstanceRecommendations(requestBuilder.build());
+                
+                response.instanceRecommendations().stream()
                     .filter(r -> r.finding() != null && r.finding() != Finding.OPTIMIZED && r.recommendationOptions() != null && !r.recommendationOptions().isEmpty())
                     .map(r -> {
-                        InstanceRecommendationOption opt = r.recommendationOptions().get(0);
-                        double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null && opt.savingsOpportunity().estimatedMonthlySavings().value() != null
-                                ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
+                        // **MODIFIED LOGIC**: Find the best option based on savings
+                        InstanceRecommendationOption bestOption = r.recommendationOptions().stream()
+                            .max(Comparator.comparingDouble(opt -> 
+                                opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null && opt.savingsOpportunity().estimatedMonthlySavings().value() != null
+                                ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0))
+                            .orElse(r.recommendationOptions().get(0));
+
+                        double savings = bestOption.savingsOpportunity() != null && bestOption.savingsOpportunity().estimatedMonthlySavings() != null && bestOption.savingsOpportunity().estimatedMonthlySavings().value() != null
+                                ? bestOption.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
                         
-                        double recommendedCost = pricingService.getEc2InstanceMonthlyPrice(opt.instanceType(), regionId);
+                        double recommendedCost = pricingService.getEc2InstanceMonthlyPrice(bestOption.instanceType(), regionId);
                         double currentCost = recommendedCost + savings;
 
                         return new DashboardData.OptimizationRecommendation(
-                                "EC2", r.instanceArn().split("/")[1], r.currentInstanceType(), opt.instanceType(),
+                                "EC2", r.instanceArn().split("/")[1], r.currentInstanceType(), bestOption.instanceType(),
                                 savings, r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
                                 currentCost, recommendedCost
                         );
                     })
-                    .collect(Collectors.toList());
+                    .forEach(recommendations::add);
+                
+                nextToken = response.nextToken();
+            } while (nextToken != null);
+            
+            return recommendations;
         }, "EC2 Recommendations").thenApply(result -> {
             dbCache.put(cacheKey, result);
             return result;
@@ -146,24 +167,43 @@ public class OptimizationService {
 
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
-            GetEbsVolumeRecommendationsRequest request = GetEbsVolumeRecommendationsRequest.builder().build();
-            return co.getEBSVolumeRecommendations(request).volumeRecommendations().stream()
+            List<DashboardData.OptimizationRecommendation> recommendations = new ArrayList<>();
+            String nextToken = null;
+
+            do {
+                GetEbsVolumeRecommendationsRequest.Builder requestBuilder = GetEbsVolumeRecommendationsRequest.builder();
+                if (nextToken != null) {
+                    requestBuilder.nextToken(nextToken);
+                }
+                GetEbsVolumeRecommendationsResponse response = co.getEBSVolumeRecommendations(requestBuilder.build());
+
+                response.volumeRecommendations().stream()
                     .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.volumeRecommendationOptions() != null && !r.volumeRecommendationOptions().isEmpty())
                     .map(r -> {
-                        VolumeRecommendationOption opt = r.volumeRecommendationOptions().get(0);
-                        double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
+                        // **MODIFIED LOGIC**: Find the best option based on savings
+                        VolumeRecommendationOption bestOption = r.volumeRecommendationOptions().stream()
+                            .max(Comparator.comparingDouble(opt ->
+                                opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0))
+                            .orElse(r.volumeRecommendationOptions().get(0));
+
+                        double savings = bestOption.savingsOpportunity() != null && bestOption.savingsOpportunity().estimatedMonthlySavings() != null ? bestOption.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
                         
-                        double recommendedCost = pricingService.getEbsGbMonthPrice(regionId, opt.configuration().volumeType()) * opt.configuration().volumeSize();
+                        double recommendedCost = pricingService.getEbsGbMonthPrice(regionId, bestOption.configuration().volumeType()) * bestOption.configuration().volumeSize();
                         double currentCost = savings + recommendedCost;
 
                         return new DashboardData.OptimizationRecommendation(
                                 "EBS", r.volumeArn().split("/")[1],
                                 r.currentConfiguration().volumeType() + " - " + r.currentConfiguration().volumeSize() + "GiB",
-                                opt.configuration().volumeType() + " - " + opt.configuration().volumeSize() + "GiB",
+                                bestOption.configuration().volumeType() + " - " + bestOption.configuration().volumeSize() + "GiB",
                                 savings, r.finding().toString(), currentCost, recommendedCost
                         );
                     })
-                    .collect(Collectors.toList());
+                    .forEach(recommendations::add);
+                
+                nextToken = response.nextToken();
+            } while (nextToken != null);
+
+            return recommendations;
         }, "EBS Recommendations").thenApply(result -> {
             dbCache.put(cacheKey, result);
             return result;
@@ -180,34 +220,51 @@ public class OptimizationService {
             }
         }
         
-        try {
-            return fetchAllRegionalResources(account, activeRegions, regionId -> {
-                ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
-                GetLambdaFunctionRecommendationsRequest request = GetLambdaFunctionRecommendationsRequest.builder().build();
-                return co.getLambdaFunctionRecommendations(request).lambdaFunctionRecommendations().stream()
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            ComputeOptimizerClient co = awsClientProvider.getComputeOptimizerClient(account, regionId);
+            List<DashboardData.OptimizationRecommendation> recommendations = new ArrayList<>();
+            String nextToken = null;
+
+            try {
+                do {
+                    GetLambdaFunctionRecommendationsRequest.Builder requestBuilder = GetLambdaFunctionRecommendationsRequest.builder();
+                    if (nextToken != null) {
+                        requestBuilder.nextToken(nextToken);
+                    }
+                    GetLambdaFunctionRecommendationsResponse response = co.getLambdaFunctionRecommendations(requestBuilder.build());
+
+                    response.lambdaFunctionRecommendations().stream()
                         .filter(r -> r.finding() != null && r.finding() != LambdaFunctionRecommendationFinding.OPTIMIZED && r.memorySizeRecommendationOptions() != null && !r.memorySizeRecommendationOptions().isEmpty())
                         .map(r -> {
-                            LambdaFunctionMemoryRecommendationOption opt = r.memorySizeRecommendationOptions().get(0);
-                            double savings = opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
+                            // **MODIFIED LOGIC**: Find the best option based on savings
+                            LambdaFunctionMemoryRecommendationOption bestOption = r.memorySizeRecommendationOptions().stream()
+                                .max(Comparator.comparingDouble(opt ->
+                                    opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0))
+                                .orElse(r.memorySizeRecommendationOptions().get(0));
+
+                            double savings = bestOption.savingsOpportunity() != null && bestOption.savingsOpportunity().estimatedMonthlySavings() != null ? bestOption.savingsOpportunity().estimatedMonthlySavings().value() : 0.0;
                             double recommendedCost = savings > 0 ? savings * 1.5 : 0; // Simplified cost
                             double currentCost = recommendedCost + savings;
 
                             return new DashboardData.OptimizationRecommendation(
                                     "Lambda", r.functionArn().substring(r.functionArn().lastIndexOf(':') + 1),
-                                    r.currentMemorySize() + " MB", opt.memorySize() + " MB",
+                                    r.currentMemorySize() + " MB", bestOption.memorySize() + " MB",
                                     savings, r.findingReasonCodes().stream().map(Object::toString).collect(Collectors.joining(", ")),
                                     currentCost, recommendedCost
                             );
                         })
-                        .collect(Collectors.toList());
-            }, "Lambda Recommendations").thenApply(result -> {
-                dbCache.put(cacheKey, result);
-                return result;
-            });
-        } catch (Exception e) {
-            logger.error("Could not fetch Lambda Recommendations for account {}. This might be a permissions issue or Compute Optimizer is not enabled.", account.getAwsAccountId(), e);
-            return CompletableFuture.completedFuture(Collections.emptyList());
-        }
+                        .forEach(recommendations::add);
+                    
+                    nextToken = response.nextToken();
+                } while (nextToken != null);
+            } catch (Exception e) {
+                logger.error("Could not fetch Lambda Recommendations for account {} in region {}. This might be a permissions issue or Compute Optimizer is not enabled.", account.getAwsAccountId(), regionId, e);
+            }
+            return recommendations;
+        }, "Lambda Recommendations").thenApply(result -> {
+            dbCache.put(cacheKey, result);
+            return result;
+        });
     }
     
     @Async("awsTaskExecutor")
@@ -243,6 +300,8 @@ public class OptimizationService {
                 });
     }
 
+    // ... [ The rest of the waste-finding methods (findUnattachedEbsVolumes, etc.) remain unchanged ] ...
+    // NOTE: I've collapsed the unchanged methods for brevity. They are still part of the file.
     private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEbsVolumes(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);

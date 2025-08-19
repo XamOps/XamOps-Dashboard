@@ -1,4 +1,3 @@
-
 package com.xammer.cloud.service;
 
 import com.xammer.cloud.domain.CloudAccount;
@@ -98,6 +97,14 @@ public class AwsClientProvider {
                 .build();
     }
 
+    /**
+     * NEW: Provides a client for AWS Compute Optimizer.
+     * This client is used to fetch rightsizing recommendations.
+     *
+     * @param account The cloud account to get a client for.
+     * @param region  The AWS region to target.
+     * @return A configured ComputeOptimizerClient.
+     */
     public ComputeOptimizerClient getComputeOptimizerClient(CloudAccount account, String region) {
         return ComputeOptimizerClient.builder()
                 .credentialsProvider(getCredentialsProvider(account))
