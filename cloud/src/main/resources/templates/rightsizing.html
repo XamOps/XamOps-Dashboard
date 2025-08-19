@@ -211,61 +211,57 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <button @click="loadRecommendations(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                        <span x-text="isLoading ? 'Analyzing...' : 'Refresh Analysis'"></span>
+                    <button @click="loadRecommendations(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                        <span x-text="isRefreshing ? 'Analyzing...' : 'Refresh Analysis'"></span>
                     </button>
                 </div>
             </header>
 
             <div class="flex-1 p-8 space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <template x-if="isLoading">
-                        <div class="skeleton h-36"></div>
-                        <div class="skeleton h-36"></div>
-                        <div class="skeleton h-36"></div>
-                    </template>
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
 
-                    <template x-if="!isLoading">
-                        <div class="kpi-card rounded-2xl p-6 fade-in">
-                            <div class="flex justify-between items-start mb-4">
-                                <div class="flex-1">
-                                    <h3 class="text-gray-600 text-sm font-medium mb-2">Potential Savings</h3>
-                                    <p class="text-4xl font-bold gradient-text mb-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
-                                    <p class="text-xs text-gray-500">per month</p>
-                                </div>
-                                <div class="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-piggy-bank text-white text-xl"></i>
-                                </div>
+                    <div x-show="!isLoading" class="kpi-card rounded-2xl p-6 fade-in">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <h3 class="text-gray-600 text-sm font-medium mb-2">Potential Savings</h3>
+                                <p class="text-4xl font-bold gradient-text mb-1" x-text="'$' + potentialSavings.toFixed(2)"></p>
+                                <p class="text-xs text-gray-500">per month</p>
+                            </div>
+                            <div class="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-piggy-bank text-white text-xl"></i>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="kpi-card rounded-2xl p-6 fade-in">
-                            <div class="flex justify-between items-start mb-4">
-                                <div class="flex-1">
-                                    <h3 class="text-gray-600 text-sm font-medium mb-2">Recommendations</h3>
-                                    <p class="text-4xl font-bold gradient-text mb-1" x-text="recommendationCount"></p>
-                                    <p class="text-xs text-gray-500">optimization opportunities</p>
-                                </div>
-                                <div class="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-lightbulb text-white text-xl"></i>
-                                </div>
+                    <div x-show="!isLoading" class="kpi-card rounded-2xl p-6 fade-in">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <h3 class="text-gray-600 text-sm font-medium mb-2">Recommendations</h3>
+                                <p class="text-4xl font-bold gradient-text mb-1" x-text="recommendationCount"></p>
+                                <p class="text-xs text-gray-500">optimization opportunities</p>
+                            </div>
+                            <div class="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-lightbulb text-white text-xl"></i>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="kpi-card rounded-2xl p-6 fade-in">
-                            <div class="flex justify-between items-start mb-4">
-                                <div class="flex-1">
-                                    <h3 class="text-gray-600 text-sm font-medium mb-2">Top Service</h3>
-                                    <p class="text-4xl font-bold gradient-text mb-1" x-text="topService"></p>
-                                    <p class="text-xs text-gray-500">needs optimization</p>
-                                </div>
-                                <div class="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-                                    <i class="fas fa-crown text-white text-xl"></i>
-                                </div>
+                    <div x-show="!isLoading" class="kpi-card rounded-2xl p-6 fade-in">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <h3 class="text-gray-600 text-sm font-medium mb-2">Top Service</h3>
+                                <p class="text-4xl font-bold gradient-text mb-1" x-text="topService"></p>
+                                <p class="text-xs text-gray-500">needs optimization</p>
+                            </div>
+                            <div class="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-crown text-white text-xl"></i>
                             </div>
                         </div>
-                    </template>
+                    </div>
                 </div>
 
                 <div class="glass-card rounded-2xl p-8 fade-in">
@@ -308,6 +304,8 @@
                                 class="form-input w-full pl-12 pr-4 py-3 text-sm rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
                         </div>
                     </div>
+
+                    <div x-show="isLoading" x-cloak class="skeleton h-96 rounded-2xl"></div>
 
                     <div x-show="!isLoading && filteredRecommendations.length === 0" x-cloak class="empty-state text-center py-20 px-8 rounded-2xl">
                         <div class="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -378,35 +376,40 @@
 function rightsizing() {
     return {
         isLoading: true,
+        isRefreshing: false,
         recommendations: [],
         filter: 'All',
         searchTerm: '',
         services: ['All', 'EC2', 'EBS', 'Lambda'],
 
         init() {
-            this.loadRecommendations(false); // Load from cache on initial load
+            this.loadRecommendations(false);
         },
 
         loadRecommendations(forceRefresh = false) {
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!selectedAccountId) {
-                console.error("No account selected");
                 this.isLoading = false;
                 return;
             }
             
             const cacheKey = `rightsizingRecs-${selectedAccountId}`;
-            if (!forceRefresh) {
-                const cachedData = sessionStorage.getItem(cacheKey);
-                if (cachedData) {
-                    this.recommendations = JSON.parse(cachedData);
-                    this.isLoading = false;
-                    return;
-                }
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                this.recommendations = JSON.parse(cachedData);
+                this.isLoading = false;
+                return;
             }
 
-            this.isLoading = true;
-            sessionStorage.removeItem(cacheKey); // Clear cache if forcing refresh
+            if (!cachedData) {
+                this.isLoading = true;
+            }
+
+            if (forceRefresh) {
+                this.isRefreshing = true;
+                sessionStorage.removeItem(cacheKey);
+            }
             
             fetch(`/api/rightsizing/recommendations?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
                 .then(res => res.json())
@@ -418,7 +421,10 @@ function rightsizing() {
                     console.error('Failed to load rightsizing recommendations:', err);
                     this.recommendations = [];
                 })
-                .finally(() => this.isLoading = false);
+                .finally(() => {
+                    this.isLoading = false;
+                    this.isRefreshing = false;
+                });
         },
 
         get filteredRecommendations() {

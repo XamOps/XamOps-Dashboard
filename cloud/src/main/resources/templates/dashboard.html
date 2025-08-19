@@ -430,9 +430,9 @@
                             id="refreshButton" 
                             @click="fetchDashboardData(true)" 
                             class="flex items-center text-sm text-indigo-600 hover:text-indigo-800 px-4 py-2 rounded-lg hover:bg-indigo-50 transition-all" 
-                            :disabled="isLoading">
-                            <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isLoading}"></i>
-                            <span x-text="isLoading ? 'Refreshing...' : 'Refresh'"></span>
+                            :disabled="isRefreshing">
+                            <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isRefreshing}"></i>
+                            <span x-text="isRefreshing ? 'Refreshing...' : 'Refresh'"></span>
                         </button>
                     </div>
                 </header>
@@ -592,50 +592,38 @@
         <i class="fas fa-bolt"></i>
     </button>
 
+
     <script>
-function dashboardApp() {
-    return {
-        isLoading: true,
-        stompClient: null,
-        layoutChanged: false,
-        showQuickActions: false,
-        
-        init() {
-            // The storage event listener is still useful for cross-tab communication.
-            window.addEventListener('storage', (event) => {
-                if (event.key === 'selectedAccountId') {
-                    window.location.reload();
-                }
-            });
-
-            // Now, when init() is called, the DOM is guaranteed to be ready.
-            this.fetchDashboardData(false);
-        },
-
-        connectWebSocket() {
-            const accountId = sessionStorage.getItem('selectedAccountId');
-            if (!accountId) {
-                console.log("No account selected, WebSocket will not connect.");
-                return; 
-            }
-
-            const socket = new SockJS('/ws');
-            this.stompClient = Stomp.over(socket);
-            this.stompClient.debug = null;
-            this.stompClient.connect({}, (frame) => {
-                console.log('WebSocket Connected: ' + frame);
-                this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
-                    console.log("Received inventory update via WebSocket.");
-                    this.populateResourceInventory(JSON.parse(message.body));
+    function dashboardApp() {
+        return {
+            isLoading: true,
+            isRefreshing: false, // New state for background refresh
+            stompClient: null,
+            layoutChanged: false,
+            showQuickActions: false,
+            
+            init() {
+                window.addEventListener('storage', (event) => {
+                    if (event.key === 'selectedAccountId') {
+                        window.location.reload();
+                    }
                 });
-                const sessionId = socket._transport.url.split('/')[5];
-                this.stompClient.subscribe(`/topic/advisor/response/${sessionId}`, (message) => {
-                    const response = JSON.parse(message.body);
-                    this.addAiChatMessage(response.response || response.error, 'ai');
-                });
-            });
-        },
+                this.fetchDashboardData(false);
+            },
 
+            connectWebSocket() {
+                const accountId = sessionStorage.getItem('selectedAccountId');
+                if (!accountId) return; 
+
+                const socket = new SockJS('/ws');
+                this.stompClient = Stomp.over(socket);
+                this.stompClient.debug = null;
+                this.stompClient.connect({}, (frame) => {
+                    this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
+                        this.populateResourceInventory(JSON.parse(message.body));
+                    });
+                });
+            },
         initializeDashboardLayout() {
             const container = document.getElementById('widgets-container');
             fetch('/api/dashboard/layout')
@@ -670,67 +658,70 @@ function dashboardApp() {
         },
 
         fetchDashboardData(forceRefresh = false) {
-            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-            if (!selectedAccountId) {
-                this.isLoading = false;
-                document.getElementById('unselectedState').classList.remove('hidden');
-                return;
-            }
-            
-            // Connect WebSocket here, ensuring we have an account ID.
-            this.connectWebSocket();
-            this.initializeDashboardLayout();
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                if (!selectedAccountId) {
+                    this.isLoading = false;
+                    document.getElementById('unselectedState').classList.remove('hidden');
+                    return;
+                }
+                
+                this.connectWebSocket();
+                this.initializeDashboardLayout();
 
-            if (forceRefresh) {
-                this.showNotification('loading', 'Updating dashboard...');
-            }
-            
-            const cacheKey = `dashboardData-${selectedAccountId}`;
-            const cachedData = sessionStorage.getItem(cacheKey);
+                const cacheKey = `dashboardData-${selectedAccountId}`;
+                const cachedData = sessionStorage.getItem(cacheKey);
 
-            if (cachedData && !forceRefresh) {
-                this.isLoading = false;
-                document.getElementById('dashboardContent').classList.remove('hidden');
-                this.populatePage(JSON.parse(cachedData));
-                return;
-            }
-            
-            this.isLoading = true;
-            document.getElementById('dashboardContent').classList.add('hidden');
-            if (forceRefresh) sessionStorage.removeItem(cacheKey);
-
-            fetch(`/api/dashboard?accountId=${selectedAccountId}&force=true`)
-                .then(res => res.json())
-                .then(data => {
-                    if (!data) return;
-                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
-                    this.populatePage(data);
-                    if (forceRefresh) {
-                        this.showNotification('success', 'Dashboard updated successfully!');
-                    }
-                })
-                .catch(error => {
-                    console.error('Failed to fetch dashboard data:', error);
-                    document.getElementById('errorMessage').textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
-                    document.getElementById('errorState').classList.remove('hidden');
-                })
-                .finally(() => {
+                // Initial load from cache
+                if (cachedData && !forceRefresh) {
                     this.isLoading = false;
                     document.getElementById('dashboardContent').classList.remove('hidden');
-                });
-        },
-        
-        // --- All other helper functions remain unchanged ---
-        showNotification(type, message) {
-            const notification = document.getElementById(type + 'Notification');
-            if (notification) {
-                notification.classList.add('show');
-                setTimeout(() => {
-                    notification.classList.remove('show');
-                }, 3000);
-            }
-        },
+                    document.getElementById('dashboardSkeleton').classList.add('hidden');
+                    this.populatePage(JSON.parse(cachedData));
+                    return;
+                }
+                
+                // Show skeleton only on initial load, not on refresh
+                if (!cachedData) {
+                    this.isLoading = true;
+                }
 
+                if (forceRefresh) {
+                    this.isRefreshing = true;
+                    this.showNotification('loading', 'Updating dashboard...');
+                    sessionStorage.removeItem(cacheKey); 
+                }
+
+                fetch(`/api/dashboard?accountId=${selectedAccountId}&force=${forceRefresh}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data) return;
+                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                        this.populatePage(data);
+                        if (forceRefresh) {
+                            this.showNotification('success', 'Dashboard updated successfully!');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Failed to fetch dashboard data:', error);
+                        document.getElementById('errorMessage').textContent = 'Failed to load AWS data. Please check the backend logs or try again later.';
+                        document.getElementById('errorState').classList.remove('hidden');
+                    })
+                    .finally(() => {
+                        this.isLoading = false; // Hide skeleton after first load
+                        this.isRefreshing = false; // Stop refresh indicator
+                        document.getElementById('dashboardContent').classList.remove('hidden');
+                    });
+            },
+            
+            showNotification(type, message) {
+                const notification = document.getElementById(type + 'Notification');
+                if (notification) {
+                    notification.classList.add('show');
+                    setTimeout(() => {
+                        notification.classList.remove('show');
+                    }, 3000);
+                }
+            },
         saveLayout() {
             const container = document.getElementById('widgets-container');
             const widgetOrder = [...container.children].map(w => w.id);
@@ -749,17 +740,16 @@ function dashboardApp() {
         },
         
         populatePage(data) {
-            const account = data.selectedAccount;
-            if (!account) return;
-            document.getElementById('updateTime').textContent = `Updated ${new Date().toLocaleTimeString()}`;
-            this.populateKpiCards(account);
-            this.populateResourceInventory(account.resourceInventory);
-            this.populateOptimizationHub(account.optimizationSummary, account.costAnomalies, account.ec2Recommendations, account.ebsRecommendations, account.lambdaRecommendations);
-            this.populateBillingSummary(account.billingSummary);
-            this.renderCostHistoryChart(account.costHistory);
-            this.renderHighchartMap(account.regionStatus);
-        },
-
+                const account = data.selectedAccount;
+                if (!account) return;
+                document.getElementById('updateTime').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                this.populateKpiCards(account);
+                this.populateResourceInventory(account.resourceInventory);
+                this.populateOptimizationHub(account.optimizationSummary, account.costAnomalies, account.ec2Recommendations, account.ebsRecommendations, account.lambdaRecommendations);
+                this.populateBillingSummary(account.billingSummary);
+                this.renderCostHistoryChart(account.costHistory);
+                this.renderHighchartMap(account.regionStatus);
+            },
         populateKpiCards(account) {
             const kpiContainer = document.getElementById('kpi-cards');
             if (!kpiContainer) return;

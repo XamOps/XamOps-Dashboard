@@ -150,15 +150,10 @@
         
         .skeleton {
             background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-            border-radius: 12px;
+            background-size: 200% 100%; animation: shimmer 1.5s infinite;
         }
         
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         
         .header-gradient {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
@@ -211,9 +206,9 @@
                         <i class="fas fa-file-excel"></i>
                         <span>Export Report</span>
                     </button>
-                    <button @click="loadFindings(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                        <span x-text="isLoading ? 'Scanning...' : 'Refresh Scan'"></span>
+                    <button @click="loadFindings(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                        <span x-text="isRefreshing ? 'Scanning...' : 'Refresh Scan'"></span>
                     </button>
                 </div>
             </header>
@@ -304,7 +299,7 @@
                                         <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="getSeverityIconBg(severity)">
                                             <i class="fas text-white" :class="getSeverityIcon(severity)"></i>
                                         </div>
-                                        <h3 class="font-bold text-xl" x-text="`${severity} Severity Findings`">Severity Findings</h3>
+                                        <h3 class="font-bold text-xl" x-text="`${severity} Severity Findings`"></h3>
                                     </div>
                                     <div class="flex items-center space-x-4">
                                         <span class="severity-badge" :class="getSeverityPillColor(severity)" x-text="getFindingsBySeverity(severity).length"></span>
@@ -398,6 +393,7 @@
 function securityCenter() {
     return {
         isLoading: true,
+        isRefreshing: false,
         findings: [],
         openSeverities: ['Critical', 'High'], // Auto-expand critical and high
         isModalOpen: false,
@@ -405,7 +401,7 @@ function securityCenter() {
         remediationSteps: '',
 
         init() {
-            this.loadFindings();
+            this.loadFindings(false);
         },
         
         loadFindings(forceRefresh = false) {
@@ -416,15 +412,24 @@ function securityCenter() {
             }
             
             const cacheKey = `securityFindings-${selectedAccountId}`;
-            if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
-                this.processFindings(JSON.parse(sessionStorage.getItem(cacheKey)));
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                this.processFindings(JSON.parse(cachedData));
                 this.isLoading = false;
                 return;
             }
 
-            this.isLoading = true;
-            sessionStorage.removeItem(cacheKey);
-            fetch(`/api/security/findings?accountId=${selectedAccountId}`)
+            if (!cachedData) {
+                this.isLoading = true;
+            }
+
+            if (forceRefresh) {
+                this.isRefreshing = true;
+                sessionStorage.removeItem(cacheKey);
+            }
+            
+            fetch(`/api/security/findings?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
                 .then(res => res.json())
                 .then(data => {
                     sessionStorage.setItem(cacheKey, JSON.stringify(data));
@@ -434,21 +439,20 @@ function securityCenter() {
                     console.error('Failed to load security findings:', err);
                     this.findings = [];
                 })
-                .finally(() => this.isLoading = false);
+                .finally(() => {
+                    this.isLoading = false;
+                    this.isRefreshing = false;
+                });
         },
         
         processFindings(data) {
-            // Filter out any null, undefined, or malformed entries before sorting
             const validFindings = Array.isArray(data) ? data.filter(f => f && typeof f === 'object' && f.severity) : [];
-
             this.findings = validFindings.sort((a, b) => {
                 const severityOrder = { 'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3 };
-                // Safely access severity after validation
                 const severityA = a.severity.trim();
                 const severityB = b.severity.trim();
                 const capitalizedA = severityA.charAt(0).toUpperCase() + severityA.slice(1).toLowerCase();
                 const capitalizedB = severityB.charAt(0).toUpperCase() + severityB.slice(1).toLowerCase();
-                
                 return (severityOrder[capitalizedA] || 4) - (severityOrder[capitalizedB] || 4);
             });
         },
@@ -474,7 +478,6 @@ function securityCenter() {
         },
         
         getFindingsBySeverity(severity) {
-            // Make the filtering case-insensitive to fix the display issue
             return this.findings.filter(f => f.severity && f.severity.trim().toLowerCase() === severity.toLowerCase());
         },
         

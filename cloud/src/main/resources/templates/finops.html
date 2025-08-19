@@ -301,9 +301,9 @@
                         <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
                         <span class="text-sm text-gray-600">Live data</span>
                     </div>
-                    <button @click="loadReport(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                        <span x-text="isLoading ? 'Refreshing...' : 'Refresh Data'"></span>
+                    <button @click="loadReport(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                        <span x-text="isRefreshing ? 'Refreshing...' : 'Refresh Data'"></span>
                     </button>
                 </div>
             </header>
@@ -313,12 +313,9 @@
                     <template x-for="kpi in kpis" :key="kpi.label">
                         <div class="kpi-card rounded-2xl p-6 fade-in">
                             <div x-show="isLoading" class="skeleton h-28 w-full rounded-lg"></div>
-                            <div x-show="!isLoading">
+                            <div x-show="!isLoading" x-cloak>
                                 <div class="flex justify-between items-start mb-4">
-                                    <h3 class="text-gray-600 text-sm font-medium" aria-live="polite">
-                                        <span x-text="kpi.label"></span>
-                                        <span class="sr-only" th:text="'KPI: ' + kpi.label">KPI label</span>
-                                    </h3>
+                                    <h3 class="text-gray-600 text-sm font-medium" x-text="kpi.label"></h3>
                                     <div class="p-3 rounded-xl" :class="kpi.color.bg">
                                         <i class="fas text-xl" :class="[kpi.icon, kpi.color.text]"></i>
                                     </div>
@@ -354,7 +351,7 @@
                         <div class="skeleton h-32 w-full rounded-xl"></div>
                     </div>
                     
-                    <div x-show="!isLoading && reportData.budgets.length === 0" class="empty-state text-center py-12 rounded-2xl">
+                    <div x-show="!isLoading && (!reportData.budgets || reportData.budgets.length === 0)" x-cloak class="empty-state text-center py-12 rounded-2xl">
                         <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
                             <i class="fas fa-wallet text-white text-2xl"></i>
                         </div>
@@ -365,14 +362,11 @@
                         </button>
                     </div>
                     
-                    <div x-show="!isLoading && reportData.budgets.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div x-show="!isLoading && reportData.budgets && reportData.budgets.length > 0" x-cloak class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <template x-for="budget in reportData.budgets" :key="budget.budgetName">
                             <div class="bg-white/70 backdrop-blur-sm border border-gray-200/50 rounded-xl p-6 hover:shadow-lg transition-all">
                                 <div class="flex items-center justify-between mb-4">
-                                    <h4 class="font-bold text-gray-800" aria-live="polite">
-                                        <span x-text="budget.budgetName"></span>
-                                        <span class="sr-only" th:text="'Budget Name: ' + budget.budgetName">Budget Name</span>
-                                    </h4>
+                                    <h4 class="font-bold text-gray-800" x-text="budget.budgetName"></h4>
                                     <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-teal-600 rounded-lg flex items-center justify-center">
                                         <i class="fas fa-chart-line text-white text-sm"></i>
                                     </div>
@@ -412,7 +406,7 @@
                         <div class="bg-white/70 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50">
                             <h4 class="text-lg font-bold text-gray-800 mb-4">Tagging Compliance</h4>
                             <div x-show="isLoading" class="skeleton h-64 w-full rounded-lg"></div>
-                            <div x-show="!isLoading" class="space-y-4">
+                            <div x-show="!isLoading" x-cloak class="space-y-4">
                                 <div class="flex items-center space-x-4">
                                     <div class="text-center">
                                         <p class="text-4xl font-bold text-indigo-600" x-text="reportData.taggingCompliance.compliancePercentage.toFixed(1) + '%'"></p>
@@ -472,7 +466,7 @@
                             </div>
                         </div>
                         <div x-show="isLoading" class="skeleton h-80 w-full rounded-lg"></div>
-                        <div x-show="!isLoading" class="chart-container h-80">
+                        <div x-show="!isLoading" x-cloak class="chart-container h-80">
                             <canvas id="costByServiceChart"></canvas>
                         </div>
                     </div>
@@ -488,7 +482,7 @@
                             </div>
                         </div>
                         <div x-show="isLoading" class="skeleton h-80 w-full rounded-lg"></div>
-                        <div x-show="!isLoading" class="chart-container h-80">
+                        <div x-show="!isLoading" x-cloak class="chart-container h-80">
                             <canvas id="costByRegionChart"></canvas>
                         </div>
                     </div>
@@ -505,7 +499,7 @@
                         </div>
                     </div>
                     
-                    <div x-show="reportData.costAnomalies.length > 0" class="mb-8">
+                    <div x-show="reportData.costAnomalies.length > 0" x-cloak class="mb-8">
                         <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
                             Cost Anomaly Detection
@@ -532,7 +526,7 @@
                         </div>
                     </div>
 
-                    <div x-show="reportData.rightsizingRecommendations.length > 0" class="mb-8">
+                    <div x-show="reportData.rightsizingRecommendations.length > 0" x-cloak class="mb-8">
                         <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             <i class="fas fa-cogs text-green-500 mr-2"></i>
                             Rightsizing Recommendations
@@ -563,7 +557,7 @@
                         </div>
                     </div>
                     
-                    <div x-show="reportData.wastedResources.length > 0">
+                    <div x-show="reportData.wastedResources.length > 0" x-cloak>
                         <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                             <i class="fas fa-trash-alt text-red-500 mr-2"></i>
                             Wasted Resources
@@ -639,58 +633,65 @@
     function finopsReport() {
         return {
             isLoading: true,
+            isRefreshing: false,
             isTagLoading: false,
             isBudgetModalOpen: false,
             isBudgetCreating: false,
             tagKey: 'cost-center',
             reportData: {
                 kpis: {},
-                costBreakdown: {
-                    byService: [],
-                    byRegion: []
-                },
+                costBreakdown: { byService: [], byRegion: [] },
                 rightsizingRecommendations: [],
                 wastedResources: [],
                 costAnomalies: [],
-                taggingCompliance: {
-                    compliancePercentage: 0,
-                    untaggedResources: []
-                },
+                taggingCompliance: { compliancePercentage: 0, untaggedResources: [] },
                 budgets: []
             },
-            newBudget: {
-                budgetName: '',
-                budgetLimit: null,
-                budgetUnit: 'USD'
-            },
-            charts: {
-                byService: null,
-                byRegion: null,
-                byTag: null
-            },
+            newBudget: { budgetName: '', budgetLimit: null, budgetUnit: 'USD' },
+            charts: { byService: null, byRegion: null, byTag: null },
 
             init() {
-                this.loadReport();
+                this.loadReport(false);
             },
 
             loadReport(forceRefresh = false) {
-                this.isLoading = true;
                 const selectedAccountId = sessionStorage.getItem('selectedAccountId');
                 if (!selectedAccountId) {
-                    console.error("No account selected");
                     this.isLoading = false;
                     return;
                 }
+
+                const cacheKey = `finopsReport-${selectedAccountId}`;
+                const cachedData = sessionStorage.getItem(cacheKey);
+
+                if (cachedData && !forceRefresh) {
+                    this.reportData = JSON.parse(cachedData);
+                    this.isLoading = false;
+                    this.renderCharts();
+                    this.getCostByTag();
+                    return;
+                }
+                
+                if (!cachedData) {
+                    this.isLoading = true;
+                } else {
+                    this.isRefreshing = true;
+                }
+                
                 const url = `/api/finops/report?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`;
                 fetch(url)
                     .then(res => res.json())
                     .then(data => {
                         this.reportData = data;
+                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
                         this.renderCharts();
                         this.getCostByTag();
                     })
                     .catch(err => console.error("Failed to load FinOps report:", err))
-                    .finally(() => this.isLoading = false);
+                    .finally(() => {
+                        this.isLoading = false;
+                        this.isRefreshing = false;
+                    });
             },
 
             formatCurrency(value) {
@@ -701,10 +702,11 @@
             },
 
             get kpis() {
-                const k = this.reportData.kpis;
+                const k = this.reportData.kpis || {};
                 const mtdSpend = k.monthToDateSpend || 0;
                 const lastMonthSpend = k.lastMonthSpend || 0;
                 const forecast = k.forecastedSpend || 0;
+                const potentialSavings = k.potentialSavings || 0;
 
                 const mtdTrend = lastMonthSpend > 0 ? ((mtdSpend - lastMonthSpend) / lastMonthSpend) * 100 : 0;
                 const forecastTrend = lastMonthSpend > 0 ? ((forecast - lastMonthSpend) / lastMonthSpend) * 100 : 0;
@@ -713,10 +715,7 @@
                     label: 'Month-to-Date Spend',
                     value: this.formatCurrency(mtdSpend),
                     icon: 'fa-dollar-sign',
-                    color: {
-                        bg: 'bg-blue-100',
-                        text: 'text-blue-500'
-                    },
+                    color: { bg: 'bg-blue-100', text: 'text-blue-500' },
                     trendIcon: mtdTrend >= 0 ? 'fa-arrow-up' : 'fa-arrow-down',
                     trendColor: mtdTrend >= 0 ? 'text-red-500' : 'text-green-500',
                     trendText: `${Math.abs(mtdTrend).toFixed(1)}% vs last month`
@@ -724,10 +723,7 @@
                     label: 'Forecasted Spend',
                     value: this.formatCurrency(forecast),
                     icon: 'fa-chart-line',
-                    color: {
-                        bg: 'bg-yellow-100',
-                        text: 'text-yellow-500'
-                    },
+                    color: { bg: 'bg-yellow-100', text: 'text-yellow-500' },
                     trendIcon: forecastTrend >= 0 ? 'fa-arrow-up' : 'fa-arrow-down',
                     trendColor: forecastTrend >= 0 ? 'text-red-500' : 'text-green-500',
                     trendText: `${Math.abs(forecastTrend).toFixed(1)}% vs last month`
@@ -735,31 +731,22 @@
                     label: 'Last Month Spend',
                     value: this.formatCurrency(lastMonthSpend),
                     icon: 'fa-calendar-alt',
-                    color: {
-                        bg: 'bg-gray-100',
-                        text: 'text-gray-500'
-                    },
-                    trendIcon: '',
-                    trendColor: '',
-                    trendText: ''
+                    color: { bg: 'bg-gray-100', text: 'text-gray-500' },
+                    trendIcon: '', trendColor: '', trendText: ''
                 }, {
                     label: 'Potential Savings',
-                    value: this.formatCurrency(k.potentialSavings),
+                    value: this.formatCurrency(potentialSavings),
                     icon: 'fa-piggy-bank',
-                    color: {
-                        bg: 'bg-green-100',
-                        text: 'text-green-500'
-                    },
-                    trendIcon: '',
-                    trendColor: '',
-                    trendText: ''
-                }, ];
+                    color: { bg: 'bg-green-100', text: 'text-green-500' },
+                    trendIcon: '', trendColor: '', trendText: ''
+                }];
             },
 
             renderCharts() {
                 this.renderServiceChart();
                 this.renderRegionChart();
             },
+            
 
             handleChartClick(event, chart, type) {
                 const points = chart.getElementsAtEventForMode(event, 'nearest', {

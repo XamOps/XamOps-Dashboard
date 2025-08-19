@@ -304,7 +304,7 @@
                 </div>
                 <button id="refresh-button" class="group flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-indigo-600 hover:text-white bg-white hover:bg-indigo-600 rounded-lg border border-indigo-200 hover:border-indigo-600 transition-all duration-200 hover:shadow-md">
                     <i class="fas fa-sync-alt transition-transform group-hover:rotate-180"></i>
-                    <span>Refresh</span>
+                    <span id="refresh-button-text">Refresh</span>
                 </button>
             </div>
         </header>
@@ -341,187 +341,139 @@
 
             <div id="resource-list-container" class="space-y-6">
                 <div id="loading-state" class="w-full space-y-4">
-                    <div class="service-group rounded-2xl shadow-lg p-6">
-                        <div class="flex items-center justify-between animate-pulse">
-                            <div class="flex items-center space-x-4 flex-1">
-                                <div class="h-6 w-6 rounded bg-gray-300"></div>
-                                <div class="h-12 w-12 rounded-xl bg-gray-300"></div>
-                                <div class="h-6 w-40 rounded-lg bg-gray-300"></div>
-                                <div class="h-6 w-16 rounded-full bg-gray-300"></div>
-                            </div>
-                            <div class="h-10 w-28 rounded-lg bg-gray-300"></div>
-                        </div>
                     </div>
-                    <div class="service-group rounded-2xl shadow-lg p-6">
-                        <div class="flex items-center justify-between animate-pulse">
-                            <div class="flex items-center space-x-4 flex-1">
-                                <div class="h-6 w-6 rounded bg-gray-300"></div>
-                                <div class="h-12 w-12 rounded-xl bg-gray-300"></div>
-                                <div class="h-6 w-40 rounded-lg bg-gray-300"></div>
-                                <div class="h-6 w-16 rounded-full bg-gray-300"></div>
-                            </div>
-                            <div class="h-10 w-28 rounded-lg bg-gray-300"></div>
-                        </div>
-                    </div>
-                    <div class="service-group rounded-2xl shadow-lg p-6">
-                        <div class="flex items-center justify-between animate-pulse">
-                            <div class="flex items-center space-x-4 flex-1">
-                                <div class="h-6 w-6 rounded bg-gray-300"></div>
-                                <div class="h-12 w-12 rounded-xl bg-gray-300"></div>
-                                <div class="h-6 w-40 rounded-lg bg-gray-300"></div>
-                                <div class="h-6 w-16 rounded-full bg-gray-300"></div>
-                            </div>
-                            <div class="h-10 w-28 rounded-lg bg-gray-300"></div>
-                        </div>
-                    </div>
-                </div>
                 
                 <div id="empty-state" class="empty-state hidden text-center py-20 px-8 rounded-2xl mt-8">
-                    <div class="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <i class="fas fa-box-open text-white text-3xl"></i>
                     </div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">No Resources Found</h3>
-                    <p class="text-gray-600 mb-6 max-w-md mx-auto">Try adjusting your search criteria or filters, or make sure you have selected an active AWS account.</p>
-                    <div class="flex items-center justify-center space-x-4">
-                        <button class="btn-secondary px-6 py-3 text-sm font-semibold rounded-xl focus-ring">
-                            <i class="fas fa-sync-alt mr-2"></i>Refresh Data
-                        </button>
-                        <button class="btn-primary px-6 py-3 text-sm font-semibold text-white rounded-xl focus-ring">
-                            <i class="fas fa-plus mr-2"></i>Add Account
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
     </main>
 </div>
 
 <script>
-// Wait for AlpineJS to be ready before initializing the app
-document.addEventListener('alpine:init', () => {
-    console.log('AlpineJS is ready');
-});
-
-// Use a slight delay to ensure AlpineJS has fully initialized
 document.addEventListener('DOMContentLoaded', function() {
-    // Add a small delay to ensure AlpineJS components are ready
-    setTimeout(() => {
-        const app = {
-            allGroups: [],
-            dom: {
-                searchInput: document.getElementById('search-input'),
-                regionFilter: document.getElementById('region-filter'),
-                listContainer: document.getElementById('resource-list-container'),
-                loadingState: document.getElementById('loading-state'),
-                emptyState: document.getElementById('empty-state'),
-                refreshButton: document.getElementById('refresh-button'),
-                updateStatus: document.getElementById('update-status'),
-            },
+    const app = {
+        allGroups: [],
+        isRefreshing: false,
+        dom: {
+            searchInput: document.getElementById('search-input'),
+            regionFilter: document.getElementById('region-filter'),
+            listContainer: document.getElementById('resource-list-container'),
+            loadingState: document.getElementById('loading-state'),
+            emptyState: document.getElementById('empty-state'),
+            refreshButton: document.getElementById('refresh-button'),
+            refreshButtonText: document.getElementById('refresh-button-text'),
+            refreshButtonIcon: document.getElementById('refresh-button').querySelector('i'),
+            updateStatus: document.getElementById('update-status'),
+        },
 
-            init() {
-                console.log('CloudList app initializing...');
-                this.setupEventListeners();
-                this.loadResources();
-            },
+        init() {
+            this.setupEventListeners();
+            this.loadResources(false); // Initial load from cache if available
+        },
 
-            setupEventListeners() {
-                this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
-                this.dom.regionFilter.addEventListener('change', () => this.render());
-                this.dom.refreshButton.addEventListener('click', () => {
+        setupEventListeners() {
+            this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
+            this.dom.regionFilter.addEventListener('change', () => this.render());
+            this.dom.refreshButton.addEventListener('click', () => {
+                this.loadResources(true);
+            });
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'selectedAccountId') {
                     this.loadResources(true);
-                });
-                
-                // Listen for account changes from the sidebar
-                window.addEventListener('storage', (e) => {
-                    if (e.key === 'selectedAccountId') {
-                        console.log('Account changed, reloading resources...');
-                        this.loadResources(true);
-                    }
-                });
-            },
-
-            debounce(func, delay) {
-                let timeout;
-                return function(...args) {
-                    const context = this;
-                    clearTimeout(timeout);
-                    timeout = setTimeout(() => func.apply(context, args), delay);
-                };
-            },
-
-            loadResources(forceRefresh = false) {
-                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-                console.log('Loading resources for account:', selectedAccountId);
-                
-                if (!selectedAccountId) {
-                    this.dom.loadingState.style.display = 'none';
-                    this.dom.emptyState.classList.remove('hidden');
-                    this.dom.updateStatus.textContent = 'Please select an account.';
-                    return;
                 }
+            });
+        },
 
-                const cacheKey = `cloudlistData-${selectedAccountId}`;
-                const cachedData = sessionStorage.getItem(cacheKey);
+        debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        },
 
-                if (cachedData && !forceRefresh) {
-                    console.log("Cloudlist data loaded from cache.");
-                    this.allGroups = JSON.parse(cachedData);
+        loadResources(forceRefresh = false) {
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.dom.loadingState.style.display = 'none';
+                this.dom.emptyState.classList.remove('hidden');
+                this.dom.updateStatus.textContent = 'Please select an account.';
+                return;
+            }
+
+            const cacheKey = `cloudlistData-${selectedAccountId}`;
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                this.allGroups = JSON.parse(cachedData);
+                this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                this.render();
+                return;
+            }
+
+            if (!forceRefresh) {
+                this.dom.listContainer.innerHTML = '';
+                this.dom.listContainer.appendChild(this.dom.loadingState);
+                this.dom.loadingState.style.display = 'block';
+            }
+            
+            this.isRefreshing = true;
+            this.dom.updateStatus.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Updating...';
+            this.dom.refreshButton.disabled = true;
+            this.dom.refreshButtonText.textContent = 'Refreshing...';
+            this.dom.refreshButtonIcon.classList.add('fa-spin');
+            
+            if (forceRefresh) {
+                sessionStorage.removeItem(cacheKey); 
+            }
+            
+            fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
+                .then(res => res.json())
+                .then(data => {
+                    this.allGroups = Array.isArray(data) ? data : [];
+                    sessionStorage.setItem(cacheKey, JSON.stringify(this.allGroups));
                     this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
                     this.render();
-                    return;
-                }
+                })
+                .catch(error => {
+                    console.error('Error fetching resources:', error);
+                    this.allGroups = [];
+                    this.dom.updateStatus.textContent = 'Update failed';
+                    this.render();
+                })
+                .finally(() => {
+                    this.isRefreshing = false;
+                    this.dom.refreshButton.disabled = false;
+                    this.dom.refreshButtonText.textContent = 'Refresh';
+                    this.dom.refreshButtonIcon.classList.remove('fa-spin');
+                });
+        },
 
-                this.dom.loadingState.style.display = 'block';
+        render() {
+            this.dom.loadingState.style.display = 'none';
+            this.dom.listContainer.innerHTML = '';
+
+            const filteredGroups = this.getFilteredData();
+
+            if (filteredGroups.length === 0) {
+                this.dom.emptyState.classList.remove('hidden');
+                this.dom.listContainer.appendChild(this.dom.emptyState);
+            } else {
                 this.dom.emptyState.classList.add('hidden');
-                this.dom.listContainer.innerHTML = ''; 
-                this.dom.listContainer.appendChild(this.dom.loadingState);
-                this.dom.updateStatus.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Updating...';
-                this.dom.refreshButton.disabled = true;
-                sessionStorage.removeItem(cacheKey); 
-                
-                fetch(`/api/cloudlist/resources?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
-                    .then(res => {
-                        if (!res.ok) throw new Error(`API Error: ${res.status}`);
-                        return res.json();
-                    })
-                    .then(data => {
-                        this.allGroups = Array.isArray(data) ? data : [];
-                        sessionStorage.setItem(cacheKey, JSON.stringify(this.allGroups));
-                        this.dom.updateStatus.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-                        this.render();
-                    })
-                    .catch(error => {
-                        console.error('Error fetching resources:', error);
-                        this.allGroups = [];
-                        this.dom.updateStatus.textContent = 'Update failed - Please try again';
-                        this.render();
-                    })
-                    .finally(() => {
-                        this.dom.refreshButton.disabled = false;
-                    });
-            },
-
-            render() {
-                this.dom.loadingState.style.display = 'none';
-                this.dom.listContainer.innerHTML = '';
-
-                const filteredGroups = this.getFilteredData();
-
-                if (filteredGroups.length === 0 && this.allGroups.length > 0) {
-                    this.dom.emptyState.classList.remove('hidden');
-                } else {
-                    this.dom.emptyState.classList.add('hidden');
-                }
-
                 filteredGroups.forEach(group => {
                     const groupElement = this.createGroupElement(group);
                     this.dom.listContainer.appendChild(groupElement);
                 });
-                
-                this.addEventListenersForToggles();
-            },
+            }
+            
+            this.addEventListenersForToggles();
+        },
 
-            getFilteredData() {
+        // getFilteredData, createGroupElement, createResourceRow, etc. remain the same
+
+        getFilteredData() {
                 const searchTerm = this.dom.searchInput.value.toLowerCase();
                 const region = this.dom.regionFilter.value;
 
@@ -684,15 +636,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     });
                 });
-
-                // Original click listener for navigating to resourcedetail.html (now handled by the "Details" button)
-                // this.dom.listContainer.querySelectorAll('.resource-row').forEach(row => {
-                //     row.addEventListener('click', (e) => {
-                //         const service = row.dataset.service;
-                //         const id = row.dataset.id;
-                //         window.location.href = `/resourcedetail?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`;
-                //     });
-                // });
             },
             
             getStateClass(state) {
@@ -726,10 +669,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
                 return iconMap[serviceType] || 'default-icon.png';
             },
-        };
-        
-        app.init();
-    }, 100); // Small delay to ensure AlpineJS is ready
+    };
+    
+    app.init();
 });
 </script>
 

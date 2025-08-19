@@ -178,9 +178,9 @@
                             <i class="fas fa-file-excel text-green-600"></i>
                             <span class="text-sm font-medium text-gray-700">Save To Excel</span>
                         </button>
-                        <button @click="loadInsights(true); loadSummary(true);" class="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all" :disabled="isLoading">
-                            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                            <span x-text="isLoading ? 'Loading...' : 'Refresh'"></span>
+                        <button @click="loadInsights(true); loadSummary(true);" class="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all" :disabled="isRefreshing">
+                            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                            <span x-text="isRefreshing ? 'Refreshing...' : 'Refresh'"></span>
                         </button>
                     </div>
                 </div>
@@ -210,7 +210,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="glass-card metric-card rounded-2xl p-6">
                         <div class="flex items-center justify-between">
                             <div>
@@ -222,7 +221,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="glass-card metric-card rounded-2xl p-6">
                         <div class="flex items-center justify-between">
                             <div>
@@ -431,6 +429,7 @@
     function performanceInsights() {
         return {
             isLoading: true,
+            isRefreshing: false,
             insights: [],
             selectedInsights: [],
             currentSeverity: 'ALL',
@@ -451,10 +450,10 @@
             ],
 
             init() {
-                this.loadInsights();
-                this.loadSummary();
+                this.loadInsights(false);
+                this.loadSummary(false);
                 this.$watch('currentSeverity', () => {
-                    this.loadInsights();
+                    this.loadInsights(true); // Always force refresh on filter change for simplicity
                 });
             },
 
@@ -464,15 +463,31 @@
                     this.isLoading = false;
                     return;
                 }
-
-                this.isLoading = true;
+                
                 const severity = this.currentSeverity === 'ALL' ? '' : this.currentSeverity;
+                const cacheKey = `performanceInsights-${selectedAccountId}-${severity}`;
+                const cachedData = sessionStorage.getItem(cacheKey);
 
-                // --- THIS IS THE FIX ---
+                if (cachedData && !forceRefresh) {
+                    this.insights = JSON.parse(cachedData);
+                    this.isLoading = false;
+                    return;
+                }
+
+                if (!cachedData) {
+                    this.isLoading = true;
+                }
+                
+                if (forceRefresh) {
+                    this.isRefreshing = true;
+                    sessionStorage.removeItem(cacheKey);
+                }
+
                 fetch(`/api/metrics/insights?accountId=${selectedAccountId}&severity=${severity}&forceRefresh=${forceRefresh}`)
                     .then(res => res.json())
                     .then(data => {
                         this.insights = data;
+                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
                     })
                     .catch(err => {
                         console.error('Failed to load insights', err);
@@ -480,6 +495,7 @@
                     })
                     .finally(() => {
                         this.isLoading = false;
+                        this.isRefreshing = false;
                     });
             },
 
@@ -487,11 +503,23 @@
                 const selectedAccountId = sessionStorage.getItem('selectedAccountId');
                 if (!selectedAccountId) return;
 
-                // --- THIS IS THE FIX ---
+                const cacheKey = `performanceSummary-${selectedAccountId}`;
+                const cachedData = sessionStorage.getItem(cacheKey);
+
+                if (cachedData && !forceRefresh) {
+                    this.summary = JSON.parse(cachedData);
+                    return;
+                }
+                
+                if (forceRefresh) {
+                    sessionStorage.removeItem(cacheKey);
+                }
+
                 fetch(`/api/metrics/insights/summary?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
                     .then(res => res.json())
                     .then(data => {
                         this.summary = data;
+                        sessionStorage.setItem(cacheKey, JSON.stringify(data));
                     })
                     .catch(err => {
                         console.error('Failed to load summary', err);
@@ -537,7 +565,7 @@
                     .then(res => {
                         if (res.ok) {
                             this.insights = this.insights.filter(i => i.id !== insightId);
-                            this.loadSummary();
+                            this.loadSummary(true);
                         }
                     })
                     .catch(err => {
@@ -560,7 +588,7 @@
                         if (res.ok) {
                             this.insights = this.insights.filter(i => !this.selectedInsights.includes(i.id));
                             this.selectedInsights = [];
-                            this.loadSummary();
+                            this.loadSummary(true);
                         }
                     })
                     .catch(err => {

@@ -324,16 +324,21 @@
                         <div class="w-2 h-2 bg-orange-500 rounded-full pulse-dot"></div>
                         <span class="text-sm text-gray-600">Active monitoring</span>
                     </div>
-                    <button @click="loadAlerts(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                        <span x-text="isLoading ? 'Scanning...' : 'Refresh Alerts'"></span>
+                    <button @click="loadAlerts(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                        <span x-text="isRefreshing ? 'Scanning...' : 'Refresh Alerts'"></span>
                     </button>
                 </div>
             </header>
 
             <div class="flex-1 p-8 space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div class="quota-card rounded-2xl p-6 fade-in">
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
+                    <div x-show="isLoading" x-cloak class="skeleton h-36"></div>
+
+                    <div x-show="!isLoading" class="quota-card rounded-2xl p-6 fade-in">
                         <div class="flex justify-between items-start mb-4">
                             <div class="flex-1">
                                 <h3 class="text-gray-600 text-sm font-medium mb-2">Total Alerts</h3>
@@ -346,7 +351,7 @@
                         </div>
                     </div>
                     
-                    <div class="quota-card rounded-2xl p-6 fade-in">
+                    <div x-show="!isLoading" class="quota-card rounded-2xl p-6 fade-in">
                         <div class="flex justify-between items-start mb-4">
                             <div class="flex-1">
                                 <h3 class="text-gray-600 text-sm font-medium mb-2">Critical Usage</h3>
@@ -359,7 +364,7 @@
                         </div>
                     </div>
                     
-                    <div class="quota-card rounded-2xl p-6 fade-in">
+                    <div x-show="!isLoading" class="quota-card rounded-2xl p-6 fade-in">
                         <div class="flex justify-between items-start mb-4">
                             <div class="flex-1">
                                 <h3 class="text-gray-600 text-sm font-medium mb-2">Warning</h3>
@@ -372,7 +377,7 @@
                         </div>
                     </div>
                     
-                    <div class="quota-card rounded-2xl p-6 fade-in">
+                    <div x-show="!isLoading" class="quota-card rounded-2xl p-6 fade-in">
                         <div class="flex justify-between items-start mb-4">
                             <div class="flex-1">
                                 <h3 class="text-gray-600 text-sm font-medium mb-2">Healthy</h3>
@@ -418,7 +423,7 @@
                             </div>
                         </div>
                     </div>
-                   
+                    
                     <div x-show="isLoading" x-cloak class="table-enhanced">
                         <table class="w-full text-sm">
                             <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
@@ -521,6 +526,7 @@
 function alerts() {
     return {
         isLoading: true,
+        isRefreshing: false,
         alerts: [],
         selectedService: 'All',
 
@@ -537,14 +543,20 @@ function alerts() {
             }
 
             const cacheKey = `alertsData-${selectedAccountId}`;
-            if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
-                this.processAlerts(JSON.parse(sessionStorage.getItem(cacheKey)));
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                this.processAlerts(JSON.parse(cachedData));
                 this.isLoading = false;
                 return;
             }
             
-            this.isLoading = true;
+            if (!cachedData) {
+                this.isLoading = true;
+            }
+            
             if (forceRefresh) {
+                this.isRefreshing = true;
                 sessionStorage.removeItem(cacheKey);
             }
 
@@ -563,6 +575,7 @@ function alerts() {
                 })
                 .finally(() => {
                     this.isLoading = false;
+                    this.isRefreshing = false;
                 });
         },
         

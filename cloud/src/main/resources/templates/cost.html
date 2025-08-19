@@ -306,9 +306,9 @@
                             <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
                             <span class="text-sm text-gray-600">Live data</span>
                         </div>
-                        <button @click="loadCostData(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isLoading">
-                            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
-                            <span x-text="isLoading ? 'Refreshing...' : 'Refresh Data'"></span>
+                        <button @click="loadCostData(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                            <span x-text="isRefreshing ? 'Refreshing...' : 'Refresh Data'"></span>
                         </button>
                     </div>
                 </header>
@@ -322,7 +322,7 @@
                                 </div>
                                 <div class="text-right">
                                     <p class="text-sm text-gray-600">Total MTD</p>
-                                    <p class="text-2xl font-bold gradient-text" x-text="'$' + costData.reduce((sum, item) => sum + item.amount, 0).toFixed(2)"></p>
+                                    <p class="text-2xl font-bold gradient-text" x-text="isLoading ? '...' : '$' + costData.reduce((sum, item) => sum + item.amount, 0).toFixed(2)"></p>
                                 </div>
                             </div>
                             <div class="text-sm text-gray-500">Month to Date Spending</div>
@@ -335,7 +335,7 @@
                                 </div>
                                 <div class="text-right">
                                     <p class="text-sm text-gray-600">Categories</p>
-                                    <p class="text-2xl font-bold gradient-text" x-text="costData.length"></p>
+                                    <p class="text-2xl font-bold gradient-text" x-text="isLoading ? '...' : costData.length"></p>
                                 </div>
                             </div>
                             <div class="text-sm text-gray-500" x-text="'Grouped by ' + groupBy.toLowerCase()"></div>
@@ -348,10 +348,10 @@
                                 </div>
                                 <div class="text-right">
                                     <p class="text-sm text-gray-600">Top Spender</p>
-                                    <p class="text-2xl font-bold gradient-text" x-text="sortedCostData.length > 0 ? '$' + sortedCostData[0].amount.toFixed(2) : '$0.00'"></p>
+                                    <p class="text-2xl font-bold gradient-text" x-text="isLoading ? '...' : (sortedCostData.length > 0 ? '$' + sortedCostData[0].amount.toFixed(2) : '$0.00')"></p>
                                 </div>
                             </div>
-                            <div class="text-sm text-gray-500" x-text="sortedCostData.length > 0 ? sortedCostData[0].name : 'No data'"></div>
+                            <div class="text-sm text-gray-500" x-text="isLoading ? '...' : (sortedCostData.length > 0 ? sortedCostData[0].name : 'No data')"></div>
                         </div>
                     </div>
 
@@ -544,6 +544,7 @@
         function costManagement() {
             return {
                 isLoading: true,
+                isRefreshing: false,
                 costData: [],
                 groupBy: 'SERVICE',
                 tagKey: 'Name',
@@ -655,14 +656,24 @@
                         return;
                     }
                     const cacheKey = `costData-${selectedAccountId}-${this.groupBy}-${this.tagKey}`;
-                    if (!forceRefresh && sessionStorage.getItem(cacheKey)) {
-                        this.costData = JSON.parse(sessionStorage.getItem(cacheKey));
+                    const cachedData = sessionStorage.getItem(cacheKey);
+
+                    if (cachedData && !forceRefresh) {
+                        this.costData = JSON.parse(cachedData);
                         this.isLoading = false;
                         this.renderChart();
                         return;
                     }
-                    this.isLoading = true;
-                    sessionStorage.removeItem(cacheKey);
+                    
+                    if (!cachedData) { // Only show full skeleton on initial, cache-less load
+                        this.isLoading = true;
+                    }
+                    
+                    if (forceRefresh) {
+                        this.isRefreshing = true;
+                        sessionStorage.removeItem(cacheKey);
+                    }
+
                     let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}&forceRefresh=${forceRefresh}`;
                     if (this.groupBy === 'TAG' && this.tagKey) {
                         url += `&tag=${this.tagKey}`;
@@ -678,7 +689,10 @@
                             console.error('Failed to load cost data:', err);
                             this.costData = [];
                         })
-                        .finally(() => this.isLoading = false);
+                        .finally(() => {
+                            this.isLoading = false;
+                            this.isRefreshing = false;
+                        });
                 },
                 get sortedCostData() {
                     return [...this.costData].sort((a, b) => b.amount - a.amount);
