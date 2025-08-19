@@ -1,5 +1,6 @@
 package com.xammer.cloud.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
 import com.xammer.cloud.repository.CloudAccountRepository;
@@ -7,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -32,6 +32,7 @@ public class CloudGuardService {
     private final CloudListService cloudListService;
     private final Set<String> keyQuotas;
     private final FinOpsService finOpsService;
+    private final DatabaseCacheService dbCache; // Added for caching
 
     @Autowired
     public CloudGuardService(
@@ -39,12 +40,14 @@ public class CloudGuardService {
             AwsClientProvider awsClientProvider,
             @Lazy CloudListService cloudListService,
             @Value("${quotas.key-codes}") Set<String> keyQuotas,
-            FinOpsService finOpsService) {
+            FinOpsService finOpsService,
+            DatabaseCacheService dbCache) { // Added dbCache
         this.cloudAccountRepository = cloudAccountRepository;
         this.awsClientProvider = awsClientProvider;
         this.cloudListService = cloudListService;
         this.keyQuotas = keyQuotas;
         this.finOpsService = finOpsService;
+        this.dbCache = dbCache; // Added dbCache
     }
 
     private CloudAccount getAccount(String accountId) {
@@ -53,8 +56,15 @@ public class CloudGuardService {
     }
 
     @Async("awsTaskExecutor")
-    @Cacheable(value = "serviceQuotas", key = "#account.awsAccountId")
-    public CompletableFuture<List<DashboardData.ServiceQuotaInfo>> getServiceQuotaInfo(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+    public CompletableFuture<List<DashboardData.ServiceQuotaInfo>> getServiceQuotaInfo(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, boolean forceRefresh) {
+        String cacheKey = "serviceQuotas-" + account.getAwsAccountId();
+        if (!forceRefresh) {
+            Optional<List<DashboardData.ServiceQuotaInfo>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
+            if (cachedData.isPresent()) {
+                return CompletableFuture.completedFuture(cachedData.get());
+            }
+        }
+
         if (activeRegions.isEmpty()) {
             logger.warn("No active regions found for account {}, skipping service quota check.", account.getAwsAccountId());
             return CompletableFuture.completedFuture(Collections.emptyList());
@@ -88,7 +98,6 @@ public class CloudGuardService {
                                 status = "WARN";
                             }
 
-                            // THIS IS THE CORRECTED CONSTRUCTOR CALL with 4 arguments
                             quotaInfos.add(new DashboardData.ServiceQuotaInfo(
                                 quota.serviceName(),
                                 quota.quotaName(),
@@ -102,6 +111,7 @@ public class CloudGuardService {
                     logger.error("Could not fetch service quotas for {} in account {}.", serviceCode, account.getAwsAccountId(), e);
                 }
             }
+            dbCache.put(cacheKey, quotaInfos); // Save fresh data to cache
             return CompletableFuture.completedFuture(quotaInfos);
         });
     }
@@ -197,9 +207,9 @@ public class CloudGuardService {
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .thenApply(v -> futures.stream().mapToInt(CompletableFuture::join).sum());
     }
+
     @Async("awsTaskExecutor")
-@Cacheable(value = "costAnomalies", key = "#account.awsAccountId")
-public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies(CloudAccount account) {
-    return finOpsService.getCostAnomalies(account, true);
-}
+    public CompletableFuture<List<DashboardData.CostAnomaly>> getCostAnomalies(CloudAccount account, boolean forceRefresh) {
+        return finOpsService.getCostAnomalies(account, forceRefresh);
+    }
 }

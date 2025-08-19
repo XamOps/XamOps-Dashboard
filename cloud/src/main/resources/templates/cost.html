@@ -573,7 +573,7 @@
                 loadForecastServices() {
                     const selectedAccountId = sessionStorage.getItem('selectedAccountId');
                     if (!selectedAccountId) return;
-                    fetch(`/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=SERVICE`)
+                    fetch(`/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=SERVICE&forceRefresh=true`)
                         .then(res => res.json())
                         .then(data => {
                             this.forecast.availableServices = ['ALL', ...[...new Set(data.map(item => item.name))].sort()];
@@ -663,8 +663,10 @@
                     }
                     this.isLoading = true;
                     sessionStorage.removeItem(cacheKey);
-                    let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}`;
-                    if (this.groupBy === 'TAG' && this.tagKey) url += `&tag=${this.tagKey}`;
+                    let url = `/api/costs/breakdown?accountId=${selectedAccountId}&groupBy=${this.groupBy}&forceRefresh=${forceRefresh}`;
+                    if (this.groupBy === 'TAG' && this.tagKey) {
+                        url += `&tag=${this.tagKey}`;
+                    }
                     fetch(url)
                         .then(res => res.json())
                         .then(data => {

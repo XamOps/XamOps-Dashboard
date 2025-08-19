@@ -67,12 +67,15 @@ public class DashboardController {
     }
 
     @GetMapping("/waste")
-    public CompletableFuture<ResponseEntity<List<DashboardData.WastedResource>>> getWastedResources(@RequestParam String accountId) {
+    public CompletableFuture<ResponseEntity<List<DashboardData.WastedResource>>> getWastedResources(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) { // <-- ADD forceRefresh parameter
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
-    // Pass 'false' for forceRefresh to match the required method signature
-    return cloudListService.getRegionStatusForAccount(account, false)
-        .thenCompose(activeRegions -> optimizationService.getWastedResources(account, activeRegions, false))
+
+        // Pass the forceRefresh parameter down to the service calls
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh)
+            .thenCompose(activeRegions -> optimizationService.getWastedResources(account, activeRegions, forceRefresh))
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching wasted resources for account {}", accountId, ex);
