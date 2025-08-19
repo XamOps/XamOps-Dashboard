@@ -114,8 +114,15 @@ public class OptimizationService {
             List<DashboardData.OptimizationRecommendation> recommendations = new ArrayList<>();
             String nextToken = null;
 
+            // **FIXED LOGIC**: Use raw strings instead of enum constants to avoid resolution issues.
+                RecommendationPreferences recommendationPreferences = RecommendationPreferences.builder()
+                    .cpuVendorArchitectures(List.of(CpuVendorArchitecture.AWS_ARM64))
+                    .build();
+
             do {
-                GetEc2InstanceRecommendationsRequest.Builder requestBuilder = GetEc2InstanceRecommendationsRequest.builder();
+                GetEc2InstanceRecommendationsRequest.Builder requestBuilder = GetEc2InstanceRecommendationsRequest.builder()
+                    .recommendationPreferences(recommendationPreferences); // Apply the preference
+                
                 if (nextToken != null) {
                     requestBuilder.nextToken(nextToken);
                 }
@@ -124,7 +131,6 @@ public class OptimizationService {
                 response.instanceRecommendations().stream()
                     .filter(r -> r.finding() != null && r.finding() != Finding.OPTIMIZED && r.recommendationOptions() != null && !r.recommendationOptions().isEmpty())
                     .map(r -> {
-                        // **MODIFIED LOGIC**: Find the best option based on savings
                         InstanceRecommendationOption bestOption = r.recommendationOptions().stream()
                             .max(Comparator.comparingDouble(opt -> 
                                 opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null && opt.savingsOpportunity().estimatedMonthlySavings().value() != null
@@ -180,7 +186,6 @@ public class OptimizationService {
                 response.volumeRecommendations().stream()
                     .filter(r -> r.finding() != null && !r.finding().toString().equals("OPTIMIZED") && r.volumeRecommendationOptions() != null && !r.volumeRecommendationOptions().isEmpty())
                     .map(r -> {
-                        // **MODIFIED LOGIC**: Find the best option based on savings
                         VolumeRecommendationOption bestOption = r.volumeRecommendationOptions().stream()
                             .max(Comparator.comparingDouble(opt ->
                                 opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0))
@@ -236,7 +241,6 @@ public class OptimizationService {
                     response.lambdaFunctionRecommendations().stream()
                         .filter(r -> r.finding() != null && r.finding() != LambdaFunctionRecommendationFinding.OPTIMIZED && r.memorySizeRecommendationOptions() != null && !r.memorySizeRecommendationOptions().isEmpty())
                         .map(r -> {
-                            // **MODIFIED LOGIC**: Find the best option based on savings
                             LambdaFunctionMemoryRecommendationOption bestOption = r.memorySizeRecommendationOptions().stream()
                                 .max(Comparator.comparingDouble(opt ->
                                     opt.savingsOpportunity() != null && opt.savingsOpportunity().estimatedMonthlySavings() != null ? opt.savingsOpportunity().estimatedMonthlySavings().value() : 0.0))
@@ -301,11 +305,10 @@ public class OptimizationService {
     }
 
     // ... [ The rest of the waste-finding methods (findUnattachedEbsVolumes, etc.) remain unchanged ] ...
-    // NOTE: I've collapsed the unchanged methods for brevity. They are still part of the file.
     private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEbsVolumes(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-            return ec2.describeVolumes(req -> req.filters(f -> f.name("status").values("available")))
+            return ec2.describeVolumes(req -> req.filters(List.of(software.amazon.awssdk.services.ec2.model.Filter.builder().name("status").values("available").build())))
                     .volumes().stream()
                     .map(volume -> {
                         double monthlyCost = calculateEbsMonthlyCost(volume, regionId);
@@ -557,13 +560,13 @@ public class OptimizationService {
     }
 
     private CompletableFuture<List<DashboardData.WastedResource>> findUnattachedEnis(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
-        return fetchAllRegionalResources(account, activeRegions, regionId -> {
-            Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-            return ec2.describeNetworkInterfaces(req -> req.filters(f -> f.name("status").values("available")))
-                    .networkInterfaces().stream()
-                    .map(eni -> new DashboardData.WastedResource(eni.networkInterfaceId(), getTagName(eni.tagSet(), eni.networkInterfaceId()), "ENI", regionId, 0.0, "Unattached ENI"))
-                    .collect(Collectors.toList());
-        }, "Unattached ENIs");
+    return fetchAllRegionalResources(account, activeRegions, regionId -> {
+        Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+            return ec2.describeNetworkInterfaces(req -> req.filters(List.of(software.amazon.awssdk.services.ec2.model.Filter.builder().name("status").values("available").build())))
+            .networkInterfaces().stream()
+            .map(eni -> new DashboardData.WastedResource(eni.networkInterfaceId(), getTagName(eni.tagSet(), eni.networkInterfaceId()), "ENI", regionId, 0.0, "Unattached ENI"))
+            .collect(Collectors.toList());
+    }, "Unattached ENIs");
     }
     
     private <T> CompletableFuture<List<T>> fetchAllRegionalResources(CloudAccount account, List<DashboardData.RegionStatus> activeRegions, Function<String, List<T>> fetchFunction, String serviceName) {
