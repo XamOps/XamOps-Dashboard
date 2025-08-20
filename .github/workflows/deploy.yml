@@ -34,23 +34,10 @@ jobs:
           docker build -t $ECR_URI:$IMAGE_TAG -f cloud/Dockerfile cloud
           docker push $ECR_URI:$IMAGE_TAG
 
-      - name: Get EC2 instance public DNS
-        id: get-ec2-info
-        run: |
-          # Fetch instance information and extract the PublicDnsName
-          EC2_PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids i-009aa3aa59a60f17f --query "Reservations[0].Instances[0].PublicDnsName" --output text)
-          echo "EC2_PUBLIC_DNS=$EC2_PUBLIC_DNS" >> $GITHUB_ENV
-          
       - name: Deploy to EC2 via SSM
-        id: deploy-ssm
-        uses: aws-actions/aws-cli@v1
-        with:
-          # This command sends a Run Command to the EC2 instance via SSM
-          # It uses the EC2 instance's ID and the commands to execute
-          # Note the use of "sudo" for docker commands
-          command: |
-            aws ssm send-command \
-              --document-name "AWS-RunShellScript" \
-              --instance-ids "i-009aa3aa59a60f17f" \
-              --parameters '{"commands":["echo \"Starting deployment on EC2 instance...\"","aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com","echo \"Pulling the new Docker image...\"","sudo docker pull 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Stopping old container...\"","sudo docker stop xamops-dashboard || true","sudo docker rm xamops-dashboard || true","echo \"Running the new container...\"","sudo docker run -d --name xamops-dashboard -p 8080:8080 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Deployment complete.\""]}' \
-              --timeout-seconds 600
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "i-009aa3aa59a60f17f" \
+            --parameters '{"commands":["echo \"Starting deployment on EC2 instance...\"","aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com","echo \"Pulling the new Docker image...\"","sudo docker pull 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Stopping old container...\"","sudo docker stop xamops-dashboard || true","sudo docker rm xamops-dashboard || true","echo \"Running the new container...\"","sudo docker run -d --name xamops-dashboard -p 8080:8080 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Deployment complete.\""]}' \
+            --timeout-seconds 600
