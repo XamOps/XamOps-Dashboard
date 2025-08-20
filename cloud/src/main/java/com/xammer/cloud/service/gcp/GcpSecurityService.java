@@ -34,8 +34,8 @@ public class GcpSecurityService {
             }
 
             try (SecurityCenterClient client = clientOpt.get()) {
-                // THE FIX IS HERE: Corrected parent format to work with the latest API versions.
-                String parent = String.format("projects/%s", gcpProjectId);
+                // *** THE FIX IS HERE: Corrected parent format to list findings for all sources. ***
+                String parent = String.format("projects/%s/sources/-", gcpProjectId);
                 log.info("Fetching security findings for project {} from parent {}", gcpProjectId, parent);
                 
                 ListFindingsRequest request = ListFindingsRequest.newBuilder().setParent(parent).build();

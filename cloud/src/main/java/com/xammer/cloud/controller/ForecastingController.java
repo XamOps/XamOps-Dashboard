@@ -49,10 +49,10 @@ public class ForecastingController {
                 null,
                 historicalDays,
                 forceRefresh
-        ).thenApply(historicalCostData -> {
+        ).thenCompose(historicalCostData -> {
             if (historicalCostData == null || historicalCostData.getLabels() == null || historicalCostData.getLabels().isEmpty()) {
                 logger.warn("No historical cost data found for account {} to generate a forecast.", accountId);
-                return ResponseEntity.ok("[]");
+                return CompletableFuture.completedFuture(ResponseEntity.status(org.springframework.http.HttpStatus.NO_CONTENT).body("[]"));
             }
 
             List<Map<String, Object>> formattedData = new ArrayList<>();
@@ -65,24 +65,32 @@ public class ForecastingController {
 
             if (formattedData.isEmpty()) {
                 logger.warn("Formatted data for forecasting is empty for account {}", accountId);
-                return ResponseEntity.ok("[]");
+                return CompletableFuture.completedFuture(ResponseEntity.status(org.springframework.http.HttpStatus.NO_CONTENT).body("[]"));
             }
 
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("periods", periods);
-            requestBody.put("data", formattedData);
-            
             try {
-                String forecastResult = forecastingService.getCostForecast(requestBody);
-                return ResponseEntity.ok(forecastResult);
+                return forecastingService.getCostForecast(
+                        accountId,
+                        "ALL".equalsIgnoreCase(serviceName) ? null : serviceName,
+                        periods
+                ).thenApply(result -> {
+                    try {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        String json = mapper.writeValueAsString(result);
+                        return ResponseEntity.ok(json);
+                    } catch (Exception ex) {
+                        logger.error("Error serializing forecast result to JSON", ex);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body("[]");
+                    }
+                });
             } catch (ResourceAccessException e) {
                 logger.error("Forecasting service is unavailable at the moment. Skipping forecast generation.", e);
-                return ResponseEntity.ok("[]");
+                return CompletableFuture.completedFuture(ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE).body("[]"));
             }
 
         }).exceptionally(ex -> {
             logger.error("Error fetching historical cost data for forecast for account {}", accountId, ex);
-            return ResponseEntity.status(500).body("[]");
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body("[]");
         });
     }
 }

@@ -26,7 +26,7 @@ public class GcpCloudlistController {
      * @param accountId The GCP Project ID.
      * @return A CompletableFuture with a list of all discovered resources.
      */
-    @GetMapping("/resources")
+    @GetMapping
     public CompletableFuture<ResponseEntity<List<GcpResourceDto>>> getAllResources(@RequestParam String accountId) {
         return gcpDataService.getAllResources(accountId)
                 .thenApply(ResponseEntity::ok);

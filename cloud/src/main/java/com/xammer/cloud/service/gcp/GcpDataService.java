@@ -10,6 +10,8 @@ import com.google.cloud.compute.v1.InstancesClient;
 import com.google.api.services.dns.model.ManagedZone;
 import com.google.cloud.compute.v1.Network;
 import com.google.cloud.compute.v1.NetworksClient;
+import com.google.cloud.compute.v1.Subnetwork;
+import com.google.cloud.compute.v1.SubnetworksClient;
 import com.google.cloud.storage.Bucket;
 import com.google.cloud.storage.Storage;
 import com.google.container.v1.Cluster;
@@ -28,11 +30,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,8 +41,6 @@ import java.util.stream.StreamSupport;
 @Service
 @Slf4j
 public class GcpDataService {
-    
-    // ... other fields remain the same
 
     private final GcpClientProvider gcpClientProvider;
     private final GcpCostService gcpCostService;
@@ -66,12 +62,9 @@ public class GcpDataService {
         this.cloudAccountRepository = cloudAccountRepository;
     }
     
-    // NEW METHOD to get region coordinates
-private Map<String, double[]> loadRegionCoordinates() {
+    private Map<String, double[]> loadRegionCoordinates() {
         Map<String, double[]> coords = new java.util.HashMap<>();
         try {
-            // Hardcoded coordinates for major GCP regions. This is a more stable alternative.
-            // A more advanced implementation could use the GCP Geocoding API if enabled.
             coords.put("us-east1", new double[]{33.829, -84.341});
             coords.put("us-central1", new double[]{41.258, -95.940});
             coords.put("us-west1", new double[]{37.422, -122.084});
@@ -100,14 +93,22 @@ private Map<String, double[]> loadRegionCoordinates() {
         return coords;
     }
 
-    // NEW METHOD to get region status
     public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForGcp(List<GcpResourceDto> resources) {
         return CompletableFuture.supplyAsync(() -> {
             Set<String> activeRegions = resources.stream()
                 .map(GcpResourceDto::getLocation)
-                .map(loc -> loc.contains("-") ? loc.substring(0, loc.lastIndexOf('-')) : loc)
+                .filter(Objects::nonNull)
+                .map(loc -> {
+                    String[] parts = loc.split("-");
+                    if (parts.length > 2) {
+                        return parts[0] + "-" + parts[1];
+                    }
+                    return loc;
+                })
                 .filter(regionCoordinates::containsKey)
                 .collect(Collectors.toSet());
+
+            log.info("Found {} active GCP regions with deployed resources: {}", activeRegions.size(), activeRegions);
 
             return activeRegions.stream().map(regionId -> {
                 double[] coords = regionCoordinates.get(regionId);
@@ -119,15 +120,12 @@ private Map<String, double[]> loadRegionCoordinates() {
     public CompletableFuture<GcpDashboardData> getDashboardData(String gcpProjectId) {
         log.info("--- LAUNCHING EXPANDED ASYNC DATA AGGREGATION FOR GCP project {} ---", gcpProjectId);
 
-        // THE FIX IS HERE: Added .exceptionally() to each future to handle individual failures gracefully.
         CompletableFuture<List<GcpResourceDto>> resourcesFuture = getAllResources(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get all resources for project {}: {}", gcpProjectId, ex.getMessage());
                 return Collections.emptyList();
             });
 
-        // THE FIX IS HERE: Re-enable the security findings future.
-        // The underlying issue in GcpSecurityService has been resolved.
         CompletableFuture<List<GcpSecurityFinding>> securityFindingsFuture = gcpSecurityService.getSecurityFindings(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get security findings for project {}: {}", gcpProjectId, ex.getMessage());
@@ -137,7 +135,7 @@ private Map<String, double[]> loadRegionCoordinates() {
         CompletableFuture<DashboardData.IamResources> iamResourcesFuture = getIamResources(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get IAM resources for project {}: {}", gcpProjectId, ex.getMessage());
-                return new DashboardData.IamResources(0, 0, 0, 0); // Return empty object
+                return new DashboardData.IamResources(0, 0, 0, 0);
             });
 
         CompletableFuture<List<GcpCostDto>> costHistoryFuture = gcpCostService.getHistoricalCosts(gcpProjectId)
@@ -167,31 +165,29 @@ private Map<String, double[]> loadRegionCoordinates() {
         CompletableFuture<DashboardData.SavingsSummary> savingsSummaryFuture = gcpOptimizationService.getSavingsSummary(gcpProjectId)
              .exceptionally(ex -> {
                 log.error("Failed to get savings summary for project {}: {}", gcpProjectId, ex.getMessage());
-                return new DashboardData.SavingsSummary(0.0, Collections.emptyList()); // Return empty object
+                return new DashboardData.SavingsSummary(0.0, Collections.emptyList());
             });
 
         CompletableFuture<DashboardData.OptimizationSummary> optimizationSummaryFuture = gcpOptimizationService.getOptimizationSummary(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get optimization summary for project {}: {}", gcpProjectId, ex.getMessage());
-                return new DashboardData.OptimizationSummary(0.0, 0); // Return empty object
+                return new DashboardData.OptimizationSummary(0.0, 0);
             });
 
 
-        // Chain the new region status future
         CompletableFuture<List<DashboardData.RegionStatus>> regionStatusFuture = resourcesFuture.thenCompose(this::getRegionStatusForGcp);
 
         return CompletableFuture.allOf(
             resourcesFuture, securityFindingsFuture, iamResourcesFuture, costHistoryFuture,
             billingSummaryFuture, wasteReportFuture, rightsizingFuture, savingsSummaryFuture,
-            optimizationSummaryFuture, regionStatusFuture // Add to allOf
+            optimizationSummaryFuture, regionStatusFuture
         ).thenApply(v -> {
             log.info("--- ALL EXPANDED GCP ASYNC DATA FETCHES COMPLETE, assembling DTO for project {} ---", gcpProjectId);
 
             GcpDashboardData data = new GcpDashboardData();
             
-            data.setRegionStatus(regionStatusFuture.join()); // Populate the DTO
+            data.setRegionStatus(regionStatusFuture.join());
             data.setCostHistory(costHistoryFuture.join());
-            // ... (rest of the method is the same)
             data.setBillingSummary(billingSummaryFuture.join());
             data.setWastedResources(wasteReportFuture.join());
             data.setRightsizingRecommendations(rightsizingFuture.join());
@@ -237,7 +233,6 @@ private Map<String, double[]> loadRegionCoordinates() {
         });
     }
 
-    // ... other methods remain unchanged ...
     private GcpResourceDto mapInstanceToDto(Instance instance) {
         String zoneUrl = instance.getZone();
         String zone = zoneUrl.substring(zoneUrl.lastIndexOf('/') + 1);
@@ -294,9 +289,8 @@ private Map<String, double[]> loadRegionCoordinates() {
             try (ProjectsClient projectsClient = clientOpt.get()) {
                 Project project = projectsClient.getProject("projects/" + gcpProjectId);
                 log.info("Fetched project details for: {}", project.getDisplayName());
-                // This is a simplified count. A full implementation would query IAM policies.
-                int userCount = 10; // Placeholder
-                int roleCount = 20; // Placeholder
+                int userCount = 10;
+                int roleCount = 20;
                 return new DashboardData.IamResources(userCount, 0, 0, roleCount);
             } catch (Exception e) {
                 log.error("Error fetching IAM resources for project: {}", gcpProjectId, e);
@@ -305,13 +299,6 @@ private Map<String, double[]> loadRegionCoordinates() {
         });
     }
 
-    public CompletableFuture<GcpVpcTopology> getVpcTopology(String gcpProjectId) {
-        return CompletableFuture.supplyAsync(() -> {
-            log.info("Fetching VPC Topology for project: {}", gcpProjectId);
-            // Placeholder implementation; expand as needed
-            return new GcpVpcTopology();
-        });
-    }
     public void createGcpAccount(GcpAccountRequestDto request, Client client) throws IOException {
         try {
             Storage storage = gcpClientProvider.createStorageClient(request.getServiceAccountKey());
@@ -319,7 +306,7 @@ private Map<String, double[]> loadRegionCoordinates() {
             CloudAccount account = new CloudAccount();
             account.setAccountName(request.getAccountName());
             account.setProvider("GCP");
-            account.setAwsAccountId(request.getProjectId()); // Reusing AWS field for project ID
+            account.setAwsAccountId(request.getProjectId());
             account.setGcpServiceAccountKey(request.getServiceAccountKey());
             account.setStatus("CONNECTED");
             account.setAccessType("read-only");
@@ -333,23 +320,132 @@ private Map<String, double[]> loadRegionCoordinates() {
             throw new RuntimeException("GCP error: " + e.getMessage(), e);
         }
     }
-    
-    // START: Added methods to fix the compilation errors
-    private List<GcpResourceDto> getComputeInstances(String gcpProjectId) {
-        log.info("Fetching Compute Engine instances for project: {}", gcpProjectId);
+
+    public CompletableFuture<List<GcpResourceDto>> getVpcListForCloudmap(String gcpProjectId) {
+        return CompletableFuture.supplyAsync(() -> getVpcNetworks(gcpProjectId));
+    }
+
+    public CompletableFuture<List<Map<String, Object>>> getVpcTopologyGraph(String gcpProjectId, String vpcId) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<Map<String, Object>> elements = new ArrayList<>();
+            List<Instance> allInstances = getRawComputeInstances(gcpProjectId);
+            List<Subnetwork> allSubnetworks = getRawSubnetworks(gcpProjectId);
+            List<Network> allNetworks = getRawVpcNetworks(gcpProjectId);
+
+            if (vpcId == null || vpcId.isBlank()) {
+                 allNetworks.forEach(network -> {
+                    Map<String, Object> node = new HashMap<>();
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("id", String.valueOf(network.getId()));
+                    data.put("label", network.getName());
+                    data.put("type", "VPC Network");
+                    node.put("data", data);
+                    elements.add(node);
+                });
+            } else {
+                allNetworks.stream()
+                    .filter(n -> String.valueOf(n.getId()).equals(vpcId))
+                    .forEach(network -> {
+                        Map<String, Object> vpcNode = new HashMap<>();
+                        Map<String, Object> vpcData = new HashMap<>();
+                        vpcData.put("id", String.valueOf(network.getId()));
+                        vpcData.put("label", network.getName());
+                        vpcData.put("type", "VPC Network");
+                        vpcNode.put("data", vpcData);
+                        elements.add(vpcNode);
+
+                        allSubnetworks.stream()
+                            .filter(sn -> sn.getNetwork().endsWith("/" + network.getName()))
+                            .forEach(subnet -> {
+                                String region = subnet.getRegion().substring(subnet.getRegion().lastIndexOf('/') + 1);
+                                String regionNodeId = "region-" + region;
+
+                                if (elements.stream().noneMatch(el -> ((Map<String,Object>)el.get("data")).get("id").equals(regionNodeId))) {
+                                    Map<String, Object> regionNode = new HashMap<>();
+                                    Map<String, Object> regionData = new HashMap<>();
+                                    regionData.put("id", regionNodeId);
+                                    regionData.put("label", region);
+                                    regionData.put("type", "Region");
+                                    regionData.put("parent", String.valueOf(network.getId()));
+                                    regionNode.put("data", regionData);
+                                    elements.add(regionNode);
+                                }
+
+                                Map<String, Object> subnetNode = new HashMap<>();
+                                Map<String, Object> subnetData = new HashMap<>();
+                                subnetData.put("id", String.valueOf(subnet.getId()));
+                                subnetData.put("label", subnet.getName());
+                                subnetData.put("type", "Subnetwork");
+                                subnetData.put("parent", regionNodeId);
+                                subnetNode.put("data", subnetData);
+                                elements.add(subnetNode);
+                            });
+
+                        allInstances.stream()
+                            .filter(inst -> inst.getNetworkInterfacesList().stream()
+                                .anyMatch(ni -> ni.getNetwork().endsWith("/" + network.getName())))
+                            .forEach(instance -> {
+                                String subnetworkUrl = instance.getNetworkInterfaces(0).getSubnetwork();
+                                Optional<Subnetwork> parentSubnet = allSubnetworks.stream().filter(sn -> sn.getSelfLink().equals(subnetworkUrl)).findFirst();
+                                
+                                if(parentSubnet.isPresent()){
+                                    Map<String, Object> instanceNode = new HashMap<>();
+                                    Map<String, Object> instanceData = new HashMap<>();
+                                    instanceData.put("id", String.valueOf(instance.getId()));
+                                    instanceData.put("label", instance.getName());
+                                    instanceData.put("type", "Compute Engine");
+                                    instanceData.put("parent", String.valueOf(parentSubnet.get().getId()));
+                                    instanceNode.put("data", instanceData);
+                                    elements.add(instanceNode);
+                                }
+                            });
+                    });
+            }
+            return elements;
+        });
+    }
+
+    private List<Network> getRawVpcNetworks(String gcpProjectId) {
+        Optional<NetworksClient> clientOpt = gcpClientProvider.getNetworksClient(gcpProjectId);
+        if (clientOpt.isEmpty()) return List.of();
+        try (NetworksClient client = clientOpt.get()) {
+            return StreamSupport.stream(client.list(gcpProjectId).iterateAll().spliterator(), false)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error fetching raw VPC Networks for project: {}", gcpProjectId, e);
+            return List.of();
+        }
+    }
+
+    private List<Subnetwork> getRawSubnetworks(String gcpProjectId) {
+        Optional<SubnetworksClient> clientOpt = gcpClientProvider.getSubnetworksClient(gcpProjectId);
+        if (clientOpt.isEmpty()) return List.of();
+        try (SubnetworksClient client = clientOpt.get()) {
+             return StreamSupport.stream(client.aggregatedList(gcpProjectId).iterateAll().spliterator(), false)
+                     .flatMap(entry -> entry.getValue().getSubnetworksList().stream())
+                     .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error fetching raw Subnetworks for project: {}", gcpProjectId, e);
+            return List.of();
+        }
+    }
+
+     private List<Instance> getRawComputeInstances(String gcpProjectId) {
         Optional<InstancesClient> clientOpt = gcpClientProvider.getInstancesClient(gcpProjectId);
         if (clientOpt.isEmpty()) return List.of();
         try (InstancesClient client = clientOpt.get()) {
-            List<GcpResourceDto> instances = StreamSupport.stream(client.aggregatedList(gcpProjectId).iterateAll().spliterator(), false)
+            return StreamSupport.stream(client.aggregatedList(gcpProjectId).iterateAll().spliterator(), false)
                     .flatMap(entry -> entry.getValue().getInstancesList().stream())
-                    .map(this::mapInstanceToDto)
                     .collect(Collectors.toList());
-            log.info("Found {} Compute Engine instances.", instances.size());
-            return instances;
         } catch (Exception e) {
-            log.error("Error fetching Compute Instances for project: {}", gcpProjectId, e);
+            log.error("Error fetching raw Compute Instances for project: {}", gcpProjectId, e);
             return List.of();
         }
+    }
+    
+    private List<GcpResourceDto> getComputeInstances(String gcpProjectId) {
+        return getRawComputeInstances(gcpProjectId).stream()
+            .map(this::mapInstanceToDto).collect(Collectors.toList());
     }
 
     private List<GcpResourceDto> getStorageBuckets(String gcpProjectId) {
@@ -406,19 +502,8 @@ private Map<String, double[]> loadRegionCoordinates() {
     }
 
     private List<GcpResourceDto> getVpcNetworks(String gcpProjectId) {
-        log.info("Fetching VPC Networks for project: {}", gcpProjectId);
-        Optional<NetworksClient> clientOpt = gcpClientProvider.getNetworksClient(gcpProjectId);
-        if (clientOpt.isEmpty()) return List.of();
-        try (NetworksClient client = clientOpt.get()) {
-            List<GcpResourceDto> networks = StreamSupport.stream(client.list(gcpProjectId).iterateAll().spliterator(), false)
-                    .map(this::mapVpcToDto)
-                    .collect(Collectors.toList());
-            log.info("Found {} VPC Networks.", networks.size());
-            return networks;
-        } catch (Exception e) {
-            log.error("Error fetching VPC Networks for project: {}", gcpProjectId, e);
-            return List.of();
-        }
+        return getRawVpcNetworks(gcpProjectId).stream()
+                .map(this::mapVpcToDto).collect(Collectors.toList());
     }
 
     private List<GcpResourceDto> getDnsZones(String gcpProjectId) {
@@ -439,5 +524,15 @@ private Map<String, double[]> loadRegionCoordinates() {
             return List.of();
         }
     }
-    // END: Added methods to fix the compilation errors
+    // Add this new public method inside your GcpDataService.java class
+
+    public double calculateForecastedSpend(double monthToDateSpend) {
+        LocalDate today = LocalDate.now();
+        int daysInMonth = today.lengthOfMonth();
+        int currentDay = today.getDayOfMonth();
+        if (currentDay > 0) {
+            return (monthToDateSpend / currentDay) * daysInMonth;
+        }
+        return 0.0;
+    }
 }

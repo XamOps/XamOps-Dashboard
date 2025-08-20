@@ -2,249 +2,648 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>XamOps - GCP Cloud Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - GCP Cloudmap</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.0.4/leader-line.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 
     <style>
-        .resource-node {
-            border: 2px solid transparent;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        #cy { 
+            width: 100%; 
+            height: 100%; 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            z-index: 1; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(229, 231, 235, 0.5);
+        }
+        
+        #info-panel { 
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            z-index: 10; 
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px 0 0 16px;
+            box-shadow: -10px 0 25px -5px rgba(0, 0, 0, 0.1), -4px 0 10px -3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+        }
+        
+        .form-select {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
             transition: all 0.3s ease;
         }
-        .selected-node {
-            border-color: #4f46e5;
-            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
-            transform: scale(1.05);
+        
+        .form-select:focus {
+            background: rgba(255, 255, 255, 1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .network-node {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .network-node:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .message-overlay {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 24px;
+        }
+        
+        .vpc-badge {
+            background: var(--success-gradient);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .legend {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 16px;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            z-index: 5;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .legend-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .toolbar {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px;
+            margin: 16px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 5;
+        }
+        
+        .toolbar-button {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin: 0 4px;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .toolbar-button:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-1px);
         }
     </style>
 </head>
-<body class="bg-gray-100 font-sans">
+<body class="bg-gray-100">
 
-<div class="flex h-screen">
-    <div th:insert="~{fragments/_sidebar :: sidebar}"></div>
+<div class="flex h-screen bg-white">
+    <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
 
-    <div class="flex-1 flex flex-col overflow-hidden" x-data="cloudMap()">
-        <header class="bg-white shadow-md p-4 flex justify-between items-center z-20">
-            <h1 class="text-2xl font-semibold text-gray-800">GCP Cloud Map</h1>
+    <main class="flex-1 flex flex-col">
+        <header class="header-gradient h-auto flex-col sm:flex-row flex items-center justify-between border-b px-8 py-4 gap-4">
             <div class="flex items-center space-x-4">
-                <button @click="autoLayout" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">
-                    <i class="fas fa-project-diagram mr-2"></i>Auto-Layout
-                </button>
-                <button @click="fetchTopology(true)" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
-                    <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isLoading}"></i>Refresh
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-project-diagram text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-gray-800">GCP Cloudmap</h1>
+                    <p class="text-sm text-gray-600">Visualize your GCP infrastructure</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                    <span class="text-sm text-gray-600">Live topology</span>
+                </div>
+                <div class="flex items-center space-x-3 glass-card rounded-xl p-3">
+                    <label for="vpc-selector" class="text-sm font-semibold text-gray-700">VPC:</label>
+                    <select id="vpc-selector" class="form-select text-sm rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
+                        <option value="">Loading VPCs...</option>
+                    </select>
+                </div>
+                <button id="save-btn" class="btn-primary px-4 py-2 text-sm font-semibold rounded-lg shadow-md flex items-center space-x-2">
+                    <i class="fas fa-download"></i>
+                    <span>Export PNG</span>
                 </button>
             </div>
         </header>
 
-        <main class="flex-1 flex overflow-hidden relative">
-            <div id="canvas" class="flex-1 relative bg-gray-200 overflow-auto" @click.self="selectedNode = null">
-                <template x-if="isLoading">
-                    <div class="absolute inset-0 flex items-center justify-center bg-gray-200 bg-opacity-75 z-30">
-                        <div class="flex flex-col items-center">
-                            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-                            <span class="mt-4 text-lg text-gray-700">Loading Cloud Topology...</span>
+        <div class="flex-1 relative" id="cloudmap-container">
+            <div id="graph-container" class="w-full h-full p-4">
+                <div id="message-overlay" class="absolute inset-0 flex items-center justify-center z-20">
+                    <div class="message-overlay text-center">
+                        <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-network-wired text-white text-2xl"></i>
                         </div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Ready to Visualize</h3>
+                        <p class="text-gray-600">Please select a VPC to begin mapping your infrastructure.</p>
                     </div>
-                </template>
-
-                <template x-for="node in topology.nodes" :key="node.id">
-                    <div :id="node.id" class="resource-node absolute p-3 bg-white rounded-lg shadow-md flex items-center space-x-3 cursor-grab"
-                         :class="{ 'selected-node': selectedNode && selectedNode.id === node.id }"
-                         @click="selectNode(node)">
-                        <img :src="getResourceIcon(node.type)" class="w-8 h-8 flex-shrink-0" alt="">
-                        <div>
-                            <p class="font-bold text-sm text-gray-800" x-text="node.label"></p>
-                            <p class="text-xs text-gray-500" x-text="node.type"></p>
+                </div>
+                
+                <div id="cy" class="rounded-xl"></div>
+                
+                <div class="toolbar">
+                    <div class="flex items-center space-x-2">
+                        <button class="toolbar-button" onclick="cy && cy.fit()" title="Fit to view">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                        </button>
+                        <button class="toolbar-button" onclick="cy && cy.center()" title="Center view">
+                            <i class="fas fa-crosshairs"></i>
+                        </button>
+                        <button class="toolbar-button" onclick="cy && cy.zoom(cy.zoom() * 1.2)" title="Zoom in">
+                            <i class="fas fa-search-plus"></i>
+                        </button>
+                        <button class="toolbar-button" onclick="cy && cy.zoom(cy.zoom() * 0.8)" title="Zoom out">
+                            <i class="fas fa-search-minus"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="legend">
+                    <h4 class="text-sm font-bold text-gray-800 mb-3">Legend</h4>
+                    <div class="legend-item">
+                        <div class="legend-icon bg-green-100 border-2 border-green-500">
+                            <i class="fas fa-cloud text-green-600 text-xs"></i>
                         </div>
+                        <span class="text-gray-700">VPC</span>
                     </div>
-                </template>
+                    <div class="legend-item">
+                        <div class="legend-icon bg-blue-100 border border-blue-400" style="border-style: dashed;">
+                            <i class="fas fa-layer-group text-blue-600 text-xs"></i>
+                        </div>
+                        <span class="text-gray-700">Region/Zone</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-icon bg-emerald-100 border border-emerald-400">
+                            <i class="fas fa-network-wired text-emerald-600 text-xs"></i>
+                        </div>
+                        <span class="text-gray-700">Subnet</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-icon bg-orange-100">
+                            <i class="fas fa-server text-orange-600 text-xs"></i>
+                        </div>
+                        <span class="text-gray-700">Resources</span>
+                    </div>
+                </div>
             </div>
-
-            <div class="w-80 bg-white border-l border-gray-300 overflow-y-auto p-4 transition-all duration-300 z-10"
-                 :class="selectedNode ? 'translate-x-0' : 'translate-x-full absolute right-0'">
-                <template x-if="selectedNode">
-                    <div>
-                        <div class="flex items-center space-x-3 mb-4">
-                            <img :src="getResourceIcon(selectedNode.type)" class="w-10 h-10" alt="">
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-900" x-text="selectedNode.label"></h3>
-                                <p class="text-sm text-gray-500" x-text="selectedNode.type"></p>
-                            </div>
-                        </div>
-                        <div class="space-y-3">
-                            <h4 class="font-semibold text-gray-700 border-b pb-2">Details</h4>
-                            <template x-for="(value, key) in selectedNode.properties" :key="key">
-                                <div class="text-sm">
-                                    <p class="font-semibold text-gray-600 capitalize" x-text="key.replace(/_/g, ' ')"></p>
-                                    <p class="text-gray-800 break-words" x-text="value"></p>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </template>
-                <template x-if="!selectedNode">
-                    <div class="text-center text-gray-500 mt-10">
-                        <i class="fas fa-mouse-pointer text-3xl mb-2"></i>
-                        <p>Select a resource to see its details.</p>
-                    </div>
-                </template>
+            
+            <div id="info-panel" class="absolute top-0 right-0 h-full w-96 p-8 border-l transform translate-x-full">
+                <button id="close-panel-btn" class="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+                <div id="info-content" class="mt-4"></div>
             </div>
-        </main>
-    </div>
+        </div>
+    </main>
 </div>
 
 <script>
-    function getResourceIcon(resourceType) {
-        const iconMap = {
-            'VM Instance': '/icons/gcp-compute-engine.png',
-            'Cloud Storage Bucket': '/icons/gcp-cloud-storage.png',
-            'VPC Network': '/icons/gcp-vpc.png',
-            'Subnetwork': '/icons/gcp-vpc.png',
-            'Firewall Rule': '/icons/gcp-firewall.png',
-            'Cloud SQL Instance': '/icons/gcp-cloud-sql.png',
-            'Kubernetes Engine Cluster': '/icons/gcp-gke.png',
-            'Cloud DNS Zone': '/icons/gcp-cloud-dns.png',
-            'Cloud IAM Service Account': '/icons/gcp-iam.png',
-            'Load Balancer': '/icons/gcp-load-balancer.png',
-            'Cloud Run Service': '/icons/gcp-cloud-run.png',
-            'Cloud Function': '/icons/gcp-cloud-functions.png'
-        };
-        return iconMap[resourceType] || '/icons/default-icon.png';
-    }
+document.addEventListener('DOMContentLoaded', function () {
+    const vpcSelector = document.getElementById('vpc-selector');
+    const messageOverlay = document.getElementById('message-overlay');
+    const infoPanel = document.getElementById('info-panel');
+    const infoContent = document.getElementById('info-content');
+    const closePanelBtn = document.getElementById('close-panel-btn');
+    const saveBtn = document.getElementById('save-btn');
+    let cy;
+
+    cytoscape.use(cytoscapeDagre);
+
+    const icons = {
+        'VPC Network': '/icons/gcp-vpc.png',
+        'Compute Engine': '/icons/gcp-compute-engine.png',
+        'Cloud SQL': '/icons/gcp-cloud-sql.png',
+        'Load Balancer': '/icons/gcp-load-balancer.png',
+        'Cloud Storage': '/icons/gcp-cloud-storage.png',
+        'Firewall Rule': '/icons/gcp-firewall.png',
+        'Kubernetes Engine': '/icons/gcp-gke.png',
+        'Cloud DNS': '/icons/gcp-cloud-dns.png'
+    };
+
+    closePanelBtn.addEventListener('click', () => infoPanel.classList.add('translate-x-full'));
+    vpcSelector.addEventListener('change', () => loadGraphForVpc(vpcSelector.value));
     
-    function cloudMap() {
-        return {
-            isLoading: true,
-            topology: { nodes: [], links: [] },
-            selectedNode: null,
-            lines: [],
-            
-            init() {
-                this.fetchTopology();
-            },
+    saveBtn.addEventListener('click', () => {
+        if(cy) {
+            const png64 = cy.png({ output: 'base64uri', bg: '#fff', full: true });
+            const link = document.createElement('a');
+            link.download = `gcp-cloudmap-${vpcSelector.value || 'global'}-${new Date().toISOString().split('T')[0]}.png`;
+            link.href = png64;
+            link.click();
+        }
+    });
 
-            fetchTopology(isManualRefresh = false) {
-                this.isLoading = true;
-                const accountId = sessionStorage.getItem('selectedAccountId');
-                if (!accountId) {
-                    this.isLoading = false;
-                    console.error('No account selected');
-                    return;
-                }
-                
-                this.clearLines();
-                
-                fetch(`/api/gcp/vpc-topology?accountId=${accountId}&forceRefresh=${isManualRefresh}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        this.topology = data;
-                        this.$nextTick(() => {
-                            this.initDraggables();
-                            this.autoLayout();
-                        });
-                    })
-                    .catch(err => console.error('Failed to fetch topology:', err))
-                    .finally(() => this.isLoading = false);
-            },
-            
-            initDraggables() {
-                interact('.resource-node').draggable({
-                    listeners: {
-                        move: event => {
-                            const target = event.target;
-                            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-                            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
-                            
-                            target.style.transform = `translate(${x}px, ${y}px)`;
-                            target.setAttribute('data-x', x);
-                            target.setAttribute('data-y', y);
-                            
-                            this.updateLines();
-                        }
-                    }
-                });
-            },
+    function initialize() {
+        const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+        if (!selectedAccountId) {
+            vpcSelector.innerHTML = '<option value="">Please select a GCP account</option>';
+            return;
+        }
 
-            drawLines() {
-                this.clearLines();
-                this.topology.links.forEach(link => {
-                    const source = document.getElementById(link.source);
-                    const target = document.getElementById(link.target);
-                    if (source && target) {
-                        const line = new LeaderLine(source, target, {
-                            color: 'rgba(107, 114, 128, 0.7)',
-                            size: 2,
-                            path: 'grid',
-                            endPlug: 'arrow1'
-                        });
-                        this.lines.push(line);
-                    }
-                });
-            },
-            
-            updateLines() {
-                this.lines.forEach(line => line.position());
-            },
-
-            clearLines() {
-                this.lines.forEach(line => line.remove());
-                this.lines = [];
-            },
-            
-            selectNode(node) {
-                this.selectedNode = node;
-            },
-
-            autoLayout() {
-                if(this.topology.nodes.length === 0) return;
-
-                const canvas = document.getElementById('canvas');
-                const canvasWidth = canvas.clientWidth;
-                const columns = {};
-
-                // Group nodes by type
-                this.topology.nodes.forEach(node => {
-                    if (!columns[node.type]) {
-                        columns[node.type] = [];
-                    }
-                    columns[node.type].push(node);
-                });
-                
-                const columnOrder = ['VPC Network', 'Subnetwork', 'VM Instance', 'Kubernetes Engine Cluster', 'Cloud SQL Instance'];
-                const sortedColumnKeys = Object.keys(columns).sort((a,b) => {
-                    let indexA = columnOrder.indexOf(a);
-                    let indexB = columnOrder.indexOf(b);
-                    if(indexA === -1) indexA = columnOrder.length;
-                    if(indexB === -1) indexB = columnOrder.length;
-                    return indexA - indexB;
-                });
-                
-                const colWidth = canvasWidth / (sortedColumnKeys.length + 1);
-                
-                sortedColumnKeys.forEach((colKey, colIndex) => {
-                    const columnNodes = columns[colKey];
-                    const x = colWidth * (colIndex + 1);
-
-                    columnNodes.forEach((node, rowIndex) => {
-                        const y = 100 + rowIndex * 120;
-                        const el = document.getElementById(node.id);
-                        if(el) {
-                            el.style.left = '0px';
-                            el.style.top = '0px';
-                            el.style.transform = `translate(${x}px, ${y}px)`;
-                            el.setAttribute('data-x', x);
-                            el.setAttribute('data-y', y);
-                        }
+        vpcSelector.innerHTML = '<option value="">Loading VPCs...</option>';
+        fetch(`/api/gcp/cloudmap/vpcs?accountId=${selectedAccountId}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Bad Request');
+                return response.json();
+            })
+            .then(vpcs => {
+                vpcSelector.innerHTML = '<option value="">🌐 Global & Unattached</option>';
+                if (Array.isArray(vpcs)) {
+                    vpcs.forEach(vpc => {
+                        const option = document.createElement('option');
+                        option.value = vpc.id;
+                        option.textContent = `${vpc.name} (${vpc.id})`;
+                        vpcSelector.appendChild(option);
                     });
-                });
-                
-                this.$nextTick(() => this.drawLines());
+                } else {
+                    console.error('Expected an array of VPCs, but received:', vpcs);
+                }
+                loadGraphForVpc(""); // Load global view by default
+            })
+            .catch(error => {
+                console.error('Error fetching VPCs:', error);
+                vpcSelector.innerHTML = '<option value="">❌ Error loading VPCs</option>';
+            });
+    }
+
+    function loadGraphForVpc(vpcId) {
+        if (cy) cy.destroy();
+        infoPanel.classList.add('translate-x-full');
+        
+        const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+        if (!selectedAccountId) {
+            messageOverlay.innerHTML = `
+                <div class="message-overlay text-center">
+                    <div class="w-16 h-16 bg-gradient-to-br from-red-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-exclamation-triangle text-white text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-2">Account Required</h3>
+                    <p class="text-gray-600">Please select a GCP account to begin mapping the infrastructure.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const url = `/api/gcp/cloudmap/graph?accountId=${selectedAccountId}&vpcId=${vpcId || ''}`;
+        
+        messageOverlay.innerHTML = `
+            <div class="message-overlay text-center">
+                <div class="loading-spinner mx-auto mb-4"></div>
+                <h3 class="text-lg font-bold text-gray-800 mb-2">Loading Infrastructure</h3>
+                <p class="text-gray-600">Analyzing your GCP topology...</p>
+            </div>
+        `;
+        messageOverlay.style.display = 'flex';
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                messageOverlay.style.display = 'none';
+                renderGraph(data);
+            })
+            .catch(error => {
+                console.error('Error fetching graph data:', error);
+                messageOverlay.innerHTML = `
+                    <div class="message-overlay text-center">
+                        <div class="w-16 h-16 bg-gradient-to-br from-red-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-exclamation-triangle text-white text-2xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Load Error</h3>
+                        <p class="text-gray-600">Could not load graph data. Please try again.</p>
+                    </div>
+                `;
+            });
+    }
+
+    function renderGraph(graphData) {
+        cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: graphData,
+            layout: {
+                name: 'dagre',
+                nodeSep: 80,
+                edgeSep: 20,
+                rankSep: 100,
+                rankDir: 'TB',
+                align: 'UL',
+                spacingFactor: 1.5,
+            },
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'shape': 'rectangle',
+                        'label': 'data(label)',
+                        'font-size': '11px',
+                        'font-weight': '600',
+                        'text-valign': 'bottom',
+                        'text-halign': 'center',
+                        'color': '#374151',
+                        'text-margin-y': 8,
+                        'width': 60, 
+                        'height': 60,
+                        'background-opacity': 0,
+                        'background-image': (node) => icons[node.data('type')] || 'none',
+                        'background-fit': 'contain',
+                        'background-clip': 'none',
+                        'border-width': 2,
+                        'border-color': '#e5e7eb',
+                        'border-opacity': 0.8,
+                        'transition-property': 'background-color, border-color, width, height',
+                        'transition-duration': '0.3s'
+                    }
+                },
+                {
+                    selector: 'node:hover',
+                    style: {
+                        'width': 70,
+                        'height': 70,
+                        'border-color': '#667eea',
+                        'border-width': 3
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: { 
+                        'width': 2, 
+                        'line-color': '#9ca3af', 
+                        'target-arrow-color': '#9ca3af', 
+                        'target-arrow-shape': 'triangle', 
+                        'curve-style': 'bezier',
+                        'opacity': 0.8
+                    }
+                },
+                {
+                    selector: ':parent',
+                    style: {
+                        'text-valign': 'top', 
+                        'text-halign': 'center', 
+                        'font-weight': 'bold',
+                        'color': '#1f2937',
+                        'font-size': '16px',
+                        'background-opacity': 1,
+                        'background-image': 'none',
+                        'padding': '20px'
+                    }
+                },
+                {
+                    selector: 'node[type="VPC Network"]',
+                    style: {
+                        'background-color': '#f0fdf4',
+                        'border-width': 3,
+                        'border-color': '#10b981',
+                        'border-style': 'solid'
+                    }
+                },
+                {
+                    selector: 'node[type="Region"]',
+                    style: {
+                        'background-color': '#f0f9ff',
+                        'border-width': 2,
+                        'border-color': '#60a5fa',
+                        'border-style': 'dashed'
+                    }
+                },
+                {
+                    selector: 'node[type="Subnetwork"]',
+                    style: {
+                        'background-color': '#ecfdf5',
+                        'border-width': 2,
+                        'border-color': '#6ee7b7',
+                        'border-style': 'solid'
+                    }
+                },
+                { 
+                    selector: 'node[type="Firewall Rule"]', 
+                    style: { 
+                        'width': 40, 
+                        'height': 40,
+                        'background-color': '#fef3c7',
+                        'border-color': '#f59e0b'
+                    } 
+                }, 
+            ]
+        });
+
+        cy.on('tap', 'node', evt => displayNodeInfo(evt.target.data()));
+        cy.on('tap', evt => { if (evt.target === cy) infoPanel.classList.add('translate-x-full'); });
+        
+        // Auto-fit the graph
+        cy.fit();
+    }
+
+    function displayNodeInfo(data) {
+        const nodeTypeColors = {
+            'VPC Network': 'from-green-500 to-emerald-600',
+            'Compute Engine': 'from-orange-500 to-red-600',
+            'Cloud SQL': 'from-blue-500 to-indigo-600',
+            'Load Balancer': 'from-purple-500 to-pink-600',
+            'Cloud Storage': 'from-green-500 to-teal-600',
+            'Firewall Rule': 'from-yellow-500 to-orange-600',
+            'Kubernetes Engine': 'from-blue-500 to-cyan-600',
+            'Cloud DNS': 'from-indigo-500 to-purple-600'
+        };
+
+        const gradientClass = nodeTypeColors[data.type] || 'from-gray-500 to-gray-600';
+        
+        let contentHtml = `
+            <div class="slide-in">
+                <div class="w-12 h-12 bg-gradient-to-br ${gradientClass} rounded-xl flex items-center justify-center mb-4">
+                    <i class="fas fa-${getIconForType(data.type)} text-white text-lg"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">${data.label}</h2>
+                <div class="vpc-badge mb-4">${data.type}</div>
+                <p class="text-sm text-gray-500 font-mono mb-6 bg-gray-50 p-2 rounded">${data.id}</p>
+                <div class="space-y-3">
+        `;
+
+        const internalKeys = ['id', 'label', 'parent', 'type'];
+        for (const [key, value] of Object.entries(data)) {
+            if (!internalKeys.includes(key) && value) {
+                contentHtml += `
+                    <div class="network-node">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-700">${key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span class="font-mono text-gray-900 text-sm">${value}</span>
+                        </div>
+                    </div>
+                `;
             }
         }
+        contentHtml += `</div></div>`;
+        
+        infoContent.innerHTML = contentHtml;
+        infoPanel.classList.remove('translate-x-full');
     }
+
+    function getIconForType(type) {
+        const iconMap = {
+            'VPC Network': 'cloud',
+            'Compute Engine': 'server',
+            'Cloud SQL': 'database',
+            'Load Balancer': 'balance-scale',
+            'Cloud Storage': 'archive',
+            'Firewall Rule': 'shield-alt',
+            'Kubernetes Engine': 'cogs',
+            'Cloud DNS': 'globe',
+            'Region': 'layer-group',
+            'Subnetwork': 'network-wired'
+        };
+        return iconMap[type] || 'cube';
+    }
+
+    initialize();
+});
 </script>
 
 </body>
