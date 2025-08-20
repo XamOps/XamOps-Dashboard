@@ -2,35 +2,73 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>XamOps - GCP Costs Overview</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - GCP Cost Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        :root { --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); --glass-bg: rgba(255, 255, 255, 0.95); --glass-border: rgba(255, 255, 255, 0.2); }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
+        .glass-card { background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+        .header-gradient { background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(229,231,235,0.8); }
+        .btn-primary { background: var(--primary-gradient); border: none; color: white; transition: all 0.3s ease; }
+        .form-select { background: var(--glass-bg); }
+        .chart-container { background: var(--glass-bg); border-radius: 16px; padding: 24px; border: 1px solid var(--glass-border); }
+        .table-enhanced { background: var(--glass-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--glass-border); }
+        .metric-card { background: var(--glass-bg); border: 1px solid var(--glass-border); }
+        .gradient-text { background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-50">
     <div class="flex">
-        <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-20">
+        <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
             <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
         </aside>
         <div class="ml-64 flex-1">
-            <main class="flex-1 p-6" x-data="gcpCostOverview()">
-                 <header class="h-20 flex items-center justify-between px-6 -mx-6 -mt-6 mb-6 border-b sticky top-0 z-10 bg-white/50 backdrop-blur-sm">
-                    <h1 class="text-xl font-bold text-gray-800">GCP Costs Overview</h1>
-                    <div class="text-sm text-gray-500">Project ID: <span x-text="accountId" class="font-semibold text-gray-700"></span></div>
-                </header>
-                <div class="space-y-6">
-                     <div class="bg-white p-6 rounded-lg shadow-md">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-4">6-Month Cost History</h2>
-                        <div x-show="isLoading" class="animate-pulse h-64 bg-gray-200 rounded-md"></div>
-                        <div x-show="!isLoading">
-                             <canvas id="historicalCostChart" class="w-full h-64"></canvas>
+            <main class="flex-1 flex flex-col min-h-screen" x-data="costManagement()">
+                <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center"><i class="fas fa-dollar-sign text-white text-xl"></i></div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">GCP Cost Management</h1>
+                            <p class="text-sm text-gray-600">Analyze and optimize your GCP spending</p>
                         </div>
                     </div>
-                    <div class="bg-white p-6 rounded-lg shadow-md">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-4">Current Month Costs by Service</h2>
-                        <div x-show="isLoading" class="animate-pulse h-64 bg-gray-200 rounded-md"></div>
-                         <div x-show="!isLoading">
-                            <canvas id="costByServiceChart" class="w-full h-64"></canvas>
+                    <button @click="loadCostData(true); renderCostForecastChart();" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                        <span x-text="isRefreshing ? 'Refreshing...' : 'Refresh Data'"></span>
+                    </button>
+                </header>
+                <div class="flex-1 p-8 space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="metric-card rounded-2xl p-6"><p class="text-sm text-gray-600">Total Spend (Last 90 Days)</p><p class="text-3xl font-bold gradient-text" x-text="formatCurrency(totalCost)"></p></div>
+                        <div class="metric-card rounded-2xl p-6"><p class="text-sm text-gray-600">Categories</p><p class="text-3xl font-bold gradient-text" x-text="costData.length"></p></div>
+                        <div class="metric-card rounded-2xl p-6"><p class="text-sm text-gray-600">Top Spender</p><p class="text-xl font-semibold text-gray-800 truncate" x-text="topSpender.name"></p><p class="text-2xl font-bold gradient-text" x-text="formatCurrency(topSpender.amount)"></p></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-8">
+                        <div class="flex flex-wrap items-center justify-between gap-6 mb-8">
+                            <h2 class="text-xl font-bold text-gray-800">Cost Breakdown</h2>
+                            <div class="flex items-center space-x-4 bg-white/70 rounded-xl p-4 border"><span class="text-sm font-medium text-gray-700">Group by:</span><select x-model="groupBy" @change="loadCostData(true)" class="form-select text-sm rounded-lg border-gray-300"><option value="SERVICE">Service</option><option value="PROJECT">Project</option></select></div>
+                        </div>
+                        <div x-show="!isLoading && costData.length > 0" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                            <div class="lg:col-span-1 chart-container h-96"><canvas id="costChart"></canvas></div>
+                            <div class="lg:col-span-2 table-enhanced"><div class="overflow-x-auto max-h-96"><table class="w-full text-sm"><thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0"><tr><th class="px-6 py-4 text-left" x-text="groupBy.charAt(0) + groupBy.slice(1).toLowerCase()"></th><th class="px-6 py-4 text-right">Cost</th><th class="px-6 py-4 text-right">% of Total</th></tr></thead><tbody class="divide-y divide-gray-200"><template x-for="item in sortedCostData" :key="item.name"><tr><td class="px-6 py-4 font-medium text-gray-800" x-text="item.name || '(Not Set)'"></td><td class="px-6 py-4 text-right font-semibold" x-text="formatCurrency(item.amount)"></td><td class="px-6 py-4 text-right text-gray-600" x-text="((item.amount / totalCost) * 100).toFixed(1) + '%'"></td></tr></template></tbody></table></div></div>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-8">
+                        <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                            <h2 class="text-xl font-bold text-gray-800">Cost Forecast</h2>
+                            <div class="flex items-center space-x-4">
+                                <select x-model="forecast.service" @change="renderCostForecastChart()" class="form-select text-sm rounded-lg border-gray-300"><template x-for="service in forecast.availableServices" :key="service"><option :value="service" x-text="service"></option></template></select>
+                                <select x-model="forecast.periods" @change="renderCostForecastChart()" class="form-select text-sm rounded-lg border-gray-300"><option value="30">Next 30 Days</option><option value="60">Next 60 Days</option><option value="90">Next 90 Days</option></select>
+                            </div>
+                        </div>
+                        <div class="chart-container relative h-96">
+                             <div x-show="forecast.isLoading" class="absolute inset-0 flex items-center justify-center bg-white/50 z-10"><div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div></div>
+                            <canvas id="costForecastChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -38,58 +76,66 @@
         </div>
     </div>
     <script>
-        function gcpCostOverview() {
+        function costManagement() {
             return {
-                isLoading: true,
-                accountId: sessionStorage.getItem('selectedAccountId'),
-                init() {
-                    if (!this.accountId) {
-                        this.isLoading = false;
-                        return;
-                    }
-                    Promise.all([
-                        this.fetchHistoricalCosts(),
-                        this.fetchCostsByService()
-                    ]).finally(() => this.isLoading = false);
+                isLoading: true, isRefreshing: false, costData: [], groupBy: 'SERVICE', costChart: null, costForecastChart: null,
+                forecast: { isLoading: true, service: 'ALL', periods: 30, availableServices: ['ALL'] },
+                init() { this.loadCostData(false); this.loadForecastServices(); this.renderCostForecastChart(); },
+                formatCurrency(value) { return (value || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' }); },
+                loadCostData(forceRefresh = false) {
+                    const accountId = sessionStorage.getItem('selectedAccountId');
+                    if (!accountId) { this.isLoading = false; this.costData = []; return; }
+                    this.isLoading = !forceRefresh; this.isRefreshing = forceRefresh;
+                    fetch(`/api/gcp/costs/breakdown?accountId=${accountId}&groupBy=${this.groupBy}`)
+                        .then(res => res.json()).then(data => { this.costData = data; this.renderChart(); })
+                        .finally(() => { this.isLoading = false; this.isRefreshing = false; });
                 },
-                fetchHistoricalCosts() {
-                    return fetch(`/api/gcp/finops/historical-costs?accountId=${this.accountId}`)
-                        .then(res => res.json())
-                        .then(data => this.renderHistoricalChart(data));
+                loadForecastServices() {
+                    const accountId = sessionStorage.getItem('selectedAccountId');
+                    if (!accountId) return;
+                    fetch(`/api/gcp/costs/breakdown?accountId=${accountId}&groupBy=SERVICE`)
+                        .then(res => res.json()).then(data => { this.forecast.availableServices = ['ALL', ...new Set(data.map(item => item.name))]; });
                 },
-                fetchCostsByService() {
-                    return fetch(`/api/gcp/finops/costs-by-service?accountId=${this.accountId}`)
-                        .then(res => res.json())
-                        .then(data => this.renderServiceChart(data));
+                async renderCostForecastChart() {
+                    this.forecast.isLoading = true;
+                    const accountId = sessionStorage.getItem('selectedAccountId');
+                    if (!accountId) { this.forecast.isLoading = false; return; }
+                    try {
+                        let url = `/api/gcp/forecast/cost?accountId=${accountId}&periods=${this.forecast.periods}&serviceName=${encodeURIComponent(this.forecast.service)}`;
+                        const response = await fetch(url);
+                        const forecastData = await response.json();
+                        const labels = forecastData.map(d => new Date(d.ds).toLocaleDateString());
+                        const actuals = forecastData.filter(d => d.yhat_lower === 0).map(d => d.yhat);
+                        const forecast = forecastData.map(d => d.yhat);
+                        const lower = forecastData.map(d => d.yhat_lower);
+                        const upper = forecastData.map(d => d.yhat_upper);
+                        const ctx = document.getElementById('costForecastChart').getContext('2d');
+                        if (this.costForecastChart) this.costForecastChart.destroy();
+                        this.costForecastChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    { label: 'Observed', data: actuals, borderColor: '#4F46E5', borderWidth: 2, fill: false },
+                                    { label: 'Forecast', data: forecast, borderColor: '#F59E0B', borderWidth: 2, borderDash: [5, 5], fill: false },
+                                    { label: 'Confidence Interval', data: upper, fill: '+1', backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'transparent', pointRadius: 0 },
+                                    { data: lower, fill: false, borderColor: 'transparent', pointRadius: 0 }
+                                ]
+                            },
+                            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                        });
+                    } catch (err) { console.error('Failed to render forecast chart:', err); } finally { this.forecast.isLoading = false; }
                 },
-                renderHistoricalChart(data) {
-                    const ctx = document.getElementById('historicalCostChart').getContext('2d');
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: data.map(d => d.name),
-                            datasets: [{
-                                label: 'Monthly Cost',
-                                data: data.map(d => d.amount),
-                                backgroundColor: 'rgba(79, 70, 229, 0.8)',
-                            }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false }
-                    });
-                },
-                renderServiceChart(data) {
-                    const ctx = document.getElementById('costByServiceChart').getContext('2d');
-                    new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: data.map(d => d.name),
-                            datasets: [{
-                                data: data.map(d => d.amount),
-                                backgroundColor: ['#4f46e5', '#10b981', '#ef4444', '#f97316', '#3b82f6', '#8b5cf6'],
-                            }]
-                        },
-                         options: { responsive: true, maintainAspectRatio: false }
-                    });
+                get sortedCostData() { return [...this.costData].sort((a, b) => b.amount - a.amount); },
+                get totalCost() { return this.costData.reduce((sum, item) => sum + item.amount, 0); },
+                get topSpender() { return this.sortedCostData.length > 0 ? this.sortedCostData[0] : { name: 'N/A', amount: 0 }; },
+                renderChart() {
+                    const ctx = document.getElementById('costChart');
+                    if (!ctx || this.costChart) this.costChart.destroy();
+                    const topN = 10, chartData = this.sortedCostData.slice(0, topN), otherData = this.sortedCostData.slice(topN);
+                    const labels = chartData.map(d => d.name), data = chartData.map(d => d.amount);
+                    if (otherData.length > 0) { labels.push('Other'); data.push(otherData.reduce((s, i) => s + i.amount, 0)); }
+                    this.costChart = new Chart(ctx, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f87171', '#fb923c'] }] } });
                 }
             }
         }

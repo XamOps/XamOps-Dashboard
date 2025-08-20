@@ -1,42 +1,69 @@
 package com.xammer.cloud.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xammer.cloud.dto.ForecastDto;
+import com.xammer.cloud.service.gcp.GcpCostService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
+
+import java.io.*;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class ForecastingService {
 
-    private final RestTemplate restTemplate;
-    private final String costApiUrl = "http://localhost:5002/forecast/cost";
-    private final String performanceApiUrl = "http://localhost:5002/forecast/performance";
+    private final CostService costService;
+    private final GcpCostService gcpCostService;
 
-    @Autowired
-    public ForecastingService(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+    public ForecastingService(CostService costService, GcpCostService gcpCostService) {
+        this.costService = costService;
+        this.gcpCostService = gcpCostService;
+    }
+    
+    public CompletableFuture<List<ForecastDto>> getCostForecast(String accountId, String serviceName, int periods) {
+        // AWS Implementation
+        return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
-    private String getForecast(String url, Map<String, Object> historicalData) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(historicalData, headers);
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-            return response.getBody();
-        } catch (HttpClientErrorException e) {
-            System.err.println("Error calling forecast service at " + url + ": " + e.getResponseBodyAsString());
-            return "[]"; // Return empty JSON array on error
-        }
-    }
+    public CompletableFuture<List<ForecastDto>> getGcpCostForecast(String gcpProjectId, String serviceName, int periods) {
+        return CompletableFuture.supplyAsync(() -> {
+            log.info("Starting GCP cost forecast for project: {}, service: {}, periods: {}", gcpProjectId, serviceName, periods);
+            List<Map<String, Object>> dailyCosts = gcpCostService.getDailyCostsForForecast(gcpProjectId, serviceName, 90).join();
+            
+            if (dailyCosts.size() < 14) {
+                log.warn("Not enough historical data for GCP cost forecast. Found {} days.", dailyCosts.size());
+                return Collections.emptyList();
+            }
 
-    public String getCostForecast(Map<String, Object> historicalData) {
-        return getForecast(costApiUrl, historicalData);
-    }
+            StringBuilder csvData = new StringBuilder("ds,y\n");
+            dailyCosts.forEach(costEntry -> csvData.append(costEntry.get("date")).append(",").append(costEntry.get("cost")).append("\n"));
 
-    public String getPerformanceForecast(Map<String, Object> historicalData) {
-        return getForecast(performanceApiUrl, historicalData);
+            try {
+                ProcessBuilder pb = new ProcessBuilder("python", "forcasting/forecast_service.py", String.valueOf(periods));
+                Process p = pb.start();
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(p.getOutputStream()))) {
+                    writer.write(csvData.toString());
+                }
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                    String outputJson = reader.lines().collect(Collectors.joining("\n"));
+                    if (p.waitFor() != 0) {
+                        try (BufferedReader errReader = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
+                            log.error("Python script error: {}", errReader.lines().collect(Collectors.joining("\n")));
+                        }
+                        return Collections.emptyList();
+                    }
+                    return new ObjectMapper().readValue(outputJson, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                }
+            } catch (Exception e) {
+                log.error("Error executing Python forecast script for GCP", e);
+                Thread.currentThread().interrupt();
+                return Collections.emptyList();
+            }
+        });
     }
 }

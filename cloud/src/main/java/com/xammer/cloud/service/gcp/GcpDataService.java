@@ -42,7 +42,6 @@ import java.util.stream.StreamSupport;
 @Slf4j
 public class GcpDataService {
 
-    // ... existing fields ...
     private final GcpClientProvider gcpClientProvider;
     private final GcpCostService gcpCostService;
     private final GcpOptimizationService gcpOptimizationService;
@@ -63,7 +62,6 @@ public class GcpDataService {
         this.cloudAccountRepository = cloudAccountRepository;
     }
     
-    // ... existing methods (getDashboardData, getAllResources, etc.) ...
     private Map<String, double[]> loadRegionCoordinates() {
         Map<String, double[]> coords = new java.util.HashMap<>();
         try {
@@ -95,33 +93,23 @@ public class GcpDataService {
         return coords;
     }
 
-    /**
-     * *** THE FIX IS HERE ***
-     * This method now correctly processes the list of discovered resources
-     * to identify unique, active regions where resources are deployed.
-     */
     public CompletableFuture<List<DashboardData.RegionStatus>> getRegionStatusForGcp(List<GcpResourceDto> resources) {
         return CompletableFuture.supplyAsync(() -> {
-            // Step 1: Extract location from each resource (e.g., "us-east1-b", "global")
-            // Step 2: Convert location to region (e.g., "us-east1-b" -> "us-east1")
-            // Step 3: Filter for valid regions that exist in our coordinates map
-            // Step 4: Collect the unique regions into a Set
             Set<String> activeRegions = resources.stream()
                 .map(GcpResourceDto::getLocation)
-                .filter(loc -> loc != null && !loc.equalsIgnoreCase("global"))
+                .filter(Objects::nonNull)
                 .map(loc -> {
-                    // Extracts region from zone, e.g., "us-east1-b" becomes "us-east1"
-                    if (loc.matches("^[a-z]+-[a-z0-9]+-[0-9]$")) {
-                        return loc.substring(0, loc.lastIndexOf('-'));
+                    String[] parts = loc.split("-");
+                    if (parts.length > 2) {
+                        return parts[0] + "-" + parts[1];
                     }
                     return loc;
                 })
                 .filter(regionCoordinates::containsKey)
                 .collect(Collectors.toSet());
 
-            log.info("Found {} active GCP regions with deployed resources.", activeRegions.size());
+            log.info("Found {} active GCP regions with deployed resources: {}", activeRegions.size(), activeRegions);
 
-            // Step 5: Create the final list of RegionStatus objects for the map
             return activeRegions.stream().map(regionId -> {
                 double[] coords = regionCoordinates.get(regionId);
                 return new DashboardData.RegionStatus(regionId, regionId, "ACTIVE", coords[0], coords[1]);
@@ -535,5 +523,16 @@ public class GcpDataService {
             log.error("Error fetching DNS Zones for project: {}", gcpProjectId, e);
             return List.of();
         }
+    }
+    // Add this new public method inside your GcpDataService.java class
+
+    public double calculateForecastedSpend(double monthToDateSpend) {
+        LocalDate today = LocalDate.now();
+        int daysInMonth = today.lengthOfMonth();
+        int currentDay = today.getDayOfMonth();
+        if (currentDay > 0) {
+            return (monthToDateSpend / currentDay) * daysInMonth;
+        }
+        return 0.0;
     }
 }
