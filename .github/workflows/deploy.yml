@@ -30,12 +30,13 @@ jobs:
         env:
           ECR_REPOSITORY: xamops
           IMAGE_TAG: ${{ github.sha }}
+          ECR_URI: 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops
         run: |
           # Use the -f flag to specify the Dockerfile location and the build context.
           # The build context is the 'cloud' directory where the pom.xml and src folders are.
-          docker build -t $ECR_REPOSITORY:$IMAGE_TAG -f cloud/Dockerfile ./cloud
+          docker build -t $ECR_URI:$IMAGE_TAG -f cloud/Dockerfile cloud
           # Push the image to your ECR repository
-          docker push $ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_URI:$IMAGE_TAG
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
@@ -45,6 +46,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Starting deployment on EC2 instance..."
+            
             # Authenticate with ECR on the EC2 instance
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
