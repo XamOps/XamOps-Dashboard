@@ -1,0 +1,43 @@
+name: CI/CD Pipeline for XamOps-Dashboard
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REPOSITORY: xamops
+          IMAGE_TAG: ${{ github.sha }}
+          ECR_URI: 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops
+        run: |
+          docker build -t $ECR_URI:$IMAGE_TAG -f cloud/Dockerfile cloud
+          docker push $ECR_URI:$IMAGE_TAG
+
+      - name: Deploy to EC2 via SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "i-009aa3aa59a60f17f" \
+            --parameters '{"commands":["echo \"Starting deployment on EC2 instance...\"","aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com","echo \"Pulling the new Docker image...\"","sudo docker pull 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Stopping old container...\"","sudo docker stop xamops-dashboard || true","sudo docker rm xamops-dashboard || true","echo \"Running the new container...\"","sudo docker run -d --name xamops-dashboard -p 8080:8080 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Deployment complete.\""]}' \
+            --timeout-seconds 600
