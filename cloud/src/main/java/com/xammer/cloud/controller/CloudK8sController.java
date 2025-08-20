@@ -37,8 +37,10 @@ public class CloudK8sController {
     
     // This endpoint remains to list available EKS clusters
     @GetMapping("/clusters")
-    public CompletableFuture<ResponseEntity<List<K8sClusterInfo>>> getClusters(@RequestParam String accountId) {
-        return eksService.getEksClusterInfo(accountId, false)
+    public CompletableFuture<ResponseEntity<List<K8sClusterInfo>>> getClusters(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) { // <-- FIX: Added forceRefresh parameter
+        return eksService.getEksClusterInfo(accountId, forceRefresh) // <-- FIX: Passed forceRefresh to the service
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> ResponseEntity.status(500).body(Collections.emptyList()));
     }

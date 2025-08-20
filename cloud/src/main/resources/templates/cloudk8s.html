@@ -62,9 +62,11 @@
                         <p class="text-sm text-gray-600">Monitor your EKS clusters and workloads</p>
                     </div>
                 </div>
-                <button @click="view === 'clusters' ? fetchClusters(true) : navigateToClusters()" class="px-4 py-2 text-sm font-semibold rounded-lg bg-white border hover:bg-gray-50">
-                    <span x-show="view === 'clusters'">Refresh Now</span>
-                    <span x-show="view !== 'clusters'"><i class="fas fa-arrow-left mr-2"></i>Back to Clusters</span>
+                <button @click="view === 'clusters' ? fetchClusters(true) : navigateToClusters()" class="px-4 py-2 text-sm font-semibold rounded-lg bg-white border hover:bg-gray-50 flex items-center" :disabled="isRefreshing">
+                    <i class="fas fa-sync-alt mr-2" :class="{'fa-spin': isRefreshing}" x-show="view === 'clusters'"></i>
+                    <i class="fas fa-arrow-left mr-2" x-show="view !== 'clusters'"></i>
+                    <span x-show="view === 'clusters'" x-text="isRefreshing ? 'Refreshing...' : 'Refresh Now'"></span>
+                    <span x-show="view !== 'clusters'">Back to Clusters</span>
                 </button>
             </header>
 
@@ -99,9 +101,9 @@
                                         </template>
                                         <template x-if="!cluster.connected">
                                              <button @click="enableMonitoring(cluster)" :disabled="cluster.isEnabling" class="px-3 py-1 text-xs font-semibold rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 disabled:opacity-50">
-                                                <span x-show="!cluster.isEnabling"><i class="fas fa-magic mr-1"></i> Enable Monitoring</span>
-                                                <span x-show="cluster.isEnabling"><i class="fas fa-spinner fa-spin mr-1"></i> Enabling...</span>
-                                            </button>
+                                                 <span x-show="!cluster.isEnabling"><i class="fas fa-magic mr-1"></i> Enable Monitoring</span>
+                                                 <span x-show="cluster.isEnabling"><i class="fas fa-spinner fa-spin mr-1"></i> Enabling...</span>
+                                             </button>
                                         </template>
                                     </td>
                                     <td class="px-6 py-4 text-center">
@@ -177,7 +179,7 @@
                     
                     <div class="w-full">
                         <div class="mb-4 border-b border-gray-200">
-                            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center">
+                            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" id="myTab">
                                 <li class="mr-2"><button @click="activeTab = 'nodes'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'nodes'}" class="inline-block p-4 border-b-2 rounded-t-lg">Nodes</button></li>
                                 <li class="mr-2"><button @click="activeTab = 'pods'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'pods'}" class="inline-block p-4 border-b-2 rounded-t-lg">Pods</button></li>
                                 <li class="mr-2"><button @click="activeTab = 'deployments'" :class="{'border-indigo-500 text-indigo-600': activeTab === 'deployments'}" class="inline-block p-4 border-b-2 rounded-t-lg">Deployments</button></li>
@@ -194,6 +196,72 @@
                     </div>
                 </div>
             </div>
+
+            <div @click="isHelpModalOpen = true" class="fixed bottom-8 right-8 w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-2xl shadow-lg cursor-pointer hover:scale-110 transition-transform">
+                <i class="fas fa-question"></i>
+            </div>
+
+            <div x-show="isHelpModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div @click="isHelpModalOpen = false" class="modal-overlay fixed inset-0"></div>
+                <div class="modal-content rounded-2xl p-8 w-full max-w-3xl mx-auto max-h-[90vh] overflow-y-auto fade-in" @click.stop>
+                    <div class="flex items-center justify-between pb-4 border-b">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                                <i class="fas fa-rocket text-white text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-xl text-gray-800">EKS Monitoring Setup Guide</h3>
+                                <p class="text-sm text-gray-600">Follow these steps to connect a new EKS cluster.</p>
+                            </div>
+                        </div>
+                        <button @click="isHelpModalOpen = false" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                    </div>
+                    <div class="space-y-6 mt-6">
+                         <div>
+                             <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 1:</span> Ensure a Node Group Exists</h4>
+                             <p class="text-sm text-gray-600 mt-1">Your cluster needs worker nodes to run the monitoring agent. If you don't have a node group, create one with this command:</p>
+                             <div class="code-block mt-2 text-sm">
+                                 <code x-text="'eksctl create nodegroup --cluster=' + (selectedCluster ? selectedCluster.name : 'YOUR_CLUSTER_NAME') + ' --region=' + (selectedCluster ? selectedCluster.region : 'YOUR_REGION') + ' --name standard-workers --node-type t3.medium --nodes 2'"></code>
+                             </div>
+                         </div>
+                         <div>
+                             <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 2:</span> Authorize XamOps IAM Role</h4>
+                             <p class="text-sm text-gray-600 mt-1">Run <code class="bg-gray-200 text-gray-800 px-1 rounded">kubectl edit configmap aws-auth -n kube-system</code> and add the following snippet under the `mapRoles` section. Your file may already contain other roles.</p>
+                             <div class="code-block mt-2 text-sm">
+<pre><code># Your aws-auth-cm.yaml should look something like this.
+# Add the '- rolearn:' section below if it's not already there.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    # ADD THIS PART
+    - rolearn: arn:aws:iam::<span x-text="selectedAccountId || 'YOUR_AWS_ACCOUNT_ID'"></span>:role/XamOpsReadOnlyRole-local
+      username: xamops-automation
+      groups:
+        - system:masters
+    # Your existing node group role may be here, leave it as is.
+    - rolearn: arn:aws:iam::xxxxxxxxxxxx:role/your-eks-node-role
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes</code></pre>
+                             </div>
+                         </div>
+                         <div>
+                             <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 3:</span> Deploy the Monitoring Agent</h4>
+                             <p class="text-sm text-gray-600 mt-1">Run the following command from the same machine where this application is running (e.g., your local terminal):</p>
+                             <div class="code-block mt-2 text-sm">
+                                 <code x-text="'curl -X POST &quot;' + appBaseUrl + '/api/eks/' + (selectedCluster ? selectedCluster.name : 'YOUR_CLUSTER_NAME') + '/enable-monitoring?accountId=' + (selectedAccountId || 'YOUR_AWS_ACCOUNT_ID') + '&amp;region=' + (selectedCluster ? selectedCluster.region : 'YOUR_REGION') + '&quot;'"></code>
+                             </div>
+                             <p class="text-sm text-gray-600 mt-2">After running the command, wait 5-10 minutes and then refresh this page.</p>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 </div>
@@ -203,6 +271,7 @@ function cloudK8s() {
     return {
         view: 'clusters',
         isLoading: { clusters: true, details: true, usage: true },
+        isRefreshing: false,
         clusters: [],
         selectedCluster: null,
         clusterUsage: null,
@@ -212,13 +281,15 @@ function cloudK8s() {
         openCostStatus: 'not_installed',
         installationMessage: '',
         installationSuccess: false,
+        isHelpModalOpen: false,
+        appBaseUrl: window.location.origin, // Dynamically get the base URL
 
         init() {
             this.selectedAccountId = sessionStorage.getItem('selectedAccountId');
             if (!this.selectedAccountId) { 
                 this.isLoading.clusters = false; return; 
             }
-            this.fetchClusters();
+            this.fetchClusters(false);
         },
         cleanup() { 
             if (this.pollingInterval) clearInterval(this.pollingInterval); 
@@ -233,7 +304,6 @@ function cloudK8s() {
             this.view = 'details';
             
             if (!cluster.connected) {
-                console.warn('Container Insights not detected. Usage data will not be available.');
                 this.isLoading.usage = false;
                 this.clusterUsage = null;
             } else {
@@ -241,19 +311,35 @@ function cloudK8s() {
                 this.renderUsageCharts();
                 this.pollingInterval = setInterval(() => this.fetchClusterUsage(), 30000);
             }
-            // Add logic here to fetch nodes, pods, etc.
             this.isLoading.details = false;
         },
-        fetchClusters(force = false) {
-            if (force) console.log('Force refreshing cluster data...');
-            this.isLoading.clusters = true;
-            fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}`)
+        fetchClusters(forceRefresh = false) {
+            const cacheKey = `k8sClusters-${this.selectedAccountId}`;
+            if (forceRefresh) {
+                sessionStorage.removeItem(cacheKey);
+            }
+            const cachedData = sessionStorage.getItem(cacheKey);
+
+            if (cachedData && !forceRefresh) {
+                this.clusters = JSON.parse(cachedData).map(c => ({...c, isEnabling: false}));
+                this.isLoading.clusters = false;
+                return;
+            }
+
+            this.isLoading.clusters = !cachedData;
+            this.isRefreshing = forceRefresh;
+
+            fetch(`/api/k8s/clusters?accountId=${this.selectedAccountId}&forceRefresh=${forceRefresh}`)
                 .then(res => res.json())
                 .then(data => { 
                     this.clusters = data.map(c => ({...c, isEnabling: false})); 
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                 })
                 .catch(err => console.error('Failed to fetch clusters', err))
-                .finally(() => this.isLoading.clusters = false);
+                .finally(() => {
+                    this.isLoading.clusters = false;
+                    this.isRefreshing = false;
+                });
         },
         async fetchClusterUsage() {
             if (!this.selectedCluster) return;

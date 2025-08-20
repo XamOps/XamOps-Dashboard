@@ -1,3 +1,4 @@
+// src/main/java/com/xammer/cloud/service/EksService.java
 package com.xammer.cloud.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -67,6 +68,9 @@ public class EksService {
     @Async
     public CompletableFuture<List<K8sClusterInfo>> getEksClusterInfo(String accountId, boolean forceRefresh) {
         String cacheKey = "eksClusters-" + accountId;
+        if (forceRefresh) {
+            dbCache.evict(cacheKey); // Evict the cache if a refresh is forced
+        }
         if (!forceRefresh) {
             Optional<List<K8sClusterInfo>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
             if (cachedData.isPresent()) {
