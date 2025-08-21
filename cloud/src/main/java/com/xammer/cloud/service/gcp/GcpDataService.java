@@ -137,6 +137,15 @@ public class GcpDataService {
                 return new DashboardData.IamResources(0, 0, 0, 0);
             });
 
+        // --- COST CONSISTENCY FIX: START ---
+        // Fetch the authoritative, unfiltered MTD spend from the central cost service
+        CompletableFuture<Double> unfilteredMtdSpendFuture = gcpCostService.getUnfilteredMonthToDateSpend(gcpProjectId)
+            .exceptionally(ex -> {
+                log.error("Failed to get unfiltered MTD spend for project {}: {}", gcpProjectId, ex.getMessage());
+                return 0.0;
+            });
+        // --- COST CONSISTENCY FIX: END ---
+        
         CompletableFuture<List<GcpCostDto>> costHistoryFuture = gcpCostService.getHistoricalCosts(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get cost history for project {}: {}", gcpProjectId, ex.getMessage());
@@ -179,7 +188,7 @@ public class GcpDataService {
         return CompletableFuture.allOf(
             resourcesFuture, securityFindingsFuture, iamResourcesFuture, costHistoryFuture,
             billingSummaryFuture, wasteReportFuture, rightsizingFuture, savingsSummaryFuture,
-            optimizationSummaryFuture, regionStatusFuture
+            optimizationSummaryFuture, regionStatusFuture, unfilteredMtdSpendFuture // Added new future to the join
         ).thenApply(v -> {
             log.info("--- ALL EXPANDED GCP ASYNC DATA FETCHES COMPLETE, assembling DTO for project {} ---", gcpProjectId);
 
@@ -203,18 +212,23 @@ public class GcpDataService {
             inventory.setVpc((int) counts.getOrDefault("VPC Network", 0L).longValue());
             inventory.setRoute53Zones((int) counts.getOrDefault("Cloud DNS", 0L).longValue());
             data.setResourceInventory(inventory);
-            double currentMtdSpend = data.getBillingSummary().stream().mapToDouble(GcpCostDto::getAmount).sum();
+            
+            // --- COST CONSISTENCY FIX: START ---
+            // Use the authoritative MTD spend from the new future
+            double currentMtdSpend = unfilteredMtdSpendFuture.join();
             data.setMonthToDateSpend(currentMtdSpend);
-            LocalDate today = LocalDate.now();
-            int daysInMonth = today.lengthOfMonth();
-            int currentDay = today.getDayOfMonth();
-            data.setForecastedSpend(currentDay > 0 ? (currentMtdSpend / currentDay) * daysInMonth : 0.0);
-            String lastMonthStr = today.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            
+            // Recalculate forecast based on the consistent MTD spend
+            data.setForecastedSpend(calculateForecastedSpend(currentMtdSpend));
+            // --- COST CONSISTENCY FIX: END ---
+
+            String lastMonthStr = LocalDate.now().minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
             double lastMonthSpend = data.getCostHistory().stream()
                     .filter(c -> c.getName().equals(lastMonthStr))
                     .mapToDouble(GcpCostDto::getAmount)
                     .findFirst().orElse(0.0);
             data.setLastMonthSpend(lastMonthSpend);
+            
             data.setSecurityScore(gcpSecurityService.calculateSecurityScore(securityFindings));
             List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
                 .collect(Collectors.groupingBy(GcpSecurityFinding::getCategory, Collectors.counting()))
@@ -553,8 +567,7 @@ public class GcpDataService {
             return List.of();
         }
     }
-    // Add this new public method inside your GcpDataService.java class
-
+    
     public double calculateForecastedSpend(double monthToDateSpend) {
         LocalDate today = LocalDate.now();
         int daysInMonth = today.lengthOfMonth();
