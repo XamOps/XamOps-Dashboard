@@ -20,7 +20,7 @@
         <aws.java.sdk.version>2.20.0</aws.java.sdk.version>
         <springdoc.version>1.6.12</springdoc.version>
         <k8s.client.version>6.8.1</k8s.client.version>
-        <gcp.libraries.bom.version>26.28.0</gcp.libraries.bom.version>
+        <gcp.libraries.bom.version>26.34.0</gcp.libraries.bom.version>
     </properties>
 
     <dependencyManagement>
@@ -207,6 +207,8 @@
             <artifactId>kms</artifactId>
         </dependency>
 
+        <!-- Removed duplicate/old google-cloud-securitycenter dependency -->
+
         <!-- Google Cloud Dependencies (versions managed by BOM, expanded from new POM) -->
         <dependency>
             <groupId>com.google.cloud</groupId>
@@ -279,6 +281,8 @@
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-billingbudgets</artifactId>
         </dependency>
+        <!-- Add Google Cloud Security Center v2 dependency -->
+    <!-- Removed duplicate/old google-cloud-securitycenter dependency -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -296,6 +300,7 @@
             <artifactId>bucket4j-spring-boot-starter</artifactId>
             <version>0.8.1</version>
         </dependency>
+    <!-- Removed duplicate/old google-cloud-securitycenter dependency -->
     </dependencies>
 
     <build>
