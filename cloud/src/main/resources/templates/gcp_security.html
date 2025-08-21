@@ -2,80 +2,277 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>XamOps - GCP Security</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XamOps - GCP Security Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        :root {
+            --primary-gradient: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
+            --danger-gradient: linear-gradient(135deg, #EA4335 0%, #D93025 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(229, 231, 235, 0.8);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        [x-cloak] { display: none !important; }
+        .rotate-90 { transform: rotate(90deg); }
+        .transition-all { transition: all 0.3s ease-in-out; }
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .kpi-card {
+            position: relative; overflow: hidden; background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 1rem;
+        }
+        .kpi-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .btn-primary {
+            background: var(--primary-gradient); border: none; color: white; transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+             box-shadow: 0 10px 15px -3px rgba(66, 133, 244, 0.4);
+        }
+        .finding-group {
+            background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 1rem;
+        }
+        .finding-row:hover {
+            background: linear-gradient(90deg, rgba(234, 67, 53, 0.03) 0%, rgba(217, 48, 37, 0.08) 100%);
+        }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
-<body class="bg-gray-100">
-    <div class="flex h-screen">
+<body class="bg-gray-50">
+
+<div class="flex">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
         <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
-        <main class="flex-1 flex flex-col p-6" x-data="gcpSecurity()">
-            <header class="flex-shrink-0 mb-6">
-                <h1 class="text-2xl font-bold text-gray-800">GCP Security Center</h1>
+    </aside>
+
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="gcpSecurity()">
+            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                 <div class="flex items-center space-x-4">
+                     <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center">
+                         <i class="fas fa-shield-alt text-white text-xl"></i>
+                     </div>
+                     <div>
+                         <h1 class="text-2xl font-bold text-gray-800">GCP Security Center</h1>
+                         <p class="text-sm text-gray-600">Monitor and remediate security risks</p>
+                     </div>
+                 </div>
+                 <button @click="fetchFindings(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                     <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                     <span x-text="isRefreshing ? 'Scanning...' : 'Scan For Issues'"></span>
+                 </button>
             </header>
-            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden">
-                <div class="overflow-x-auto h-full">
-                    <table class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th scope="col" class="px-6 py-3">Severity</th>
-                                <th scope="col" class="px-6 py-3">Category</th>
-                                <th scope="col" class="px-6 py-3">Description</th>
-                                <th scope="col" class="px-6 py-3">Resource</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-if="isLoading">
-                                <tr class="bg-white border-b animate-pulse" x-ref="loading" x-init="$el.setAttribute('x-for', 'i in 5')">
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-20"></div></td>
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-32"></div></td>
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-full"></div></td>
-                                    <td class="px-6 py-4"><div class="h-4 bg-gray-200 rounded w-48"></div></td>
-                                </tr>
-                            </template>
-                            <template x-for="finding in findings" :key="finding.resourceName + finding.category">
-                                <tr class="bg-white border-b hover:bg-gray-50">
-                                    <td class="px-6 py-4">
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full"
-                                              :class="{
-                                                  'bg-red-100 text-red-800': finding.severity === 'HIGH',
-                                                  'bg-yellow-100 text-yellow-800': finding.severity === 'MEDIUM',
-                                                  'bg-blue-100 text-blue-800': finding.severity === 'LOW'
-                                              }"
-                                              x-text="finding.severity"></span>
-                                    </td>
-                                    <td class="px-6 py-4 font-medium text-gray-900" x-text="finding.category"></td>
-                                    <td class="px-6 py-4" x-text="finding.description"></td>
-                                    <td class="px-6 py-4 font-mono text-xs" x-text="finding.resourceName"></td>
-                                </tr>
-                            </template>
-                             <template x-if="!isLoading && findings.length === 0">
-                                <tr><td colspan="4" class="text-center py-12 text-gray-500">No security findings. Your GCP account appears to be secure.</td></tr>
-                            </template>
-                        </tbody>
-                    </table>
+
+            <div class="flex-1 p-8 space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-gray-600 text-sm font-medium mb-2">Security Score</h3>
+                        <p class="text-4xl font-bold text-green-600 mb-1" x-text="isLoading ? '...' : securityScore + '%'"></p>
+                        <p class="text-xs text-gray-500">Overall posture</p>
+                    </div>
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-gray-600 text-sm font-medium mb-2">Total Findings</h3>
+                        <p class="text-4xl font-bold text-red-600 mb-1" x-text="isLoading ? '...' : findings.length"></p>
+                        <p class="text-xs text-gray-500">across all categories</p>
+                    </div>
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Findings by Severity</h3>
+                        <div class="h-48"><canvas id="severityChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div x-show="!isLoading && groupedFindings.length === 0" x-cloak class="text-center py-20 px-8 rounded-2xl bg-white/80">
+                         <div class="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                             <i class="fas fa-shield-check text-white text-3xl"></i>
+                         </div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">No Security Issues Found!</h3>
+                        <p class="text-gray-600">Your GCP environment appears to be secure and well-configured.</p>
+                    </div>
+
+                    <template x-for="group in groupedFindings" :key="group.category">
+                        <div class="finding-group fade-in">
+                            <div @click="group.open = !group.open" class="flex items-center justify-between p-6 cursor-pointer">
+                                <div class="flex items-center space-x-4 flex-1">
+                                    <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all" :class="{'rotate-90': group.open}"></i>
+                                    <div class="w-12 h-12 flex items-center justify-center rounded-xl">
+                                        <img :src="'/icons/' + getServiceIcon(group.category)" :alt="group.category" class="w-full h-full rounded-xl object-cover">
+                                    </div>
+                                    <h3 class="font-bold text-gray-800 text-lg" x-text="group.category"></h3>
+                                    <div class="text-xs font-semibold px-3 py-1 rounded-full" :class="getSeverityPillClass(group.highestSeverity)" x-text="group.findings.length + ' findings'"></div>
+                                </div>
+                                <div class="font-bold" :class="getSeverityTextClass(group.highestSeverity)" x-text="'Highest: ' + group.highestSeverity"></div>
+                            </div>
+                            <div x-show="group.open" x-cloak class="bg-gray-50/50">
+                                <template x-for="finding in group.findings" :key="finding.resourceName + finding.description">
+                                    <div class="finding-row border-t border-gray-200/50">
+                                        <div @click="finding.detailsOpen = !finding.detailsOpen" class="grid grid-cols-12 items-center p-6 pl-16 text-sm cursor-pointer">
+                                            <div class="col-span-6 flex items-center space-x-3">
+                                                 <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all" :class="{'rotate-90': finding.detailsOpen}"></i>
+                                                 <p class="font-medium text-gray-800" x-text="finding.description"></p>
+                                            </div>
+                                            <div class="col-span-4 font-mono text-xs text-gray-600 truncate" x-text="finding.resourceName"></div>
+                                            <div class="col-span-2 text-right">
+                                                <span class="px-3 py-1 text-xs font-semibold rounded-full" :class="getSeverityPillClass(finding.severity)" x-text="finding.severity"></span>
+                                            </div>
+                                        </div>
+                                        <div x-show="finding.detailsOpen" x-cloak class="resource-details p-6 pl-24 text-sm text-gray-700 bg-gray-50/50 border-t border-gray-200">
+                                            <h4 class="font-semibold text-base mb-3">Finding Details:</h4>
+                                            <div class="grid grid-cols-2 gap-2 mb-4">
+                                                <div><strong class="text-gray-600">Project:</strong> <span x-text="finding.project"></span></div>
+                                                <div><strong class="text-gray-600">Location:</strong> <span x-text="finding.location"></span></div>
+                                            </div>
+                                            <div class="bg-white p-4 rounded-lg border">
+                                                <h5 class="font-semibold mb-2">Remediation Steps:</h5>
+                                                <p class="text-xs" x-text="getRemediationSteps(finding.category)"></p>
+                                            </div>
+                                            <div class="mt-4 text-right">
+                                                <button class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                                                    <i class="fas fa-wrench mr-1"></i> Remediate
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </main>
     </div>
-    <script>
-        function gcpSecurity() {
-            return {
-                isLoading: true,
-                accountId: sessionStorage.getItem('selectedAccountId'),
-                findings: [],
-                init() { this.fetchFindings(); },
-                fetchFindings() {
-                    this.isLoading = true;
-                    fetch(`/api/gcp/security/findings?accountId=${this.accountId}`)
-                        .then(res => res.json())
-                        .then(data => { this.findings = data; })
-                        .catch(err => console.error('Failed to load GCP security findings:', err))
-                        .finally(() => this.isLoading = false);
+<script>
+function gcpSecurity() {
+    return {
+        isLoading: true,
+        isRefreshing: false,
+        accountId: sessionStorage.getItem('selectedAccountId'),
+        findings: [],
+        severityChart: null,
+        init() { this.fetchFindings(); },
+        fetchFindings(forceRefresh = false) {
+            this.isRefreshing = forceRefresh;
+            if(!forceRefresh) this.isLoading = true;
+
+            fetch(`/api/gcp/security/findings?accountId=${this.accountId}`)
+                .then(res => res.json())
+                .then(data => { 
+                    this.findings = data.map(f => ({...f, detailsOpen: false }));
+                    this.renderSeverityChart();
+                })
+                .catch(err => console.error('Failed to load GCP security findings:', err))
+                .finally(() => {
+                    this.isLoading = false;
+                    this.isRefreshing = false;
+                });
+        },
+        get securityScore() {
+            if (this.findings.length === 0) return 100;
+            const score = this.findings.reduce((acc, f) => {
+                if (f.severity === 'HIGH') return acc - 5;
+                if (f.severity === 'MEDIUM') return acc - 2;
+                return acc - 1;
+            }, 100);
+            return Math.max(0, score);
+        },
+        get groupedFindings() {
+            if (!this.findings) return [];
+            const groups = this.findings.reduce((acc, finding) => {
+                const key = finding.category || 'General';
+                if (!acc[key]) {
+                    acc[key] = { category: key, findings: [], open: true, highestSeverity: 'LOW' };
                 }
-            }
+                acc[key].findings.push(finding);
+                // Determine the highest severity for the group
+                const severityOrder = { 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+                if (severityOrder[finding.severity] > severityOrder[acc[key].highestSeverity]) {
+                    acc[key].highestSeverity = finding.severity;
+                }
+                return acc;
+            }, {});
+            return Object.values(groups).sort((a, b) => {
+                 const severityOrder = { 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+                 return severityOrder[b.highestSeverity] - severityOrder[a.highestSeverity];
+            });
+        },
+        getServiceIcon(category) {
+            const iconMap = {
+                'IAM': 'gcp-iam.png',
+                'VPC': 'gcp-vpc.png',
+                'Firewall': 'gcp-firewall.png',
+                'Cloud Storage': 'gcp-cloud-storage.png',
+                'GKE': 'gcp-gke.png',
+                'Cloud SQL': 'gcp-cloud-sql.png',
+            };
+            return iconMap[category] || 'gcp-icon.png';
+        },
+        getSeverityPillClass(severity) {
+            return {
+                'HIGH': 'bg-red-100 text-red-800', 'MEDIUM': 'bg-yellow-100 text-yellow-800',
+                'LOW': 'bg-blue-100 text-blue-800', 'INFO': 'bg-gray-100 text-gray-800'
+            }[severity] || 'bg-gray-100 text-gray-800';
+        },
+        getSeverityTextClass(severity) {
+            return {
+                'HIGH': 'text-red-600', 'MEDIUM': 'text-yellow-600',
+                'LOW': 'text-blue-600', 'INFO': 'text-gray-600'
+            }[severity] || 'text-gray-600';
+        },
+        getRemediationSteps(category) {
+            const steps = {
+                'IAM': 'Navigate to IAM & Admin in the GCP Console. Review the roles for the specified principal and remove any excessive permissions. Apply the principle of least privilege.',
+                'VPC': 'Go to the VPC Network section. Review the firewall rules and network configurations. Ensure no ports are unnecessarily exposed to the public internet (0.0.0.0/0).',
+                'Cloud Storage': 'In the Cloud Storage browser, find the specified bucket. Go to the Permissions tab and ensure "Public access" is not set to "Public". Use fine-grained IAM roles for access.',
+            };
+            return steps[category] || 'Refer to the official GCP security documentation for best practices related to this resource type.';
+        },
+        renderSeverityChart() {
+            const counts = this.findings.reduce((acc, f) => {
+                acc[f.severity] = (acc[f.severity] || 0) + 1;
+                return acc;
+            }, {});
+            const labels = Object.keys(counts);
+            const data = Object.values(counts);
+
+            const ctx = document.getElementById('severityChart');
+            if (!ctx) return;
+            if (this.severityChart) this.severityChart.destroy();
+            
+            this.severityChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#EA4335', '#FBBC05', '#4285F4'],
+                        borderWidth: 0, hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+                }
+            });
         }
-    </script>
+    }
+}
+</script>
 </body>
 </html>
