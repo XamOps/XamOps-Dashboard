@@ -1,4 +1,3 @@
-// File: src/main/java/com/xammer/cloud/service/gcp/GcpDataService.java
 package com.xammer.cloud.service.gcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -236,33 +235,63 @@ public class GcpDataService {
     private GcpResourceDto mapInstanceToDto(Instance instance) {
         String zoneUrl = instance.getZone();
         String zone = zoneUrl.substring(zoneUrl.lastIndexOf('/') + 1);
-        return new GcpResourceDto(String.valueOf(instance.getId()), instance.getName(),
-                "Compute Engine", zone, instance.getStatus());
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(String.valueOf(instance.getId()));
+        dto.setName(instance.getName());
+        dto.setType("Compute Engine");
+        dto.setLocation(zone);
+        dto.setStatus(instance.getStatus());
+        return dto;
     }
 
     private GcpResourceDto mapBucketToDto(Bucket bucket) {
-        return new GcpResourceDto(bucket.getName(), bucket.getName(),
-                "Cloud Storage", bucket.getLocation(), "ACTIVE");
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(bucket.getName());
+        dto.setName(bucket.getName());
+        dto.setType("Cloud Storage");
+        dto.setLocation(bucket.getLocation());
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     private GcpResourceDto mapGkeToDto(Cluster cluster) {
-        return new GcpResourceDto(cluster.getId(), cluster.getName(),
-                "Kubernetes Engine", cluster.getLocation(), cluster.getStatus().toString());
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(cluster.getId());
+        dto.setName(cluster.getName());
+        dto.setType("Kubernetes Engine");
+        dto.setLocation(cluster.getLocation());
+        dto.setStatus(cluster.getStatus().toString());
+        return dto;
     }
 
     private GcpResourceDto mapSqlToDto(DatabaseInstance instance) {
-        return new GcpResourceDto(instance.getName(), instance.getName(),
-                "Cloud SQL", instance.getRegion(), instance.getState().toString());
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(instance.getName());
+        dto.setName(instance.getName());
+        dto.setType("Cloud SQL");
+        dto.setLocation(instance.getRegion());
+        dto.setStatus(instance.getState().toString());
+        return dto;
     }
 
     private GcpResourceDto mapVpcToDto(Network network) {
-        return new GcpResourceDto(String.valueOf(network.getId()), network.getName(),
-                "VPC Network", "global", "ACTIVE");
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(String.valueOf(network.getId()));
+        dto.setName(network.getName());
+        dto.setType("VPC Network");
+        dto.setLocation("global");
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     private GcpResourceDto mapDnsToDto(ManagedZone zone) {
-        return new GcpResourceDto(String.valueOf(zone.getId()), zone.getDnsName(),
-                "Cloud DNS", "global", "ACTIVE");
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(String.valueOf(zone.getId()));
+        dto.setName(zone.getDnsName());
+        dto.setType("Cloud DNS");
+        dto.setLocation("global");
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     public CompletableFuture<List<GcpResourceDto>> getAllResources(String gcpProjectId) {

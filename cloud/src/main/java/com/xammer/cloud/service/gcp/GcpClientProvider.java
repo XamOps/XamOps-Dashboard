@@ -17,7 +17,8 @@ import com.google.cloud.compute.v1.NetworksClient;
 import com.google.cloud.compute.v1.NetworksSettings;
 import com.google.cloud.compute.v1.SubnetworksClient;
 import com.google.cloud.compute.v1.SubnetworksSettings;
-
+import com.google.cloud.billing.budgets.v1.BudgetServiceClient;
+import com.google.cloud.billing.budgets.v1.BudgetServiceSettings;
 
 import com.google.cloud.monitoring.v3.MetricServiceClient;
 import com.google.cloud.monitoring.v3.MetricServiceSettings;
@@ -283,4 +284,14 @@ public class GcpClientProvider {
         return Optional.empty();
     }
 }
+public BudgetServiceClient getBudgetServiceClient(String gcpProjectId) throws IOException {
+        Optional<GoogleCredentials> credsOpt = getCredentials(gcpProjectId);
+        if (credsOpt.isEmpty()) {
+            throw new IOException("GoogleCredentials not found for project ID: " + gcpProjectId);
+        }
+        BudgetServiceSettings budgetServiceSettings = BudgetServiceSettings.newBuilder()
+                .setCredentialsProvider(com.google.api.gax.core.FixedCredentialsProvider.create(credsOpt.get()))
+                .build();
+        return BudgetServiceClient.create(budgetServiceSettings);
+    }
 }

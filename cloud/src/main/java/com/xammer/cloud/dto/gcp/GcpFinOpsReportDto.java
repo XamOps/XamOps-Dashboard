@@ -3,6 +3,7 @@ package com.xammer.cloud.dto.gcp;
 import com.xammer.cloud.dto.DashboardData;
 import lombok.Data;
 import java.util.List;
+import com.xammer.cloud.dto.gcp.TaggingComplianceDto;
 
 @Data
 public class GcpFinOpsReportDto {
@@ -16,4 +17,7 @@ public class GcpFinOpsReportDto {
     private double monthToDateSpend;
     private double lastMonthSpend;
     private double forecastedSpend;
+    private List<GcpBudgetDto> budgets;
+    private List<GcpCostDto> costAllocationByTag;
+    private TaggingComplianceDto taggingCompliance;
 }
