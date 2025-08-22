@@ -253,4 +253,22 @@ public class GcpClientProvider {
                 .build();
         return BudgetServiceClient.create(budgetServiceSettings);
     }
+    public Optional<ForwardingRulesClient> getForwardingRulesClient(String gcpProjectId) {
+    Optional<GoogleCredentials> credentialsOpt = getCredentials(gcpProjectId);
+    if (credentialsOpt.isEmpty()) {
+        log.error("Failed to get credentials for project {}", gcpProjectId);
+        return Optional.empty();
+    }
+
+    try {
+        GoogleCredentials credentials = credentialsOpt.get();
+        ForwardingRulesSettings settings = ForwardingRulesSettings.newBuilder()
+                .setCredentialsProvider(() -> credentials)
+                .build();
+        return Optional.of(ForwardingRulesClient.create(settings));
+    } catch (IOException e) {
+        log.error("Failed to create ForwardingRulesClient for project {}", gcpProjectId, e);
+        return Optional.empty();
+    }
+}
 }
