@@ -12,7 +12,6 @@ import org.springframework.web.client.RestTemplate;
 @EnableCaching
 @EnableAsync
 public class CloudDashboardApplication {
-
     public static void main(String[] args) {
         // ADD THIS LINE
         System.setProperty("user.timezone", "UTC");
