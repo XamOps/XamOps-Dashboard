@@ -2,137 +2,234 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XamOps - GCP Waste Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        :root {
+            --primary-gradient: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
+            --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            --glass-bg: rgba(255, 255, 255, 0.95);
+            --glass-border: rgba(229, 231, 235, 0.8);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        [x-cloak] { display: none !important; }
+        .rotate-90 { transform: rotate(90deg); }
+        .transition-all { transition: all 0.3s ease-in-out; }
+        .header-gradient {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .kpi-card {
+            position: relative; overflow: hidden; background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 1rem;
+        }
+        .kpi-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .btn-primary {
+            background: var(--primary-gradient); border: none; color: white; transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+             box-shadow: 0 10px 15px -3px rgba(66, 133, 244, 0.4);
+        }
+        .service-group {
+            background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 1rem;
+        }
+        .resource-row:hover {
+            background: linear-gradient(90deg, rgba(66, 133, 244, 0.03) 0%, rgba(52, 168, 83, 0.08) 100%);
+        }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
-<body class="bg-gray-100">
-    <div class="flex h-screen">
-        <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
-        <main class="flex-1 flex flex-col p-6" x-data="gcpWaste()">
-            <header class="flex-shrink-0 mb-6">
-                <h1 class="text-2xl font-bold text-gray-800">GCP Waste Management</h1>
-            </header>
-            <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <div class="bg-white p-6 rounded-lg shadow-md">
-                     <p class="text-sm font-medium text-gray-500">Total Potential Savings</p>
-                     <p class="text-3xl font-bold text-green-600" x-text="`$${totalSavings.toFixed(2)}`"></p>
-                 </div>
-                 <div class="bg-white p-6 rounded-lg shadow-md">
-                     <p class="text-sm font-medium text-gray-500">Wasted Resources</p>
-                     <p class="text-3xl font-bold text-red-600" x-text="wasteItems.length"></p>
-                 </div>
-                 <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h3 class="text-lg font-bold text-gray-800 mb-4">Savings by Category</h3>
-                    <div class="h-48">
-                        <canvas id="savingsChart"></canvas>
-                    </div>
-                 </div>
-            </div>
+<body class="bg-gray-50">
 
-            <div class="flex-1 w-full bg-white rounded-lg shadow-md overflow-hidden">
-                <div class="overflow-x-auto h-full">
-                     <table class="w-full text-sm text-left text-gray-500">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th scope="col" class="px-6 py-3">Resource Name</th>
-                                <th scope="col" class="px-6 py-3">Type</th>
-                                <th scope="col" class="px-6 py-3">Location</th>
-                                <th scope="col" class="px-6 py-3 text-right">Potential Monthly Savings (USD)</th>
-                            </tr>
-                        </thead>
-                         <tbody>
-                            <template x-if="isLoading">
-                                <tr class="bg-white border-b animate-pulse" x-ref="loading" x-init="$el.setAttribute('x-for', 'i in 5')">
-                                    <td class="px-6 py-4" colspan="4"><div class="h-4 bg-gray-200 rounded"></div></td>
-                                </tr>
-                            </template>
-                            <template x-for="item in wasteItems" :key="item.resourceName">
-                                <tr class="bg-white border-b hover:bg-gray-50">
-                                    <td class="px-6 py-4 font-medium text-gray-900" x-text="item.resourceName"></td>
-                                    <td class="px-6 py-4" x-text="item.type"></td>
-                                    <td class="px-6 py-4" x-text="item.location"></td>
-                                    <td class="px-6 py-4 text-right font-medium text-green-600" x-text="`$${item.monthlySavings.toFixed(2)}`"></td>
-                                </tr>
-                            </template>
-                             <template x-if="!isLoading && wasteItems.length === 0">
-                                <tr>
-                                    <td colspan="4" class="text-center py-12 text-gray-500">No wasted resources found. Great job!</td>
-                                </tr>
-                            </template>
-                        </tbody>
-                     </table>
+<div class="flex">
+<aside class="fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200">
+    <div th:replace="~{fragments/_sidebar :: sidebar}"></div>
+</aside>
+    <div class="ml-64 flex-1">
+        <main class="flex-1 flex flex-col min-h-screen" x-data="gcpWaste()">
+            <header class="header-gradient h-20 flex items-center justify-between px-8 sticky top-0 z-10">
+                 <div class="flex items-center space-x-4">
+                     <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-yellow-500 rounded-xl flex items-center justify-center">
+                         <i class="fas fa-recycle text-white text-xl"></i>
+                     </div>
+                     <div>
+                         <h1 class="text-2xl font-bold text-gray-800">GCP Waste Management</h1>
+                         <p class="text-sm text-gray-600">Identify and eliminate unused cloud resources</p>
+                     </div>
+                 </div>
+                 <button @click="fetchWasteReport(true)" class="btn-primary flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isRefreshing">
+                     <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+                     <span x-text="isRefreshing ? 'Scanning...' : 'Scan Resources'"></span>
+                 </button>
+            </header>
+
+            <div class="flex-1 p-8 space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-gray-600 text-sm font-medium mb-2">Potential Savings</h3>
+                        <p class="text-4xl font-bold text-red-600 mb-1" x-text="isLoading ? '...' : formatCurrency(totalSavings)"></p>
+                        <p class="text-xs text-gray-500">per month</p>
+                    </div>
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-gray-600 text-sm font-medium mb-2">Wasted Resources</h3>
+                        <p class="text-4xl font-bold text-red-600 mb-1" x-text="isLoading ? '...' : wasteItems.length"></p>
+                        <p class="text-xs text-gray-500">items found</p>
+                    </div>
+                    <div class="kpi-card p-6 fade-in">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Savings by Category</h3>
+                        <div class="h-48"><canvas id="savingsChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div x-show="!isLoading && groupedResources.length === 0" x-cloak class="text-center py-20 px-8 rounded-2xl bg-white/80">
+                         <div class="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                             <i class="fas fa-leaf text-white text-3xl"></i>
+                         </div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">No Waste Found!</h3>
+                        <p class="text-gray-600">Your GCP environment is looking clean and optimized.</p>
+                    </div>
+
+                    <template x-for="group in groupedResources" :key="group.type">
+                        <div class="service-group fade-in">
+                            <div @click="group.open = !group.open" class="flex items-center justify-between p-6 cursor-pointer">
+                                <div class="flex items-center space-x-4 flex-1">
+                                    <i class="fas fa-chevron-right text-gray-400 w-5 text-center transition-all" :class="{'rotate-90': group.open}"></i>
+                                    <div class="w-12 h-12 flex items-center justify-center rounded-xl">
+                                        <img :src="'/icons/' + getServiceIcon(group.type)" :alt="group.type" class="w-full h-full rounded-xl object-cover">
+                                    </div>
+                                    <h3 class="font-bold text-gray-800 text-lg" x-text="group.type"></h3>
+                                    <div class="bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full" x-text="group.resources.length + ' items'"></div>
+                                </div>
+                                <div class="font-bold text-red-600" x-text="formatCurrency(group.totalSavings)"></div>
+                            </div>
+                            <div x-show="group.open" x-cloak class="bg-gray-50/50">
+                                <template x-for="resource in group.resources" :key="resource.resourceName">
+                                    <div class="resource-row border-t border-gray-200/50">
+                                        <div class="grid grid-cols-12 items-center p-6 pl-16 text-sm">
+                                            <div class="col-span-6">
+                                                <p class="font-bold text-gray-800" x-text="resource.resourceName"></p>
+                                            </div>
+                                            <div class="col-span-3 text-gray-600" x-text="resource.location"></div>
+                                            <div class="col-span-2 font-semibold text-green-600" x-text="formatCurrency(resource.monthlySavings)"></div>
+                                            <div class="col-span-1 text-right">
+                                                <button title="Delete" class="px-3 py-2 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700"><i class="fas fa-trash-alt"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </main>
     </div>
-    <script>
-        function gcpWaste() {
-            return {
-                isLoading: true,
-                accountId: sessionStorage.getItem('selectedAccountId'),
-                wasteItems: [],
-                savingsChart: null,
-                get totalSavings() {
-                    return this.wasteItems.reduce((sum, item) => sum + item.monthlySavings, 0);
-                },
-                init() {
-                    this.fetchWasteReport();
-                },
-                fetchWasteReport() {
-                    this.isLoading = true;
-                    fetch(`/api/gcp/optimization/waste-report?accountId=${this.accountId}`)
-                        .then(res => res.json())
-                        .then(data => { 
-                            this.wasteItems = data; 
-                            this.renderSavingsChart();
-                        })
-                        .catch(err => console.error('Failed to load GCP waste report:', err))
-                        .finally(() => this.isLoading = false);
-                },
-                renderSavingsChart() {
-                    const savingsByCategory = this.wasteItems.reduce((acc, resource) => {
-                        acc[resource.type] = (acc[resource.type] || 0) + resource.monthlySavings;
-                        return acc;
-                    }, {});
-
-                    const labels = Object.keys(savingsByCategory);
-                    const data = Object.values(savingsByCategory);
-
-                    const ctx = document.getElementById('savingsChart');
-                    if (!ctx) return;
-
-                    if (this.savingsChart) {
-                        this.savingsChart.destroy();
-                    }
-                    
-                    this.savingsChart = new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                data: data,
-                                backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6'],
-                                borderWidth: 0,
-                                hoverOffset: 6
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'bottom',
-                                    labels: { boxWidth: 12, font: { size: 11 } }
-                                }
-                            }
-                        }
-                    });
+<script>
+function gcpWaste() {
+    return {
+        isLoading: true,
+        isRefreshing: false,
+        accountId: sessionStorage.getItem('selectedAccountId'),
+        wasteItems: [],
+        savingsChart: null,
+        get totalSavings() {
+            return this.wasteItems.reduce((sum, item) => sum + item.monthlySavings, 0);
+        },
+        init() {
+            this.fetchWasteReport();
+        },
+        fetchWasteReport(forceRefresh = false) {
+            this.isRefreshing = forceRefresh;
+            this.isLoading = !forceRefresh;
+            fetch(`/api/gcp/optimization/waste-report?accountId=${this.accountId}`)
+                .then(res => res.json())
+                .then(data => { 
+                    this.wasteItems = data.map(item => ({ ...item, detailsOpen: false }));
+                    this.renderSavingsChart();
+                })
+                .catch(err => console.error('Failed to load GCP waste report:', err))
+                .finally(() => {
+                    this.isLoading = false;
+                    this.isRefreshing = false;
+                });
+        },
+        get groupedResources() {
+            if (!this.wasteItems) return [];
+            const groups = this.wasteItems.reduce((acc, res) => {
+                const key = res.type || 'Other';
+                if (!acc[key]) {
+                    acc[key] = { type: key, resources: [], open: true, totalSavings: 0 };
                 }
-            }
+                acc[key].resources.push(res);
+                acc[key].totalSavings += res.monthlySavings;
+                return acc;
+            }, {});
+            return Object.values(groups).sort((a, b) => b.totalSavings - a.totalSavings);
+        },
+        formatCurrency(value) {
+            return (value || 0).toLocaleString('en-IN', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+        },
+        getServiceIcon(serviceType) {
+            const iconMap = {
+                'Unused IP Address': 'gcp-icon.png', // Replace with a more specific icon if available
+                'Idle Cloud SQL Instance': 'gcp-cloud-sql.png',
+                'Unattached Persistent Disk': 'gcp-compute-engine.png', // Or a disk icon
+                'Idle Load Balancer': 'gcp-load-balancer.png',
+            };
+            return iconMap[serviceType] || 'default-icon.png';
+        },
+        renderSavingsChart() {
+            const savingsByCategory = this.wasteItems.reduce((acc, resource) => {
+                acc[resource.type] = (acc[resource.type] || 0) + resource.monthlySavings;
+                return acc;
+            }, {});
+
+            const labels = Object.keys(savingsByCategory);
+            const data = Object.values(savingsByCategory);
+
+            const ctx = document.getElementById('savingsChart');
+            if (!ctx) return;
+            if (this.savingsChart) this.savingsChart.destroy();
+            
+            this.savingsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#EA4335', '#FBBC05', '#34A853', '#4285F4', '#9333ea', '#ec4899'],
+                        borderWidth: 0,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
         }
-    </script>
+    }
+}
+</script>
 </body>
 </html>

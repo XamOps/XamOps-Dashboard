@@ -31,6 +31,7 @@ public class DashboardData {
         private int rdsInstances;
         private int route53Zones;
         private int loadBalancers;
+
     }
     
     @Data @AllArgsConstructor @NoArgsConstructor public static class ServiceQuotaInfo { private String serviceName; private String quotaName; private double limit; private double usage; private String status; }

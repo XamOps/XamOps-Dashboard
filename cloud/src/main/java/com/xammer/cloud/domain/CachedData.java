@@ -6,8 +6,8 @@ import javax.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Data // <-- Add this annotation
-@NoArgsConstructor // <-- Add this annotation
+@Data
+@NoArgsConstructor
 public class CachedData {
 
     @Id

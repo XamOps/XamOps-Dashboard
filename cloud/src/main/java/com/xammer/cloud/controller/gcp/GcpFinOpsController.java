@@ -1,96 +1,64 @@
 package com.xammer.cloud.controller.gcp;
 
 import com.xammer.cloud.dto.gcp.GcpFinOpsReportDto;
-import com.xammer.cloud.service.gcp.GcpCostService;
-import com.xammer.cloud.service.gcp.GcpDataService;
-import com.xammer.cloud.service.gcp.GcpOptimizationService;
+import com.xammer.cloud.service.gcp.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
 import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/gcp/finops")
+@Slf4j
 public class GcpFinOpsController {
 
     private final GcpCostService gcpCostService;
     private final GcpOptimizationService gcpOptimizationService;
     private final GcpDataService gcpDataService;
+    private final GcpBudgetService gcpBudgetService;
 
-    public GcpFinOpsController(GcpCostService gcpCostService,
-                               GcpOptimizationService gcpOptimizationService,
-                               GcpDataService gcpDataService) {
+    public GcpFinOpsController(GcpCostService gcpCostService, GcpOptimizationService gcpOptimizationService, GcpDataService gcpDataService, GcpBudgetService gcpBudgetService) {
         this.gcpCostService = gcpCostService;
         this.gcpOptimizationService = gcpOptimizationService;
         this.gcpDataService = gcpDataService;
+        this.gcpBudgetService = gcpBudgetService;
     }
 
     @GetMapping("/report")
     public CompletableFuture<ResponseEntity<GcpFinOpsReportDto>> getFinOpsReport(@RequestParam String accountId) {
-        // Fetch all data points in parallel
-        CompletableFuture<GcpFinOpsReportDto> billingSummaryFuture = gcpCostService.getBillingSummary(accountId)
-                .thenApply(summary -> {
-                    GcpFinOpsReportDto report = new GcpFinOpsReportDto();
-                    report.setBillingSummary(summary);
-                    double mtdSpend = summary.stream().mapToDouble(dto -> dto.getAmount()).sum();
-                    report.setMonthToDateSpend(mtdSpend);
-                    return report;
-                });
+        log.info("Starting GCP FinOps report for accountId: {}", accountId);
+        GcpFinOpsReportDto finalReport = new GcpFinOpsReportDto();
 
-        CompletableFuture<GcpFinOpsReportDto> costHistoryFuture = gcpCostService.getHistoricalCosts(accountId)
-                .thenApply(history -> {
-                    GcpFinOpsReportDto report = new GcpFinOpsReportDto();
-                    report.setCostHistory(history);
-                    // Set last month's spend from historical data
-                    // This part can be enhanced to be more precise
-                    if (history.size() > 1) {
-                        report.setLastMonthSpend(history.get(history.size() - 2).getAmount());
-                    }
-                    return report;
-                });
+        CompletableFuture<Void> billingFuture = gcpCostService.getBillingSummary(accountId).thenAccept(summary -> {
+            finalReport.setBillingSummary(summary);
+            double mtd = summary.stream().mapToDouble(dto -> dto.getAmount()).sum();
+            finalReport.setMonthToDateSpend(mtd);
+            finalReport.setForecastedSpend(gcpDataService.calculateForecastedSpend(mtd));
+        });
+
+        CompletableFuture<Void> historyFuture = gcpCostService.getHistoricalCosts(accountId).thenAccept(history -> {
+            finalReport.setCostHistory(history);
+            if (history.size() > 1) finalReport.setLastMonthSpend(history.get(history.size() - 2).getAmount());
+        });
         
-        CompletableFuture<GcpFinOpsReportDto> optimizationSummaryFuture = gcpOptimizationService.getOptimizationSummary(accountId)
-                .thenApply(optSummary -> {
-                    GcpFinOpsReportDto report = new GcpFinOpsReportDto();
-                    report.setOptimizationSummary(optSummary);
-                    return report;
-                });
-        
-        CompletableFuture<GcpFinOpsReportDto> rightsizingFuture = gcpOptimizationService.getRightsizingRecommendations(accountId)
-                .thenApply(recommendations -> {
-                    GcpFinOpsReportDto report = new GcpFinOpsReportDto();
-                    report.setRightsizingRecommendations(recommendations);
-                    return report;
-                });
+        String billingAccountId = "YOUR_BILLING_ACCOUNT_ID"; // <-- IMPORTANT: Replace placeholder
 
-        CompletableFuture<GcpFinOpsReportDto> wasteReportFuture = gcpOptimizationService.getWasteReport(accountId)
-                .thenApply(wasteItems -> {
-                    GcpFinOpsReportDto report = new GcpFinOpsReportDto();
-                    report.setWastedResources(wasteItems);
-                    return report;
-                });
-
-        // Combine all futures
-        return CompletableFuture.allOf(billingSummaryFuture, costHistoryFuture, optimizationSummaryFuture, rightsizingFuture, wasteReportFuture)
-                .thenApply(v -> {
-                    GcpFinOpsReportDto finalReport = new GcpFinOpsReportDto();
-                    // Merge data from all futures into the final report
-                    finalReport.setBillingSummary(billingSummaryFuture.join().getBillingSummary());
-                    finalReport.setMonthToDateSpend(billingSummaryFuture.join().getMonthToDateSpend());
-                    finalReport.setCostHistory(costHistoryFuture.join().getCostHistory());
-                    finalReport.setLastMonthSpend(costHistoryFuture.join().getLastMonthSpend());
-                    finalReport.setOptimizationSummary(optimizationSummaryFuture.join().getOptimizationSummary());
-                    finalReport.setRightsizingRecommendations(rightsizingFuture.join().getRightsizingRecommendations());
-                    finalReport.setWastedResources(wasteReportFuture.join().getWastedResources());
-                    
-                    // Calculate forecasted spend
-                    double mtd = finalReport.getMonthToDateSpend();
-                    finalReport.setForecastedSpend(gcpDataService.calculateForecastedSpend(mtd));
-                    
-                    return ResponseEntity.ok(finalReport);
-                });
+        return CompletableFuture.allOf(
+            billingFuture, historyFuture,
+            gcpOptimizationService.getOptimizationSummary(accountId).thenAccept(finalReport::setOptimizationSummary),
+            gcpOptimizationService.getRightsizingRecommendations(accountId).thenAccept(finalReport::setRightsizingRecommendations),
+            gcpOptimizationService.getWasteReport(accountId).thenAccept(finalReport::setWastedResources),
+            gcpBudgetService.getBudgets(billingAccountId).thenAccept(finalReport::setBudgets),
+            gcpOptimizationService.getTaggingCompliance(accountId).thenAccept(finalReport::setTaggingCompliance)
+        ).thenApply(v -> {
+            log.info("Successfully aggregated GCP FinOps report for accountId: {}", accountId);
+            return ResponseEntity.ok(finalReport);
+        }).exceptionally(ex -> {
+            log.error("Failed to generate GCP FinOps report for accountId: {}", accountId, ex);
+            return ResponseEntity.internalServerError().build();
+        });
     }
 }

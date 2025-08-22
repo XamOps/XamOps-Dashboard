@@ -1,4 +1,3 @@
-// File: src/main/java/com/xammer/cloud/service/gcp/GcpDataService.java
 package com.xammer.cloud.service.gcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,6 +24,8 @@ import com.xammer.cloud.dto.GcpAccountRequestDto;
 import com.xammer.cloud.dto.gcp.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import com.google.cloud.compute.v1.ForwardingRule;
+import com.google.cloud.compute.v1.ForwardingRulesClient;
 
 import java.io.IOException;
 import java.net.URL;
@@ -138,6 +139,15 @@ public class GcpDataService {
                 return new DashboardData.IamResources(0, 0, 0, 0);
             });
 
+        // --- COST CONSISTENCY FIX: START ---
+        // Fetch the authoritative, unfiltered MTD spend from the central cost service
+        CompletableFuture<Double> unfilteredMtdSpendFuture = gcpCostService.getUnfilteredMonthToDateSpend(gcpProjectId)
+            .exceptionally(ex -> {
+                log.error("Failed to get unfiltered MTD spend for project {}: {}", gcpProjectId, ex.getMessage());
+                return 0.0;
+            });
+        // --- COST CONSISTENCY FIX: END ---
+        
         CompletableFuture<List<GcpCostDto>> costHistoryFuture = gcpCostService.getHistoricalCosts(gcpProjectId)
             .exceptionally(ex -> {
                 log.error("Failed to get cost history for project {}: {}", gcpProjectId, ex.getMessage());
@@ -180,7 +190,7 @@ public class GcpDataService {
         return CompletableFuture.allOf(
             resourcesFuture, securityFindingsFuture, iamResourcesFuture, costHistoryFuture,
             billingSummaryFuture, wasteReportFuture, rightsizingFuture, savingsSummaryFuture,
-            optimizationSummaryFuture, regionStatusFuture
+            optimizationSummaryFuture, regionStatusFuture, unfilteredMtdSpendFuture // Added new future to the join
         ).thenApply(v -> {
             log.info("--- ALL EXPANDED GCP ASYNC DATA FETCHES COMPLETE, assembling DTO for project {} ---", gcpProjectId);
 
@@ -203,19 +213,26 @@ public class GcpDataService {
             inventory.setKubernetes((int) counts.getOrDefault("Kubernetes Engine", 0L).longValue());
             inventory.setVpc((int) counts.getOrDefault("VPC Network", 0L).longValue());
             inventory.setRoute53Zones((int) counts.getOrDefault("Cloud DNS", 0L).longValue());
+            inventory.setLoadBalancers((int) counts.getOrDefault("Load Balancer", 0L).longValue());
+
             data.setResourceInventory(inventory);
-            double currentMtdSpend = data.getBillingSummary().stream().mapToDouble(GcpCostDto::getAmount).sum();
+            
+            // --- COST CONSISTENCY FIX: START ---
+            // Use the authoritative MTD spend from the new future
+            double currentMtdSpend = unfilteredMtdSpendFuture.join();
             data.setMonthToDateSpend(currentMtdSpend);
-            LocalDate today = LocalDate.now();
-            int daysInMonth = today.lengthOfMonth();
-            int currentDay = today.getDayOfMonth();
-            data.setForecastedSpend(currentDay > 0 ? (currentMtdSpend / currentDay) * daysInMonth : 0.0);
-            String lastMonthStr = today.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            
+            // Recalculate forecast based on the consistent MTD spend
+            data.setForecastedSpend(calculateForecastedSpend(currentMtdSpend));
+            // --- COST CONSISTENCY FIX: END ---
+
+            String lastMonthStr = LocalDate.now().minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
             double lastMonthSpend = data.getCostHistory().stream()
                     .filter(c -> c.getName().equals(lastMonthStr))
                     .mapToDouble(GcpCostDto::getAmount)
                     .findFirst().orElse(0.0);
             data.setLastMonthSpend(lastMonthSpend);
+            
             data.setSecurityScore(gcpSecurityService.calculateSecurityScore(securityFindings));
             List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
                 .collect(Collectors.groupingBy(GcpSecurityFinding::getCategory, Collectors.counting()))
@@ -236,50 +253,81 @@ public class GcpDataService {
     private GcpResourceDto mapInstanceToDto(Instance instance) {
         String zoneUrl = instance.getZone();
         String zone = zoneUrl.substring(zoneUrl.lastIndexOf('/') + 1);
-        return new GcpResourceDto(String.valueOf(instance.getId()), instance.getName(),
-                "Compute Engine", zone, instance.getStatus());
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(String.valueOf(instance.getId()));
+        dto.setName(instance.getName());
+        dto.setType("Compute Engine");
+        dto.setLocation(zone);
+        dto.setStatus(instance.getStatus());
+        return dto;
     }
 
     private GcpResourceDto mapBucketToDto(Bucket bucket) {
-        return new GcpResourceDto(bucket.getName(), bucket.getName(),
-                "Cloud Storage", bucket.getLocation(), "ACTIVE");
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(bucket.getName());
+        dto.setName(bucket.getName());
+        dto.setType("Cloud Storage");
+        dto.setLocation(bucket.getLocation());
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     private GcpResourceDto mapGkeToDto(Cluster cluster) {
-        return new GcpResourceDto(cluster.getId(), cluster.getName(),
-                "Kubernetes Engine", cluster.getLocation(), cluster.getStatus().toString());
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(cluster.getId());
+        dto.setName(cluster.getName());
+        dto.setType("Kubernetes Engine");
+        dto.setLocation(cluster.getLocation());
+        dto.setStatus(cluster.getStatus().toString());
+        return dto;
     }
 
     private GcpResourceDto mapSqlToDto(DatabaseInstance instance) {
-        return new GcpResourceDto(instance.getName(), instance.getName(),
-                "Cloud SQL", instance.getRegion(), instance.getState().toString());
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(instance.getName());
+        dto.setName(instance.getName());
+        dto.setType("Cloud SQL");
+        dto.setLocation(instance.getRegion());
+        dto.setStatus(instance.getState().toString());
+        return dto;
     }
 
     private GcpResourceDto mapVpcToDto(Network network) {
-        return new GcpResourceDto(String.valueOf(network.getId()), network.getName(),
-                "VPC Network", "global", "ACTIVE");
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(String.valueOf(network.getId()));
+        dto.setName(network.getName());
+        dto.setType("VPC Network");
+        dto.setLocation("global");
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     private GcpResourceDto mapDnsToDto(ManagedZone zone) {
-        return new GcpResourceDto(String.valueOf(zone.getId()), zone.getDnsName(),
-                "Cloud DNS", "global", "ACTIVE");
+        GcpResourceDto dto = new GcpResourceDto();
+        dto.setId(String.valueOf(zone.getId()));
+        dto.setName(zone.getDnsName());
+        dto.setType("Cloud DNS");
+        dto.setLocation("global");
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     public CompletableFuture<List<GcpResourceDto>> getAllResources(String gcpProjectId) {
-        log.info("Starting to fetch all GCP resources for project: {}", gcpProjectId);
-        CompletableFuture<List<GcpResourceDto>> instancesFuture = CompletableFuture.supplyAsync(() -> getComputeInstances(gcpProjectId), executor);
-        CompletableFuture<List<GcpResourceDto>> bucketsFuture = CompletableFuture.supplyAsync(() -> getStorageBuckets(gcpProjectId), executor);
-        CompletableFuture<List<GcpResourceDto>> gkeFuture = CompletableFuture.supplyAsync(() -> getGkeClusters(gcpProjectId), executor);
-        CompletableFuture<List<GcpResourceDto>> sqlFuture = CompletableFuture.supplyAsync(() -> getCloudSqlInstances(gcpProjectId), executor);
-        CompletableFuture<List<GcpResourceDto>> vpcFuture = CompletableFuture.supplyAsync(() -> getVpcNetworks(gcpProjectId), executor);
-        CompletableFuture<List<GcpResourceDto>> dnsFuture = CompletableFuture.supplyAsync(() -> getDnsZones(gcpProjectId), executor);
+    log.info("Starting to fetch all GCP resources for project: {}", gcpProjectId);
+    CompletableFuture<List<GcpResourceDto>> instancesFuture = CompletableFuture.supplyAsync(() -> getComputeInstances(gcpProjectId), executor);
+    CompletableFuture<List<GcpResourceDto>> bucketsFuture = CompletableFuture.supplyAsync(() -> getStorageBuckets(gcpProjectId), executor);
+    CompletableFuture<List<GcpResourceDto>> gkeFuture = CompletableFuture.supplyAsync(() -> getGkeClusters(gcpProjectId), executor);
+    CompletableFuture<List<GcpResourceDto>> sqlFuture = CompletableFuture.supplyAsync(() -> getCloudSqlInstances(gcpProjectId), executor);
+    CompletableFuture<List<GcpResourceDto>> vpcFuture = CompletableFuture.supplyAsync(() -> getVpcNetworks(gcpProjectId), executor);
+    CompletableFuture<List<GcpResourceDto>> dnsFuture = CompletableFuture.supplyAsync(() -> getDnsZones(gcpProjectId), executor);
+    CompletableFuture<List<GcpResourceDto>> loadBalancersFuture = CompletableFuture.supplyAsync(() -> getLoadBalancers(gcpProjectId), executor); 
 
-        return CompletableFuture.allOf(instancesFuture, bucketsFuture, gkeFuture, sqlFuture, vpcFuture, dnsFuture)
-                .thenApply(v -> Stream.of(instancesFuture.join(), bucketsFuture.join(), gkeFuture.join(),
-                                sqlFuture.join(), vpcFuture.join(), dnsFuture.join())
-                        .flatMap(List::stream)
-                        .collect(Collectors.toList()));
-    }
+    return CompletableFuture.allOf(instancesFuture, bucketsFuture, gkeFuture, sqlFuture, vpcFuture, dnsFuture, loadBalancersFuture) // The loadBalancersFuture was missing here
+            .thenApply(v -> Stream.of(instancesFuture.join(), bucketsFuture.join(), gkeFuture.join(),
+                            sqlFuture.join(), vpcFuture.join(), dnsFuture.join(), loadBalancersFuture.join()) // and also here
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList()));
+}
 
     public CompletableFuture<DashboardData.IamResources> getIamResources(String gcpProjectId) {
         log.info("Attempting to get IAM resources for project: {}", gcpProjectId);
@@ -524,8 +572,7 @@ public class GcpDataService {
             return List.of();
         }
     }
-    // Add this new public method inside your GcpDataService.java class
-
+    
     public double calculateForecastedSpend(double monthToDateSpend) {
         LocalDate today = LocalDate.now();
         int daysInMonth = today.lengthOfMonth();
@@ -535,4 +582,30 @@ public class GcpDataService {
         }
         return 0.0;
     }
+    private List<GcpResourceDto> getLoadBalancers(String gcpProjectId) {
+    log.info("Fetching Load Balancers for project: {}", gcpProjectId);
+    Optional<ForwardingRulesClient> clientOpt = gcpClientProvider.getForwardingRulesClient(gcpProjectId);
+    if (clientOpt.isEmpty()) return List.of();
+    try (ForwardingRulesClient client = clientOpt.get()) {
+        return StreamSupport.stream(client.aggregatedList(gcpProjectId).iterateAll().spliterator(), false)
+                .flatMap(entry -> entry.getValue().getForwardingRulesList().stream())
+                .map(this::mapForwardingRuleToDto)
+                .collect(Collectors.toList());
+    } catch (Exception e) {
+        log.error("Error fetching Load Balancers for project: {}", gcpProjectId, e);
+        return List.of();
+    }
+}
+
+private GcpResourceDto mapForwardingRuleToDto(ForwardingRule forwardingRule) {
+    GcpResourceDto dto = new GcpResourceDto();
+    dto.setId(String.valueOf(forwardingRule.getId()));
+    dto.setName(forwardingRule.getName());
+    dto.setType("Load Balancer");
+    String regionUrl = forwardingRule.getRegion();
+    String region = regionUrl.substring(regionUrl.lastIndexOf('/') + 1);
+    dto.setLocation(region);
+    dto.setStatus("ACTIVE"); // Forwarding rules don't have a status in the same way as instances
+    return dto;
+}
 }

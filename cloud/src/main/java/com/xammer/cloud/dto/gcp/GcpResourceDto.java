@@ -12,6 +12,17 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class GcpResourceDto {
     /**
+     * The tags associated with the resource (key-value pairs).
+     */
+    private java.util.Map<String, String> tags;
+
+    public java.util.Map<String, String> getTags() {
+        return tags;
+    }
+    public void setTags(java.util.Map<String, String> tags) {
+        this.tags = tags;
+    }
+    /**
      * The unique identifier of the resource (e.g., instance ID, bucket name).
      */
     private String id;

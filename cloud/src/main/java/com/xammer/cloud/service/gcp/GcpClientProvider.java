@@ -1,48 +1,31 @@
 package com.xammer.cloud.service.gcp;
 
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
-import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.dns.Dns;
 import com.google.api.services.dns.DnsScopes;
 import com.google.api.services.sqladmin.SQLAdmin;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
-
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryOptions;
-
-import com.google.cloud.compute.v1.InstancesClient;
-import com.google.cloud.compute.v1.InstancesSettings;
-import com.google.cloud.compute.v1.NetworksClient;
-import com.google.cloud.compute.v1.NetworksSettings;
-import com.google.cloud.compute.v1.SubnetworksClient;
-import com.google.cloud.compute.v1.SubnetworksSettings;
-
-
-import com.google.cloud.monitoring.v3.MetricServiceClient;
-import com.google.cloud.monitoring.v3.MetricServiceSettings;
-
-import com.google.cloud.recommender.v1.RecommenderClient;
-import com.google.cloud.recommender.v1.RecommenderSettings;
-
-import com.google.cloud.resourcemanager.v3.ProjectsClient;
-import com.google.cloud.resourcemanager.v3.ProjectsSettings;
-
-import com.google.cloud.securitycenter.v1.SecurityCenterClient;
-import com.google.cloud.securitycenter.v1.SecurityCenterSettings;
-
-// import com.google.cloud.sql.v1.SqlInstancesServiceClient;
-// import com.google.cloud.sql.v1.SqlInstancesServiceSettings;
-
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
-
+import com.google.cloud.billing.budgets.v1.BudgetServiceClient;
+import com.google.cloud.billing.budgets.v1.BudgetServiceSettings;
+import com.google.cloud.compute.v1.*;
 import com.google.cloud.container.v1.ClusterManagerClient;
 import com.google.cloud.container.v1.ClusterManagerSettings;
-
+import com.google.cloud.monitoring.v3.MetricServiceClient;
+import com.google.cloud.monitoring.v3.MetricServiceSettings;
+import com.google.cloud.recommender.v1.RecommenderClient;
+import com.google.cloud.recommender.v1.RecommenderSettings;
+import com.google.cloud.resourcemanager.v3.ProjectsClient;
+import com.google.cloud.resourcemanager.v3.ProjectsSettings;
+import com.google.cloud.securitycenter.v2.SecurityCenterClient; // Correct V2 import
+import com.google.cloud.securitycenter.v2.SecurityCenterSettings; // Correct V2 import
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.repository.CloudAccountRepository;
-
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -73,17 +56,30 @@ public class GcpClientProvider {
                 log.error("Credentials for GCP project ID: {} are missing.", gcpProjectId);
                 return Optional.empty();
             }
-            GoogleCredentials credentials = GoogleCredentials.fromStream(
+            return Optional.of(GoogleCredentials.fromStream(
                     new ByteArrayInputStream(account.getGcpServiceAccountKey().getBytes()))
-                    .createScoped(
-                            "https://www.googleapis.com/auth/cloud-platform"
-                    );
-            return Optional.of(credentials);
+                    .createScoped("https://www.googleapis.com/auth/cloud-platform"));
         } catch (IOException e) {
             log.error("Failed to create GoogleCredentials for project ID: {}", gcpProjectId, e);
             return Optional.empty();
         }
     }
+
+    public Optional<SecurityCenterClient> getSecurityCenterV2Client(String gcpProjectId) {
+        return getCredentials(gcpProjectId).map(credentials -> {
+            try {
+                SecurityCenterSettings settings = SecurityCenterSettings.newBuilder()
+                        .setCredentialsProvider(() -> credentials)
+                        .build();
+                return SecurityCenterClient.create(settings);
+            } catch (IOException e) {
+                log.error("Failed to create SecurityCenterClient V2 for project ID: {}", gcpProjectId, e);
+                return null;
+            }
+        });
+    }
+
+    // --- Other client provider methods ---
 
     public Optional<InstancesClient> getInstancesClient(String gcpProjectId) {
         return getCredentials(gcpProjectId).map(credentials -> {
@@ -126,20 +122,6 @@ public class GcpClientProvider {
                 return RecommenderClient.create(settings);
             } catch (IOException e) {
                 log.error("Failed to create RecommenderClient for project ID: {}", gcpProjectId, e);
-                return null;
-            }
-        });
-    }
-
-    public Optional<SecurityCenterClient> getSecurityCenterClient(String gcpProjectId) {
-        return getCredentials(gcpProjectId).map(credentials -> {
-            try {
-                SecurityCenterSettings settings = SecurityCenterSettings.newBuilder()
-                        .setCredentialsProvider(() -> credentials)
-                        .build();
-                return SecurityCenterClient.create(settings);
-            } catch (IOException e) {
-                log.error("Failed to create SecurityCenterClient for project ID: {}", gcpProjectId, e);
                 return null;
             }
         });
@@ -215,23 +197,6 @@ public class GcpClientProvider {
         });
     }
 
-    // public Optional<SqlInstancesServiceClient> getSqlInstancesServiceClient(String gcpProjectId) {
-    //     return getCredentials(gcpProjectId).map(credentials -> {
-    //         try {
-    //             SqlInstancesServiceSettings settings = SqlInstancesServiceSettings.newBuilder()
-    //                     .setCredentialsProvider(() -> credentials)
-    //                     .build();
-    //             return SqlInstancesServiceClient.create(settings);
-    //         } catch (IOException e) {
-    //             log.error("Failed to create SqlInstancesServiceClient for project ID: {}", gcpProjectId, e);
-    //             return null;
-    //         }
-    //     });
-    // }
-
-    /**
-     * Method to create SQLAdmin client (Google API client) using legacy SQL Admin API.
-     */
     public Optional<SQLAdmin> getSqlAdminClient(String gcpProjectId) {
         try {
             Optional<GoogleCredentials> credsOpt = getCredentials(gcpProjectId);
@@ -240,15 +205,14 @@ public class GcpClientProvider {
             }
             GoogleCredentials credentials = credsOpt.get();
             var httpTransport = GoogleNetHttpTransport.newTrustedTransport();
-            var jsonFactory = JacksonFactory.getDefaultInstance();
+            var jsonFactory = new GsonFactory();
 
             SQLAdmin sqlAdmin = new SQLAdmin.Builder(
                     httpTransport,
                     jsonFactory,
                     new HttpCredentialsAdapter(credentials))
-                    .setApplicationName("your-application-name") // Replace as needed
+                    .setApplicationName("xamops-app")
                     .build();
-
             return Optional.of(sqlAdmin);
         } catch (GeneralSecurityException | IOException e) {
             log.error("Failed to create SQLAdmin client for project ID: {}", gcpProjectId, e);
@@ -263,23 +227,47 @@ public class GcpClientProvider {
     }
 
     public Optional<Dns> getDnsZonesClient(String gcpProjectId) {
-    try {
+        try {
+            Optional<GoogleCredentials> credsOpt = getCredentials(gcpProjectId);
+            if (credsOpt.isEmpty()) return Optional.empty();
+            GoogleCredentials credentials = credsOpt.get().createScoped(DnsScopes.all());
+            var httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+            var jsonFactory = new GsonFactory();
+            Dns dns = new Dns.Builder(httpTransport, jsonFactory, new HttpCredentialsAdapter(credentials))
+                    .setApplicationName("xamops-app")
+                    .build();
+            return Optional.of(dns);
+        } catch (Exception e) {
+            log.error("Failed to create Dns client for project ID: {}", gcpProjectId, e);
+            return Optional.empty();
+        }
+    }
+
+    public BudgetServiceClient getBudgetServiceClient(String gcpProjectId) throws IOException {
         Optional<GoogleCredentials> credsOpt = getCredentials(gcpProjectId);
-        if (credsOpt.isEmpty()) return Optional.empty();
-
-        GoogleCredentials credentials = credsOpt.get()
-                .createScoped(DnsScopes.all());
-
-        var httpTransport = GoogleNetHttpTransport.newTrustedTransport();
-        var jsonFactory = JacksonFactory.getDefaultInstance();
-
-        Dns dns = new Dns.Builder(httpTransport, jsonFactory, new HttpCredentialsAdapter(credentials))
-                .setApplicationName("your-application-name") // Replace if needed
+        if (credsOpt.isEmpty()) {
+            throw new IOException("GoogleCredentials not found for project ID: " + gcpProjectId);
+        }
+        BudgetServiceSettings budgetServiceSettings = BudgetServiceSettings.newBuilder()
+                .setCredentialsProvider(com.google.api.gax.core.FixedCredentialsProvider.create(credsOpt.get()))
                 .build();
+        return BudgetServiceClient.create(budgetServiceSettings);
+    }
+    public Optional<ForwardingRulesClient> getForwardingRulesClient(String gcpProjectId) {
+    Optional<GoogleCredentials> credentialsOpt = getCredentials(gcpProjectId);
+    if (credentialsOpt.isEmpty()) {
+        log.error("Failed to get credentials for project {}", gcpProjectId);
+        return Optional.empty();
+    }
 
-        return Optional.of(dns);
-    } catch (Exception e) {
-        log.error("Failed to create Dns client for project ID: {}", gcpProjectId, e);
+    try {
+        GoogleCredentials credentials = credentialsOpt.get();
+        ForwardingRulesSettings settings = ForwardingRulesSettings.newBuilder()
+                .setCredentialsProvider(() -> credentials)
+                .build();
+        return Optional.of(ForwardingRulesClient.create(settings));
+    } catch (IOException e) {
+        log.error("Failed to create ForwardingRulesClient for project {}", gcpProjectId, e);
         return Optional.empty();
     }
 }
