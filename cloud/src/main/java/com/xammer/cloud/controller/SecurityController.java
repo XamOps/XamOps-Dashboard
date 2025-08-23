@@ -43,12 +43,15 @@ public class SecurityController {
     }
 
     @GetMapping("/findings")
-    public CompletableFuture<ResponseEntity<List<DashboardData.SecurityFinding>>> getSecurityFindings(@RequestParam String accountId) {
+    public CompletableFuture<ResponseEntity<List<DashboardData.SecurityFinding>>> getSecurityFindings(
+            @RequestParam String accountId,
+            @RequestParam(defaultValue = "false") boolean forceRefresh) { // <-- FIX: Added forceRefresh parameter
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
-        return cloudListService.getRegionStatusForAccount(account, true)
-                .thenCompose((List<DashboardData.RegionStatus> activeRegions) -> securityService.getComprehensiveSecurityFindings(account, activeRegions, true))
+        // FIX: Pass the forceRefresh parameter down to the service calls
+        return cloudListService.getRegionStatusForAccount(account, forceRefresh)
+                .thenCompose((List<DashboardData.RegionStatus> activeRegions) -> securityService.getComprehensiveSecurityFindings(account, activeRegions, forceRefresh))
                 .thenApply(ResponseEntity::ok)
                 .exceptionally(ex -> {
                     logger.error("Error fetching security findings for account {}", accountId, ex);
@@ -61,6 +64,7 @@ public class SecurityController {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
+        // For exports, always get the freshest data.
         return cloudListService.getRegionStatusForAccount(account, true)
                 .thenCompose((List<DashboardData.RegionStatus> activeRegions) -> securityService.getComprehensiveSecurityFindings(account, activeRegions, true))
                 .thenApply(findings -> {

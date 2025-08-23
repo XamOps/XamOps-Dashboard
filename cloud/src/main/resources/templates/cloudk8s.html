@@ -41,6 +41,13 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
         }
+        .placeholder-highlight {
+            background-color: #fef3c7;
+            color: #92400e;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -217,47 +224,87 @@
                         <button @click="isHelpModalOpen = false" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
                     </div>
                     <div class="space-y-6 mt-6">
-                         <div>
-                             <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 1:</span> Ensure a Node Group Exists</h4>
-                             <p class="text-sm text-gray-600 mt-1">Your cluster needs worker nodes to run the monitoring agent. If you don't have a node group, create one with this command:</p>
-                             <div class="code-block mt-2 text-sm">
-                                 <code x-text="'eksctl create nodegroup --cluster=' + (selectedCluster ? selectedCluster.name : 'YOUR_CLUSTER_NAME') + ' --region=' + (selectedCluster ? selectedCluster.region : 'YOUR_REGION') + ' --name standard-workers --node-type t3.medium --nodes 2'"></code>
-                             </div>
-                         </div>
-                         <div>
-                             <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 2:</span> Authorize XamOps IAM Role</h4>
-                             <p class="text-sm text-gray-600 mt-1">Run <code class="bg-gray-200 text-gray-800 px-1 rounded">kubectl edit configmap aws-auth -n kube-system</code> and add the following snippet under the `mapRoles` section. Your file may already contain other roles.</p>
-                             <div class="code-block mt-2 text-sm">
-<pre><code># Your aws-auth-cm.yaml should look something like this.
-# Add the '- rolearn:' section below if it's not already there.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: aws-auth
-  namespace: kube-system
-data:
-  mapRoles: |
-    # ADD THIS PART
-    - rolearn: arn:aws:iam::<span x-text="selectedAccountId || 'YOUR_AWS_ACCOUNT_ID'"></span>:role/XamOpsReadOnlyRole-local
-      username: xamops-automation
-      groups:
-        - system:masters
-    # Your existing node group role may be here, leave it as is.
-    - rolearn: arn:aws:iam::xxxxxxxxxxxx:role/your-eks-node-role
-      username: system:node:{{EC2PrivateDNSName}}
-      groups:
-        - system:bootstrappers
-        - system:nodes</code></pre>
-                             </div>
-                         </div>
-                         <div>
-                             <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 3:</span> Deploy the Monitoring Agent</h4>
-                             <p class="text-sm text-gray-600 mt-1">Run the following command from the same machine where this application is running (e.g., your local terminal):</p>
-                             <div class="code-block mt-2 text-sm">
-                                 <code x-text="'curl -X POST &quot;' + appBaseUrl + '/api/eks/' + (selectedCluster ? selectedCluster.name : 'YOUR_CLUSTER_NAME') + '/enable-monitoring?accountId=' + (selectedAccountId || 'YOUR_AWS_ACCOUNT_ID') + '&amp;region=' + (selectedCluster ? selectedCluster.region : 'YOUR_REGION') + '&quot;'"></code>
-                             </div>
-                             <p class="text-sm text-gray-600 mt-2">After running the command, wait 5-10 minutes and then refresh this page.</p>
-                         </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 1:</span> Check for an Existing Node Group</h4>
+                            <p class="text-sm text-gray-600 mt-1">Before deploying the monitoring agent, ensure your EKS cluster has a node group where the agent can run. You can check for existing node groups with the following command:</p>
+                            <div class="code-block mt-2 text-sm">
+                                <code>eksctl get nodegroup --cluster=<span class="placeholder-highlight">your-cluster-name</span> --region=<span class="placeholder-highlight">your-region</span></code>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                <strong>Replace:</strong><br>
+                                • <span class="placeholder-highlight">your-cluster-name</span> - Your actual EKS cluster name<br>
+                                • <span class="placeholder-highlight">your-region</span> - AWS region where your cluster is deployed (e.g., ap-south-1, us-east-1)
+                            </p>
+                            <p class="text-sm text-gray-600 mt-1">If no node group is found, you will need to create one using eksctl or AWS Console.</p>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 2:</span> Attach Required IAM Policy</h4>
+                            <p class="text-sm text-gray-600 mt-1">The worker nodes in your cluster need permission to send metrics to CloudWatch. Attach the <code>CloudWatchAgentServerPolicy</code> to your node instance role using the AWS CLI:</p>
+                            <div class="code-block mt-2 text-sm">
+                                <pre><code>aws iam attach-role-policy \
+--policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy \
+--role-name <span class="placeholder-highlight">your-node-instance-role-name</span></code></pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                <strong>Replace:</strong><br>
+                                • <span class="placeholder-highlight">your-node-instance-role-name</span> - Your EKS node instance role name (typically starts with "eksctl-")
+                            </p>
+                            <p class="text-sm text-gray-600 mt-1">You can find your node instance role name in the AWS console under <strong>IAM > Roles</strong> or by checking your node group configuration.</p>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 3:</span> Deploy the CloudWatch Agent and Fluent Bit</h4>
+                            <p class="text-sm text-gray-600 mt-1">Next, download and deploy the necessary monitoring agents to your cluster. This is done by applying a pre-configured YAML file from AWS.</p>
+                            <p class="text-sm text-gray-600 mt-1">First, set your cluster name and region as environment variables:</p>
+                            <div class="code-block mt-2 text-sm">
+                                <pre><code>ClusterName='<span class="placeholder-highlight">your-cluster-name</span>'
+RegionName='<span class="placeholder-highlight">your-region</span>'
+HttpServer='On'
+HttpPort='2020'
+ReadHead='Off'
+ReadTail='On'</code></pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                <strong>Replace:</strong><br>
+                                • <span class="placeholder-highlight">your-cluster-name</span> - Your actual EKS cluster name<br>
+                                • <span class="placeholder-highlight">your-region</span> - AWS region where your cluster is deployed
+                            </p>
+                            <p class="text-sm text-gray-600 mt-1">Then, download, configure, and apply the manifest (clean up any old file first):</p>
+                            <div class="code-block mt-2 text-sm">
+                                <pre><code># Clean up any old file
+rm -f cwagent-fluent-bit-quickstart.yaml
+
+# Download the latest manifest
+curl -O https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/quickstart/cwagent-fluent-bit-quickstart.yaml
+
+# Apply substitutions
+sed -i -e "s/{{cluster_name}}/$ClusterName/g" -e "s/{{region_name}}/$RegionName/g" -e "s/{{http_server_toggle}}/\"$HttpServer\"/g" -e "s/{{http_server_port}}/\"$HttpPort\"/g" -e "s/{{read_from_head}}/\"$ReadHead\"/g" -e "s/{{read_from_tail}}/\"$ReadTail\"/g" cwagent-fluent-bit-quickstart.yaml
+
+# Apply the configured manifest
+kubectl apply -f cwagent-fluent-bit-quickstart.yaml</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 4:</span> Patch the Agent Configuration</h4>
+                            <p class="text-sm text-gray-600 mt-1">After deploying the agents, you need to patch the <code>cwagentconfig</code> ConfigMap to ensure the correct cluster name is being used. This is a crucial step for the monitoring data to appear in the correct CloudWatch Log Group.</p>
+                            <p class="text-sm text-gray-600 mt-1">Execute the following <code>kubectl patch</code> command:</p>
+                            <div class="code-block mt-2 text-sm">
+                                <pre><code>kubectl patch configmap cwagentconfig -n amazon-cloudwatch -p '{"data":{"cwagentconfig.json":"{\n  \"agent\": {\n    \"region\": \"<span class="placeholder-highlight">your-region</span>\"\n  },\n  \"logs\": {\n    \"metrics_collected\": {\n      \"kubernetes\": {\n        \"cluster_name\": \"<span class="placeholder-highlight">your-cluster-name</span>\",\n        \"metrics_collection_interval\": 60\n      }\n    },\n    \"force_flush_interval\": 5\n  }\n}"}}'</code></pre>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">
+                                <strong>Replace:</strong><br>
+                                • <span class="placeholder-highlight">your-region</span> - AWS region where your cluster is deployed<br>
+                                • <span class="placeholder-highlight">your-cluster-name</span> - Your actual EKS cluster name
+                            </p>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800"><span class="text-blue-600 font-bold">Step 5:</span> Restart the DaemonSet</h4>
+                            <p class="text-sm text-gray-600 mt-1">Finally, restart the <code>cloudwatch-agent</code> DaemonSet to apply the configuration changes and the new IAM role permissions:</p>
+                            <div class="code-block mt-2 text-sm">
+                                <code>kubectl rollout restart daemonset cloudwatch-agent -n amazon-cloudwatch</code>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-2">After completing these steps, it may take a few minutes for the monitoring data to start appearing in your CloudWatch console and on the XamOps dashboard.</p>
+                            <p class="text-sm text-blue-600 font-semibold mt-2">Note: Make sure your kubectl context is configured to point to your EKS cluster before running these commands.</p>
+                        </div>
                     </div>
                 </div>
             </div>

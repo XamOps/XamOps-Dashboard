@@ -65,11 +65,15 @@ public class PerformanceInsightsService {
     }
 
     public List<PerformanceInsightDto> getInsights(String accountId, String severity, boolean forceRefresh) {
-        String cacheKey = "performanceInsights-" + accountId + "-" + severity;
+        // FIX: Use a standardized cache key that does not include the severity filter.
+        String cacheKey = "performanceInsights-" + accountId + "-ALL";
+
         if (!forceRefresh) {
             Optional<List<PerformanceInsightDto>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
             if (cachedData.isPresent()) {
-                return cachedData.get();
+                logger.info("Performance insights found in cache for account {}. Filtering by severity '{}'.", accountId, severity);
+                // If cache hits, filter the results and return immediately.
+                return filterBySeverity(cachedData.get(), severity);
             }
         }
 
@@ -108,22 +112,38 @@ public class PerformanceInsightsService {
                     .flatMap(future -> future.join().stream())
                     .collect(Collectors.toList());
             
-            dbCache.put(cacheKey, allInsights); // Save to database cache
-            logger.info("Total insights generated across all regions before filtering: {}", allInsights.size());
+            // Cache the complete, unfiltered dataset.
+            dbCache.put(cacheKey, allInsights);
+            logger.info("Total insights generated and cached across all regions: {}", allInsights.size());
 
-            if (severity != null && !severity.isEmpty() && !"ALL".equalsIgnoreCase(severity)) {
-                PerformanceInsightDto.InsightSeverity severityEnum = PerformanceInsightDto.InsightSeverity.valueOf(severity.toUpperCase());
-                return allInsights.stream()
-                        .filter(insight -> insight.getSeverity() == severityEnum)
-                        .collect(Collectors.toList());
-            }
-
-            return allInsights;
+            // Filter the newly fetched data before returning.
+            return filterBySeverity(allInsights, severity);
 
         } catch (InterruptedException | ExecutionException e) {
             logger.error("Error fetching performance insights for account: {}", accountId, e);
             Thread.currentThread().interrupt();
             return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Helper method to filter insights by severity.
+     * @param insights The list of all insights.
+     * @param severity The severity to filter by (e.g., "CRITICAL", "WARNING", or null/empty for all).
+     * @return A filtered list of insights.
+     */
+    private List<PerformanceInsightDto> filterBySeverity(List<PerformanceInsightDto> insights, String severity) {
+        if (severity == null || severity.isEmpty() || "ALL".equalsIgnoreCase(severity)) {
+            return insights;
+        }
+        try {
+            PerformanceInsightDto.InsightSeverity severityEnum = PerformanceInsightDto.InsightSeverity.valueOf(severity.toUpperCase());
+            return insights.stream()
+                    .filter(insight -> insight.getSeverity() == severityEnum)
+                    .collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            logger.warn("Invalid severity filter '{}' provided. Returning all insights.", severity);
+            return insights;
         }
     }
 
