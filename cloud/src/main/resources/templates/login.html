@@ -255,14 +255,11 @@
 </head>
 <body class="flex items-center justify-center min-h-screen px-4">
 
-    <!-- Aurora Background -->
     <div class="aurora-container">
         <canvas class="aurora-canvas" id="auroraCanvas"></canvas>
     </div>
 
-    <!-- Enhanced Cloud Background -->
     <div class="cloud-background">
-        <!-- Floating Clouds -->
         <div class="cloud-layer">
             <div class="floating-cloud" style="top: 10%; animation-delay: 0s;">
                 <i class="fas fa-cloud"></i>
@@ -278,7 +275,6 @@
             </div>
         </div>
 
-        <!-- DevOps Icons -->
         <div class="devops-icons">
             <div class="floating-icon" style="top: 15%; left: 10%; animation-delay: 0s;">
                 <i class="fab fa-docker"></i>
@@ -301,10 +297,8 @@
         </div>
     </div>
 
-    <!-- Main Login Container -->
     <div class="glass-container">
         
-        <!-- Logo and Title -->
         <div class="text-center mb-6">
             <div class="logo-container mb-3">
                 <div class="logo-glow"></div>
@@ -313,12 +307,11 @@
                 </div>
             </div>
             <h1 class="text-2xl font-bold text-white mb-1">
-                Welcome to <span class="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">XamOps</span>
+                Welcome to <span class="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">XamOps</span><sup style="font-size: 11px; color: #ff9800; margin-left: 4px; font-weight: 600; vertical-align: top; text-transform: uppercase;">beta</sup>
             </h1>
             <p class="text-gray-300 text-xs">Cloud FinOps & DevOps Platform</p>
         </div>
 
-        <!-- Error Alert -->
         <div th:if="${param.error}" class="error-alert p-3 rounded-lg mb-4" role="alert">
             <div class="flex items-center">
                 <i class="fas fa-exclamation-triangle mr-2 text-sm"></i>
@@ -329,7 +322,6 @@
             </div>
         </div>
 
-        <!-- Login Form -->
         <form th:action="@{/login}" method="post" class="space-y-4" id="loginForm">
             <div>
                 <label for="username" class="block text-xs font-semibold text-gray-200 mb-1">
@@ -382,7 +374,6 @@
             </button>
         </form>
 
-        <!-- Footer -->
         <div class="text-center mt-4 pt-4 border-t border-gray-600">
             <p class="text-xs text-gray-400">
                 Secure • Compliant • Enterprise Ready
