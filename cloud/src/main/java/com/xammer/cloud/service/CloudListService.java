@@ -24,6 +24,7 @@ import software.amazon.awssdk.services.ec2.model.Region;
 import software.amazon.awssdk.services.ec2.model.Tag;
 import software.amazon.awssdk.services.ecr.EcrClient;
 import software.amazon.awssdk.services.ecs.EcsClient;
+import software.amazon.awssdk.services.eks.EksClient;
 import software.amazon.awssdk.services.elasticache.ElastiCacheClient;
 import software.amazon.awssdk.services.elasticloadbalancingv2.ElasticLoadBalancingV2Client;
 import software.amazon.awssdk.services.lambda.LambdaClient;
@@ -59,6 +60,9 @@ public class CloudListService {
 
     @Autowired
     private DatabaseCacheService dbCache; // Inject the new database cache service
+
+    @Autowired
+    private EksService eksService;
 
     @Autowired
     public CloudListService(
@@ -148,7 +152,8 @@ public class CloudListService {
                     fetchRoute53HostedZonesForCloudlist(account),
                     fetchCloudTrailsForCloudlist(account, activeRegions),
                     fetchAcmCertificatesForCloudlist(account, activeRegions), fetchCloudWatchLogGroupsForCloudlist(account, activeRegions),
-                    fetchSnsTopicsForCloudlist(account, activeRegions), fetchSqsQueuesForCloudlist(account, activeRegions)
+                    fetchSnsTopicsForCloudlist(account, activeRegions), fetchSqsQueuesForCloudlist(account, activeRegions),
+                    fetchEksClustersForCloudlist(account, activeRegions)
             );
 
             return CompletableFuture.allOf(resourceFutures.toArray(new CompletableFuture[0]))
@@ -505,6 +510,18 @@ public class CloudListService {
                     .map(c -> new ResourceDto(c.certificateArn(), c.domainName(), "Certificate Manager", regionId, c.statusAsString(), c.createdAt(), Map.of("Type", c.typeAsString(), "InUse", c.inUse().toString())))
                     .collect(Collectors.toList());
         }, "ACM Certificates");
+    }
+
+    private CompletableFuture<List<ResourceDto>> fetchEksClustersForCloudlist(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            EksClient eks = awsClientProvider.getEksClient(account, regionId);
+            return eks.listClusters().clusters().stream()
+                    .map(clusterName -> {
+                        var cluster = eks.describeCluster(b -> b.name(clusterName)).cluster();
+                        return new ResourceDto(cluster.name(), cluster.name(), "EKS Cluster", getRegionFromArn(cluster.arn()), cluster.statusAsString(), cluster.createdAt(), Map.of("Version", cluster.version(), "Platform Version", cluster.platformVersion()));
+                    })
+                    .collect(Collectors.toList());
+        }, "EKS Clusters");
     }
 
     private String getRegionFromArn(String arn) {
