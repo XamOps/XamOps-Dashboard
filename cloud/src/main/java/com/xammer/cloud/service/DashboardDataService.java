@@ -181,7 +181,7 @@ public class DashboardDataService {
         CompletableFuture<DashboardData.IamResources> iamFuture = getIamResources(account, forceRefresh);
         CompletableFuture<List<DashboardData.CostAnomaly>> anomaliesFuture = finOpsService.getCostAnomalies(account, forceRefresh);
         CompletableFuture<DashboardData.ReservationAnalysis> reservationFuture = reservationService.getReservationAnalysis(account, forceRefresh);
-        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = reservationService.getReservationPurchaseRecommendations(account, forceRefresh);
+        CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> reservationPurchaseFuture = reservationService.getReservationPurchaseRecommendations(account, "ONE_YEAR", "NO_UPFRONT", "THIRTY_DAYS", "STANDARD", forceRefresh);
         
         CompletableFuture<DashboardData.SavingsSummary> savingsFuture = getSavingsSummary(
             wastedResourcesFuture, ec2RecsFuture, ebsRecsFuture, lambdaRecsFuture

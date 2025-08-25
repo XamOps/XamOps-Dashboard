@@ -89,7 +89,25 @@ public static class RegionStatus {
     @Data @AllArgsConstructor @NoArgsConstructor public static class RightsizingOption { private String recommendedType; private double recommendedMonthlyCost; private double estimatedMonthlySavings; private String usage; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class CostAnomaly { private String anomalyId; private String service; private double unexpectedSpend; private LocalDate startDate; private LocalDate endDate; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class ReservationAnalysis { private double utilizationPercentage; private double coveragePercentage; }
-    @Data @AllArgsConstructor @NoArgsConstructor public static class ReservationPurchaseRecommendation { private String instanceFamily; private String recommendedInstances; private String recommendedUnits; private String minimumUnits; private String monthlySavings; private String onDemandCost; private String estimatedMonthlyCost; private String term; }
+    @Data @AllArgsConstructor @NoArgsConstructor 
+    public static class ReservationPurchaseRecommendation { 
+        private String instanceFamily; 
+        private String recommendedInstances; 
+        private String recommendedUnits; 
+        private String minimumUnits; 
+        private String monthlySavings; 
+        private String onDemandCost; 
+        private String estimatedMonthlyCost; 
+        private String term; 
+        
+        // --- ADDED FIELDS ---
+        private String instanceType;
+        private String region;
+        private String platform;
+        private String tenancy;
+        private String generation;
+        private boolean sizeFlex;
+    }
     @Data @AllArgsConstructor @NoArgsConstructor public static class OptimizationSummary { private double totalPotentialSavings; private long criticalAlertsCount; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class WastedResource { private String resourceId; private String resourceName; private String resourceType; private String region; private double monthlySavings; private String reason; }
     @Data @AllArgsConstructor @NoArgsConstructor public static class ServiceGroupDto { private String serviceType; private List<ResourceDto> resources; }

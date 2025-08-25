@@ -151,14 +151,14 @@
             box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
         }
         
-        .form-input {
+        .form-input, .form-select {
             background: var(--glass-bg);
             backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             transition: all 0.3s ease;
         }
         
-        .form-input:focus {
+        .form-input:focus, .form-select:focus {
             background: rgba(255, 255, 255, 1);
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -629,15 +629,52 @@
                             </div>
                         </div>
                         
-                        <div x-show="!data.purchaseRecommendations || data.purchaseRecommendations.length === 0" class="empty-state text-center py-20 px-8 rounded-2xl">
+                        <div class="flex flex-wrap items-center gap-4 mb-8 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
+                            <div class="flex items-center space-x-2">
+                                <label class="text-sm font-semibold text-gray-700">Term:</label>
+                                <select x-model="recFilters.term" @change="fetchPurchaseRecommendations(true)" class="form-select text-sm rounded-lg">
+                                    <option value="ONE_YEAR">1 Year</option>
+                                    <option value="THREE_YEARS">3 Years</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <label class="text-sm font-semibold text-gray-700">Payment:</label>
+                                <select x-model="recFilters.paymentOption" @change="fetchPurchaseRecommendations(true)" class="form-select text-sm rounded-lg">
+                                    <option value="NO_UPFRONT">No Upfront</option>
+                                    <option value="PARTIAL_UPFRONT">Partial Upfront</option>
+                                    <option value="ALL_UPFRONT">All Upfront</option>
+                                </select>
+                            </div>
+                             <div class="flex items-center space-x-2">
+                                <label class="text-sm font-semibold text-gray-700">Lookback:</label>
+                                <select x-model="recFilters.lookback" @change="fetchPurchaseRecommendations(true)" class="form-select text-sm rounded-lg">
+                                    <option value="SEVEN_DAYS">7 Days</option>
+                                    <option value="THIRTY_DAYS">30 Days</option>
+                                    <option value="SIXTY_DAYS">60 Days</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <label class="text-sm font-semibold text-gray-700">Class:</label>
+                                <select x-model="recFilters.offeringClass" @change="fetchPurchaseRecommendations(true)" class="form-select text-sm rounded-lg">
+                                    <option value="STANDARD">Standard</option>
+                                    <option value="CONVERTIBLE">Convertible</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div x-show="isRecsLoading" class="text-center py-12">
+                            <div class="loading-spinner mx-auto"></div>
+                        </div>
+
+                        <div x-show="!isRecsLoading && (!data.purchaseRecommendations || data.purchaseRecommendations.length === 0)" class="empty-state text-center py-20 px-8 rounded-2xl">
                             <div class="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <i class="fas fa-check-circle text-white text-3xl"></i>
                             </div>
                             <h3 class="text-2xl font-bold text-gray-800 mb-2">Fully Covered!</h3>
-                            <p class="text-gray-600">Your instance usage appears to be well-covered by existing reservations</p>
+                            <p class="text-gray-600">Your instance usage appears to be well-covered by existing reservations for the selected criteria.</p>
                         </div>
                         
-                        <div x-show="data.purchaseRecommendations && data.purchaseRecommendations.length > 0" class="table-enhanced">
+                        <div x-show="!isRecsLoading && data.purchaseRecommendations && data.purchaseRecommendations.length > 0" class="table-enhanced">
                             <table class="w-full text-sm">
                                 <thead class="text-xs text-gray-700 uppercase bg-gradient-to-r from-gray-50 to-gray-100">
                                     <tr>
@@ -666,7 +703,7 @@
                                             <td class="px-4 py-3 text-gray-700" x-text="rec.sizeFlex ? 'true' : 'false'"></td>
                                             <td class="px-4 py-3 text-gray-700" x-text="rec.term"></td>
                                             <td class="px-4 py-3 text-right font-bold text-indigo-600" x-text="rec.recommendedInstances"></td>
-                                            <td class="px-4 py-3 text-right font-bold text-green-600" x-text="'$' + rec.monthlySavings.toFixed(2)"></td>
+                                            <td class="px-4 py-3 text-right font-bold text-green-600" x-text="'$' + rec.monthlySavings"></td>
                                             <td class="px-4 py-3 text-center">
                                                 <button @click="openAnalysisModal(rec)" class="px-4 py-2 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded-lg hover:bg-indigo-200 transition-all">
                                                     <i class="fas fa-chart-pie mr-2"></i>Analyze
@@ -681,9 +718,7 @@
                 </div>
             </div>
 
-            <!-- Modals remain unchanged -->
-
-        </main>
+            </main>
     </div>
 </div>
 
@@ -692,6 +727,7 @@ function reservationManagement() {
     return {
         isLoading: true,
         isRefreshing: false,
+        isRecsLoading: false, // --- NEW: Loading state for recommendations
         isTagLoading: false,
         isAnalysisModalOpen: false,
         isModificationModalOpen: false,
@@ -709,6 +745,13 @@ function reservationManagement() {
             historicalData: null,
             modificationRecommendations: []
         },
+        // --- NEW: Filters for recommendations ---
+        recFilters: {
+            term: 'ONE_YEAR',
+            paymentOption: 'NO_UPFRONT',
+            lookback: 'THIRTY_DAYS',
+            offeringClass: 'STANDARD'
+        },
         configuredRegion: 'ap-south-1',
         historicalChartInstance: null,
         costByTagChartInstance: null,
@@ -716,24 +759,22 @@ function reservationManagement() {
 
         init() {
             this.loadReservationData(false);
+            // Fetch initial recommendations
+            this.fetchPurchaseRecommendations(false);
         },
 
         loadReservationData(forceRefresh = false) {
+            // This function now only loads the main page data, not the purchase recommendations
             const selectedAccountId = sessionStorage.getItem('selectedAccountId');
              if (!selectedAccountId) {
                 this.isLoading = false;
                 return;
             }
-            const cacheKey = `reservationData-${selectedAccountId}`;
+            const cacheKey = `reservationPageData-${selectedAccountId}`;
             const cachedData = sessionStorage.getItem(cacheKey);
 
             if (cachedData && !forceRefresh) {
                 this.data = JSON.parse(cachedData);
-                this.data.purchaseRecommendations = this.data.purchaseRecommendations.map(rec => {
-                    if (rec.instanceType) return rec;
-                    const details = this.parseInstanceDetails(rec.instanceFamily);
-                    return { ...rec, ...details };
-                });
                 this.isLoading = false;
                 setTimeout(() => {
                     this.renderHistoricalChart();
@@ -754,15 +795,8 @@ function reservationManagement() {
             fetch(`/api/reservations?accountId=${selectedAccountId}&forceRefresh=${forceRefresh}`)
                 .then(res => res.json())
                 .then(data => {
-                    const processedData = {
-                        ...data,
-                        purchaseRecommendations: data.purchaseRecommendations.map(rec => {
-                            const details = this.parseInstanceDetails(rec.instanceFamily);
-                            return { ...rec, ...details };
-                        })
-                    };
-                    this.data = processedData;
-                    sessionStorage.setItem(cacheKey, JSON.stringify(processedData));
+                    this.data = data;
+                    sessionStorage.setItem(cacheKey, JSON.stringify(data));
                     setTimeout(() => {
                         this.renderHistoricalChart();
                         this.renderExpiryChart();
@@ -775,6 +809,32 @@ function reservationManagement() {
                 .finally(() => {
                     this.isLoading = false;
                     this.isRefreshing = false;
+                });
+        },
+
+        // --- NEW: Function to fetch purchase recommendations based on filters ---
+        fetchPurchaseRecommendations(forceRefresh = false) {
+            this.isRecsLoading = true;
+            const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+            if (!selectedAccountId) {
+                this.isRecsLoading = false;
+                return;
+            }
+            
+            const { term, paymentOption, lookback, offeringClass } = this.recFilters;
+            const url = `/api/reservations/recommendations?accountId=${selectedAccountId}&term=${term}&paymentOption=${paymentOption}&lookback=${lookback}&offeringClass=${offeringClass}&forceRefresh=${forceRefresh}`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    this.data.purchaseRecommendations = data;
+                })
+                .catch(err => {
+                    console.error('Failed to load purchase recommendations:', err);
+                    this.data.purchaseRecommendations = [];
+                })
+                .finally(() => {
+                    this.isRecsLoading = false;
                 });
         },
 
@@ -863,7 +923,6 @@ function reservationManagement() {
         get projectedCoverage() {
             if (!this.analysisData || !this.data.analysis) return 0;
             const currentCoverage = this.data.analysis.coveragePercentage;
-            // Ensure onDemandCost is a number before division
             const onDemandCost = parseFloat(this.analysisData.onDemandCost);
             const monthlySavings = parseFloat(this.analysisData.monthlySavings);
             
@@ -1131,30 +1190,6 @@ function reservationManagement() {
             return {
                 text: diffDays <= 0 ? "Expired" : `${diffDays} days`,
                 color: colorClass
-            };
-        },
-
-        // *** NEW HELPER FUNCTION TO PARSE THE DETAILS STRING ***
-        parseInstanceDetails(detailsString) {
-            if (!detailsString || typeof detailsString !== 'string') {
-                return { instanceFamily: 'N/A', instanceType: 'N/A', region: 'N/A', platform: 'N/A', tenancy: 'N/A', generation: 'N/A', sizeFlex: 'false' };
-            }
-            const details = {};
-            // Updated regex to handle spaces after commas
-            const regex = /(\w+)=([^,]+(?:, (?!(\w+=)))?)/g; // Match key=value, value can contain spaces and commas unless followed by another key=
-            let match;
-            while ((match = regex.exec(detailsString)) !== null) {
-                details[match[1]] = match[2].trim();
-            }
-            
-            return {
-                instanceFamily: details.InstanceFamily || 'N/A',
-                instanceType: details.InstanceType || 'N/A',
-                region: details.Region || 'N/A',
-                platform: details.Platform || 'N/A',
-                tenancy: details.Tenancy || 'N/A',
-                generation: details.CurrentGeneration === 'true' ? 'Current' : 'Previous',
-                sizeFlex: details.SizeFlexEligible === 'true'
             };
         },
     }

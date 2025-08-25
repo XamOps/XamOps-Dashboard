@@ -76,7 +76,7 @@ public class ReservationService {
         return cloudListService.getRegionStatusForAccount(account, forceRefresh).thenCompose(activeRegions -> {
             logger.info("--- LAUNCHING ASYNC DATA FETCH FOR RESERVATION PAGE for account {}---", account.getAwsAccountId());
             CompletableFuture<DashboardData.ReservationAnalysis> analysisFuture = getReservationAnalysis(account, forceRefresh);
-            CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations(account, forceRefresh);
+            CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> purchaseRecsFuture = getReservationPurchaseRecommendations(account, "ONE_YEAR", "NO_UPFRONT", "THIRTY_DAYS", "STANDARD", forceRefresh);
             CompletableFuture<List<ReservationInventoryDto>> inventoryFuture = getReservationInventory(account, activeRegions, forceRefresh);
             CompletableFuture<HistoricalReservationDataDto> historicalDataFuture = getHistoricalReservationData(account, forceRefresh);
             CompletableFuture<List<ReservationModificationRecommendationDto>> modificationRecsFuture = getReservationModificationRecommendations(account, activeRegions, forceRefresh);
@@ -123,8 +123,8 @@ public class ReservationService {
     }
 
     @Async("awsTaskExecutor")
-    public CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> getReservationPurchaseRecommendations(CloudAccount account, boolean forceRefresh) {
-        String cacheKey = "reservationPurchaseRecs-" + account.getAwsAccountId();
+    public CompletableFuture<List<DashboardData.ReservationPurchaseRecommendation>> getReservationPurchaseRecommendations(CloudAccount account, String term, String paymentOption, String lookback, String offeringClass, boolean forceRefresh) {
+        String cacheKey = String.format("reservationPurchaseRecs-%s-%s-%s-%s-%s", account.getAwsAccountId(), term, paymentOption, lookback, offeringClass);
         if (!forceRefresh) {
             Optional<List<DashboardData.ReservationPurchaseRecommendation>> cachedData = dbCache.get(cacheKey, new TypeReference<>() {});
             if (cachedData.isPresent()) {
@@ -133,10 +133,15 @@ public class ReservationService {
         }
 
         CostExplorerClient ce = awsClientProvider.getCostExplorerClient(account);
-        logger.info("Fetching RI purchase recommendations for account {}...", account.getAwsAccountId());
+        logger.info("Fetching RI purchase recommendations for account {} with params: term={}, payment={}, lookback={}, offering={}", account.getAwsAccountId(), term, paymentOption, lookback, offeringClass);
         try {
             GetReservationPurchaseRecommendationRequest request = GetReservationPurchaseRecommendationRequest.builder()
-                    .lookbackPeriodInDays(LookbackPeriodInDays.SIXTY_DAYS).service("Amazon Elastic Compute Cloud - Compute").build();
+                    .lookbackPeriodInDays(LookbackPeriodInDays.fromValue(lookback))
+                    .termInYears(TermInYears.fromValue(term))
+                    .paymentOption(PaymentOption.fromValue(paymentOption))
+                    // .offeringClass(OfferingClass.fromValue(offeringClass))
+                    .service("Amazon Elastic Compute Cloud - Compute").build();
+            
             GetReservationPurchaseRecommendationResponse response = ce.getReservationPurchaseRecommendation(request);
 
             List<DashboardData.ReservationPurchaseRecommendation> result = response.recommendations().stream()
@@ -144,15 +149,22 @@ public class ReservationService {
                 .flatMap(rec -> rec.recommendationDetails().stream()
                     .map(details -> {
                         try {
+                            EC2InstanceDetails ec2Details = details.instanceDetails().ec2InstanceDetails();
                             return new DashboardData.ReservationPurchaseRecommendation(
-                                details.instanceDetails().ec2InstanceDetails().family(),
+                                ec2Details.family(),
                                 String.valueOf(details.recommendedNumberOfInstancesToPurchase()),
                                 String.valueOf(details.recommendedNormalizedUnitsToPurchase()),
                                 String.valueOf(details.minimumNumberOfInstancesUsedPerHour()),
                                 String.valueOf(details.estimatedMonthlySavingsAmount()),
                                 String.valueOf(details.estimatedMonthlyOnDemandCost()),
                                 String.valueOf(details.upfrontCost()),
-                                String.valueOf(rec.termInYears())
+                                String.valueOf(rec.termInYears()),
+                                ec2Details.instanceType(),
+                                ec2Details.region(),
+                                ec2Details.platform(),
+                                ec2Details.tenancy(),
+                                ec2Details.currentGeneration() ? "Current" : "Previous",
+                                ec2Details.sizeFlexEligible()
                             );
                         } catch (Exception e) {
                             logger.warn("Failed to process recommendation detail: {}", e.getMessage());
@@ -365,7 +377,7 @@ public class ReservationService {
             dbCache.put(cacheKey, resultList);
             return CompletableFuture.completedFuture(resultList);
         } catch (Exception e) {
-            logger.error("Could not fetch reservation cost by tag key '{}' for account {}", tagKey, e);
+            logger.error("Could not fetch reservation cost by tag key '{}' for account {}. This tag may not be activated in the billing console.", tagKey, e);
             return CompletableFuture.completedFuture(Collections.emptyList());
         }
     }
