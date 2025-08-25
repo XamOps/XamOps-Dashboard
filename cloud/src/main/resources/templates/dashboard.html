@@ -437,24 +437,42 @@
                     </div>
                 </header>
 
-                <div id="unselectedState" class="hidden text-center py-32 fade-in">
-                    <div class="max-w-md mx-auto">
-                        <div class="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <i class="fas fa-mouse-pointer text-white text-3xl"></i>
-                        </div>
-                        <h3 class="text-2xl font-bold text-gray-800 mb-4">Welcome to XamOps</h3>
-                        <p class="text-gray-600 mb-8">Please select an AWS account from the sidebar to view its comprehensive dashboard with real-time metrics and insights.</p>
-                        <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-6 border border-indigo-200">
-                            <h4 class="font-semibold text-indigo-800 mb-2">What you'll see:</h4>
-                            <ul class="text-sm text-indigo-700 space-y-1">
-                                <li>• Real-time cost monitoring</li>
-                                <li>• Resource optimization insights</li>
-                                <li>• Global infrastructure overview</li>
-                                <li>• AI-powered recommendations</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+<div th:with="hasAccounts=${hasAccounts != null ? hasAccounts : true}">
+
+    <div id="unselectedState" class="hidden text-center py-32 fade-in" th:if="${hasAccounts}">
+        <div class="max-w-md mx-auto">
+            <div class="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-mouse-pointer text-white text-3xl"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Welcome to XamOps</h3>
+            <p class="text-gray-600 mb-8">Please select an AWS account from the sidebar to view its comprehensive dashboard with real-time metrics and insights.</p>
+            <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-6 border border-indigo-200">
+                <h4 class="font-semibold text-indigo-800 mb-2">What you'll see:</h4>
+                <ul class="text-sm text-indigo-700 space-y-1">
+                    <li>• Real-time cost monitoring</li>
+                    <li>• Resource optimization insights</li>
+                    <li>• Global infrastructure overview</li>
+                    <li>• AI-powered recommendations</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="noAccountState" class="text-center py-32 fade-in" th:unless="${hasAccounts}">
+        <div class="max-w-md mx-auto">
+            <div class="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-plus text-white text-3xl"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">Get Started with XamOps!</h3>
+            <p class="text-gray-600 mb-8">You don't have any cloud accounts connected yet. To begin, please add your first account.</p>
+            <a href="/account-manager" class="btn-primary inline-flex items-center space-x-2 px-8 py-4 text-sm font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
+                <i class="fas fa-users-cog"></i>
+                <span>Go to Account Manager</span>
+            </a>
+        </div>
+    </div>
+
+</div>
 
                 <div x-show="isLoading" id="dashboardSkeleton" class="space-y-6 fade-in">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

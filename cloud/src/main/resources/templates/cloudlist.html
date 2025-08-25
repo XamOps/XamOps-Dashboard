@@ -317,10 +317,6 @@
                             <i class="fas fa-globe absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                             <select id="region-filter" class="form-select pl-10 pr-4 py-3 rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 min-w-[200px]">
                                 <option value="">All Regions</option>
-                                <option value="ap-south-1">Asia Pacific (Mumbai)</option>
-                                <option value="us-east-1">US East (N. Virginia)</option>
-                                <option value="Global">Global</option>
-                                <option value="Regional">Regional</option>
                             </select>
                         </div>
                         <div class="relative flex-1 min-w-[350px]">
@@ -329,9 +325,6 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-3">
-                        <button class="btn-secondary px-6 py-3 text-sm font-semibold rounded-xl hover:bg-gray-50 hover:border-indigo-500 hover:text-indigo-600 transition-all focus-ring">
-                            <i class="fas fa-filter mr-2"></i>Advanced Filter
-                        </button>
                         <button class="btn-primary px-6 py-3 text-sm font-semibold text-white rounded-xl shadow-md hover:shadow-lg focus-ring">
                             <i class="fas fa-file-excel mr-2"></i>Export Data
                         </button>
@@ -455,6 +448,7 @@ document.addEventListener('DOMContentLoaded', function() {
             this.dom.loadingState.style.display = 'none';
             this.dom.listContainer.innerHTML = '';
 
+            this.populateRegionFilter(this.allGroups);
             const filteredGroups = this.getFilteredData();
 
             if (filteredGroups.length === 0) {
@@ -471,25 +465,47 @@ document.addEventListener('DOMContentLoaded', function() {
             this.addEventListenersForToggles();
         },
 
-        // getFilteredData, createGroupElement, createResourceRow, etc. remain the same
+        populateRegionFilter(groups) {
+            const regions = [...new Set(groups.flatMap(g => g.resources.map(r => r.region)))].filter(Boolean);
+            regions.sort();
+            
+            const currentSelection = this.dom.regionFilter.value;
+            this.dom.regionFilter.innerHTML = '<option value="">All Regions</option>';
+            
+            if (regions.includes('Global')) {
+                 this.dom.regionFilter.innerHTML += '<option value="Global">Global</option>';
+            }
+             if (regions.includes('Regional')) {
+                 this.dom.regionFilter.innerHTML += '<option value="Regional">Regional</option>';
+            }
+
+            regions.forEach(region => {
+                if(region !== 'Global' && region !== 'Regional') {
+                    const option = document.createElement('option');
+                    option.value = region;
+                    option.textContent = region;
+                    this.dom.regionFilter.appendChild(option);
+                }
+            });
+            this.dom.regionFilter.value = currentSelection;
+        },
+
 
         getFilteredData() {
-                const searchTerm = this.dom.searchInput.value.toLowerCase();
-                const region = this.dom.regionFilter.value;
+            const searchTerm = this.dom.searchInput.value.toLowerCase();
+            const region = this.dom.regionFilter.value;
 
-                if (!searchTerm && !region) return this.allGroups;
-
-                return this.allGroups.map(group => {
-                    const matchingResources = group.resources.filter(res => {
-                        const regionMatch = !region || (res.region && res.region === region) || (region === 'Global' && res.region === 'Global') || (region === 'Regional' && res.region === 'Regional');
-                        const searchMatch = !searchTerm ||
-                            (res.name && res.name.toLowerCase().includes(searchTerm)) ||
-                            (res.id && res.id.toLowerCase().includes(searchTerm));
-                        return regionMatch && searchMatch;
-                    });
-                    return { ...group, resources: matchingResources };
-                }).filter(group => group.resources.length > 0);
-            },
+            return this.allGroups.map(group => {
+                const matchingResources = group.resources.filter(res => {
+                    const regionMatch = (region === "") || (res.region === region);
+                    const searchMatch = (searchTerm === "") ||
+                        (res.name && res.name.toLowerCase().includes(searchTerm)) ||
+                        (res.id && res.id.toLowerCase().includes(searchTerm));
+                    return regionMatch && searchMatch;
+                });
+                return { ...group, resources: matchingResources };
+            }).filter(group => group.resources.length > 0);
+        },
             
             createGroupElement(group) {
                 const container = document.createElement('div');
@@ -511,11 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 ${group.resources.length}
                             </div>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <button class="btn-secondary px-4 py-2 text-sm font-semibold rounded-lg hover:bg-gray-100 transition-all">
-                                <i class="fas fa-eye mr-2"></i>View Details
-                            </button>
-                        </div>
+
                     </div>
                     <div id="${groupId}" class="resource-content hidden bg-gradient-to-r from-gray-50/30 to-gray-100/30 backdrop-blur-sm">
                         ${group.resources.map(res => this.createResourceRow(res, group.serviceType)).join('')}

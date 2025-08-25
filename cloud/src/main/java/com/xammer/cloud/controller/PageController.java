@@ -2,10 +2,14 @@ package com.xammer.cloud.controller;
 
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.repository.CloudAccountRepository;
+import com.xammer.cloud.security.ClientUserDetails; // Import this
+import org.springframework.security.core.Authentication; // Import this
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List; // Import this
 
 @Controller
 public class PageController {
@@ -32,13 +36,42 @@ public class PageController {
                 .orElse("AWS"); // Default to AWS if account not found
     }
 
+    // --- THIS IS THE MODIFIED METHOD ---
     @GetMapping("/")
-    public String dashboardPage(@RequestParam(required = false) String accountId) {
-        if ("GCP".equals(getProviderForAccount(accountId))) {
-            return "gcp_dashboard";
+    public String dashboardPage(@RequestParam(required = false) String accountId, Authentication authentication, Model model) {
+        // If an accountId is already in the URL, it means we have been redirected or the user is switching.
+        // Let the existing logic handle it.
+        if (accountId != null && !accountId.isBlank()) {
+            if ("GCP".equals(getProviderForAccount(accountId))) {
+                return "gcp_dashboard";
+            }
+            return "dashboard";
         }
-        return "dashboard";
+
+        // If no accountId is in the URL, this is the first load after login.
+        // We need to decide whether to redirect or show a special welcome message.
+        ClientUserDetails userDetails = (ClientUserDetails) authentication.getPrincipal();
+        Long clientId = userDetails.getClientId();
+        List<CloudAccount> accounts = cloudAccountRepository.findByClientId(clientId);
+
+        if (accounts.isEmpty()) {
+            // SCENARIO 2: User has NO accounts.
+            // Add a flag to the model and render the dashboard page.
+            // The template will use this flag to show the "add account" message.
+            model.addAttribute("hasAccounts", false);
+            return "dashboard";
+        } else {
+            // SCENARIO 1: User HAS accounts.
+            // Get the first account and redirect to the dashboard URL with its ID.
+            CloudAccount defaultAccount = accounts.get(0);
+            String firstAccountId = "AWS".equals(defaultAccount.getProvider())
+                    ? defaultAccount.getAwsAccountId()
+                    : defaultAccount.getGcpProjectId();
+            
+            return "redirect:/?accountId=" + firstAccountId;
+        }
     }
+
     
     // NEWLY ADDED
     @GetMapping("/account-manager")

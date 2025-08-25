@@ -211,6 +211,12 @@
                                             </div>
                                         </div>
                                     </div>
+																		<div>
+                                        <label class="block text-sm font-semibold text-gray-700 mb-4"><i class="fas fa-shield-alt mr-2 text-indigo-600"></i>Policies</label>
+                                        <div class="space-y-3">
+                                            <button type="button" @click="isPolicyModalOpen = true" class="text-indigo-600 hover:text-indigo-800 font-semibold">View Policies</button>
+                                        </div>
+                                    </div>
                                     <div class="flex justify-end items-center pt-6 border-t border-gray-200">
                                         <button type="submit" class="btn-primary px-10 py-4 text-sm font-semibold rounded-xl shadow-md" :disabled="isLoading || !accountName">
                                             <span x-show="!isLoading">Launch Stack</span>
@@ -262,8 +268,102 @@
                 </div>
             </div>
             
-            <div x-show="isPolicyModalOpen" x-cloak class="modal-overlay fixed inset-0">
+            <div x-show="isPolicyModalOpen" x-cloak class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div @click.away="isPolicyModalOpen = false" class="modal-content rounded-2xl p-8 w-full max-w-2xl mx-auto max-h-[90vh] overflow-y-auto">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">IAM Policy</h2>
+                    <pre class="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto"><code>
+Policies:
+  - PolicyName: XamOpsComprehensiveReadOnlyPolicy
+    PolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+        - Sid: 'XamOpsApplicationPermissions'
+          Effect: Allow
+          Action:
+            - 'acm:ListCertificates'
+            - 'access-analyzer:ListAnalyzers'
+            - 'access-analyzer:ListFindings'
+            - 'autoscaling:DescribeAutoScalingGroups'
+            - 'budgets:ViewBudget'
+            - 'ce:GetAnomalies'
+            - 'ce:GetCostAndUsage'
+            - 'ce:GetDimensionValues'
+            - 'ce:GetReservationCoverage'
+            - 'ce:GetReservationPurchaseRecommendation'
+            - 'ce:GetReservationUtilization'
+            - 'cloudtrail:DescribeTrails'
+            - 'cloudtrail:GetTrailStatus'
+            - 'cloudtrail:LookupEvents'
+            - 'cloudwatch:DescribeAlarms'
+            - 'cloudwatch:GetMetricData'
+            - 'cloudwatch:GetMetricStatistics'
+            - 'compute-optimizer:GetEBSVolumeRecommendations'
+            - 'compute-optimizer:GetEc2InstanceRecommendations'
+            - 'compute-optimizer:GetLambdaFunctionRecommendations'
+            - 'dynamodb:DescribeTable'
+            - 'dynamodb:ListTables'
+            - 'ec2:Describe*'
+            - 'ecr:DescribeRepositories'
+            - 'ecs:DescribeClusters'
+            - 'ecs:ListClusters'
+            - 'eks:DescribeCluster'
+            - 'eks:ListClusters'
+            - 'elasticache:DescribeCacheClusters'
+            - 'elasticloadbalancing:DescribeLoadBalancers'
+            - 'elasticloadbalancing:DescribeTargetGroups'
+            - 'elasticloadbalancing:DescribeTargetHealth'
+            - 'iam:GetAccountPasswordPolicy'
+            - 'iam:GetLoginProfile'
+            - 'iam:GetPolicyVersion'
+            - 'iam:GetRole'
+            - 'iam:ListAccessKeys'
+            - 'iam:ListAccountAliases'
+            - 'iam:ListGroups'
+            - 'iam:ListMFADevices'
+            - 'iam:ListPolicies'
+            - 'iam:ListRoles'
+            - 'iam:ListUsers'
+            - 'kms:DescribeKey'
+            - 'kms:GetKeyRotationStatus'
+            - 'kms:ListKeys'
+            - 'lambda:ListFunctions'
+            - 'lambda:ListProvisionedConcurrencyConfigs'
+            - 'lambda:ListVersionsByFunction'
+            - 'logs:DescribeLogGroups'
+            - 'logs:DescribeLogStreams'
+            - 'logs:GetQueryResults'
+            - 'logs:StartQuery'
+            - 'organizations:DescribeAccount'
+            - 'organizations:ListAccounts'
+            - 'pricing:DescribeServices'
+            - 'pricing:GetProducts'
+            - 'pricing:ListPriceLists'
+            - 'rds:DescribeDBInstances'
+            - 'rds:DescribeDBSnapshots'
+            - 'rds:ListTagsForResource'
+            - 'route53:ListHostedZones'
+            - 's3:GetBucketAcl'
+            - 's3:GetBucketLocation'
+            - 's3:GetBucketPublicAccessBlock'
+            - 's3:GetLifecycleConfiguration'
+            - 's3:ListAccessGrantsInstances'
+            - 's3:ListAccessGrantsLocations'
+            - 's3:ListAllMyBuckets'
+            - 's3:ListBucket'
+            - 's3:ListBucketVersions'
+            - 's3:ListMultiRegionAccessPoints'
+            - 'servicequotas:ListServiceQuotas'
+            - 'sns:ListTopics'
+            - 'sqs:GetQueueAttributes'
+            - 'sqs:ListQueues'
+            - 'sts:GetCallerIdentity'
+          Resource: '*'
+                    </code></pre>
+                    <div class="flex justify-end mt-6">
+                        <button @click="isPolicyModalOpen = false" class="btn-primary px-6 py-3 text-sm font-semibold rounded-lg shadow-md">Close</button>
+                    </div>
                 </div>
+            </div>
         </main>
     </div>
 </div>
