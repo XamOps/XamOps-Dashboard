@@ -31,7 +31,7 @@ public class DashboardData {
         private int rdsInstances;
         private int route53Zones;
         private int loadBalancers;
-
+        private int firewalls;
     }
     
     @Data @AllArgsConstructor @NoArgsConstructor public static class ServiceQuotaInfo { private String serviceName; private String quotaName; private double limit; private double usage; private String status; }
@@ -40,30 +40,30 @@ public class DashboardData {
     @Data @AllArgsConstructor @NoArgsConstructor public static class UntaggedResource { private String resourceId; private String resourceType; private String region; private List<String> missingTags; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class Account { private String id; private String name; private List<RegionStatus> regionStatus; private ResourceInventory resourceInventory; private CloudWatchStatus cloudWatchStatus; private List<SecurityInsight> securityInsights; private CostHistory costHistory; private List<BillingSummary> billingSummary; private IamResources iamResources; private SavingsSummary savingsSummary; private List<OptimizationRecommendation> ec2Recommendations; private List<CostAnomaly> costAnomalies; private List<OptimizationRecommendation> ebsRecommendations; private List<OptimizationRecommendation> lambdaRecommendations; private ReservationAnalysis reservationAnalysis; private List<ReservationPurchaseRecommendation> reservationPurchaseRecommendations; private OptimizationSummary optimizationSummary; private List<WastedResource> wastedResources; private List<ServiceQuotaInfo> serviceQuotas; private int securityScore; private double monthToDateSpend; private double forecastedSpend; private double lastMonthSpend;}
     @Data 
-@NoArgsConstructor 
-public static class RegionStatus {
-    private String regionId;
-    private String regionName;
-    private String status;
-    private double latitude;
-    private double longitude;
-    private String activeServices;
-    
-    public RegionStatus(String regionId, String regionName, String status, 
-                       double latitude, double longitude, String activeServices) {
-        this.regionId = regionId;
-        this.regionName = regionName;
-        this.status = status;
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.activeServices = activeServices;
+    @NoArgsConstructor 
+    public static class RegionStatus {
+        private String regionId;
+        private String regionName;
+        private String status;
+        private double latitude;
+        private double longitude;
+        private String activeServices;
+        
+        public RegionStatus(String regionId, String regionName, String status, 
+                           double latitude, double longitude, String activeServices) {
+            this.regionId = regionId;
+            this.regionName = regionName;
+            this.status = status;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.activeServices = activeServices;
+        }
+        
+        public RegionStatus(String regionId, String regionName, String status, 
+                           double latitude, double longitude) {
+            this(regionId, regionName, status, latitude, longitude, null);
+        }
     }
-    
-    public RegionStatus(String regionId, String regionName, String status, 
-                       double latitude, double longitude) {
-        this(regionId, regionName, status, latitude, longitude, null);
-    }
-}
 
     @Data @NoArgsConstructor @AllArgsConstructor public static class CloudWatchStatus { private long ok; private long alarm; private long insufficient; }
     @Data @NoArgsConstructor @AllArgsConstructor public static class IamResources { private int users; private int groups; private int customerManagedPolicies; private int roles; }
@@ -100,7 +100,6 @@ public static class RegionStatus {
         private String estimatedMonthlyCost; 
         private String term; 
         
-        // --- ADDED FIELDS ---
         private String instanceType;
         private String region;
         private String platform;

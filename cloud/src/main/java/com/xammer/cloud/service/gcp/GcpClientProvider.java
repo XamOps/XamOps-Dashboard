@@ -20,8 +20,8 @@ import com.google.cloud.recommender.v1.RecommenderClient;
 import com.google.cloud.recommender.v1.RecommenderSettings;
 import com.google.cloud.resourcemanager.v3.ProjectsClient;
 import com.google.cloud.resourcemanager.v3.ProjectsSettings;
-import com.google.cloud.securitycenter.v2.SecurityCenterClient; // Correct V2 import
-import com.google.cloud.securitycenter.v2.SecurityCenterSettings; // Correct V2 import
+import com.google.cloud.securitycenter.v2.SecurityCenterClient;
+import com.google.cloud.securitycenter.v2.SecurityCenterSettings;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import com.xammer.cloud.domain.CloudAccount;
@@ -78,8 +78,6 @@ public class GcpClientProvider {
             }
         });
     }
-
-    // --- Other client provider methods ---
 
     public Optional<InstancesClient> getInstancesClient(String gcpProjectId) {
         return getCredentials(gcpProjectId).map(credentials -> {
@@ -254,21 +252,35 @@ public class GcpClientProvider {
         return BudgetServiceClient.create(budgetServiceSettings);
     }
     public Optional<ForwardingRulesClient> getForwardingRulesClient(String gcpProjectId) {
-    Optional<GoogleCredentials> credentialsOpt = getCredentials(gcpProjectId);
-    if (credentialsOpt.isEmpty()) {
-        log.error("Failed to get credentials for project {}", gcpProjectId);
-        return Optional.empty();
-    }
+        Optional<GoogleCredentials> credentialsOpt = getCredentials(gcpProjectId);
+        if (credentialsOpt.isEmpty()) {
+            log.error("Failed to get credentials for project {}", gcpProjectId);
+            return Optional.empty();
+        }
 
-    try {
-        GoogleCredentials credentials = credentialsOpt.get();
-        ForwardingRulesSettings settings = ForwardingRulesSettings.newBuilder()
-                .setCredentialsProvider(() -> credentials)
-                .build();
-        return Optional.of(ForwardingRulesClient.create(settings));
-    } catch (IOException e) {
-        log.error("Failed to create ForwardingRulesClient for project {}", gcpProjectId, e);
-        return Optional.empty();
+        try {
+            GoogleCredentials credentials = credentialsOpt.get();
+            ForwardingRulesSettings settings = ForwardingRulesSettings.newBuilder()
+                    .setCredentialsProvider(() -> credentials)
+                    .build();
+            return Optional.of(ForwardingRulesClient.create(settings));
+        } catch (IOException e) {
+            log.error("Failed to create ForwardingRulesClient for project {}", gcpProjectId, e);
+            return Optional.empty();
+        }
     }
-}
+    
+    public Optional<FirewallsClient> getFirewallsClient(String gcpProjectId) {
+        return getCredentials(gcpProjectId).map(credentials -> {
+            try {
+                FirewallsSettings settings = FirewallsSettings.newBuilder()
+                        .setCredentialsProvider(() -> credentials)
+                        .build();
+                return FirewallsClient.create(settings);
+            } catch (IOException e) {
+                log.error("Failed to create FirewallsClient for project ID: {}", gcpProjectId, e);
+                return null;
+            }
+        });
+    }
 }
