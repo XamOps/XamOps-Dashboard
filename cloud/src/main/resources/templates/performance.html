@@ -151,6 +151,13 @@
                 background-position: 100% 50%;
             }
         }
+        
+        .btn-success { 
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none; 
+            color: white; 
+        }
+
     </style>
 </head>
 <body class="bg-gray-50">
@@ -174,9 +181,9 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <button @click="exportToExcel()" class="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
-                            <i class="fas fa-file-excel text-green-600"></i>
-                            <span class="text-sm font-medium text-gray-700">Save To Excel</span>
+                        <button @click="exportData()" class="btn-success flex items-center space-x-2 px-6 py-3 text-sm font-semibold rounded-lg shadow-md" :disabled="isExporting">
+                            <i class="fas" :class="isExporting ? 'fa-spinner fa-spin' : 'fa-file-excel'"></i>
+                            <span x-text="isExporting ? 'Exporting...' : 'Export Report'"></span>
                         </button>
                         <button @click="loadInsights(true); loadSummary(true);" class="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all" :disabled="isRefreshing">
                             <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
@@ -430,6 +437,7 @@
         return {
             isLoading: true,
             isRefreshing: false,
+            isExporting: false,
             insights: [],
             selectedInsights: [],
             currentSeverity: 'ALL',
@@ -452,9 +460,9 @@
             init() {
                 this.loadInsights(false);
                 this.loadSummary(false);
-this.$watch('currentSeverity', () => {
-    this.loadInsights(false); 
-});
+                this.$watch('currentSeverity', () => {
+                    this.loadInsights(false); 
+                });
             },
 
             loadInsights(forceRefresh = false) {
@@ -596,11 +604,38 @@ this.$watch('currentSeverity', () => {
                     });
             },
 
-            exportToExcel() {
-                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
-                const severity = this.currentSeverity === 'ALL' ? '' : this.currentSeverity;
+            exportData() {
+                this.isExporting = true;
+                const headers = ["ID", "Insight", "Description", "Severity", "Category", "Account", "Quantity", "Resource Type", "Resource ID", "Recommendation", "Documentation URL", "Potential Savings", "Region", "Created Date"];
+                const rows = this.filteredInsights.map(insight => [
+                    `"${insight.id || ''}"`,
+                    `"${(insight.insight || '').replace(/"/g, '""')}"`,
+                    `"${(insight.description || '').replace(/"/g, '""')}"`,
+                    `"${insight.severity || ''}"`,
+                    `"${insight.category || ''}"`,
+                    `"${insight.account || ''}"`,
+                    `"${insight.quantity || ''}"`,
+                    `"${insight.resourceType || ''}"`,
+                    `"${insight.resourceId || ''}"`,
+                    `"${(insight.recommendation || '').replace(/"/g, '""')}"`,
+                    `"${insight.documentationUrl || ''}"`,
+                    `"${insight.potentialSavings || 0}"`,
+                    `"${insight.region || ''}"`,
+                    `"${insight.createdDate || ''}"`
+                ]);
 
-                window.open(`/api/metrics/insights/export?accountId=${selectedAccountId}&severity=${severity}`, '_blank');
+                let csvContent = "data:text/csv;charset=utf-8," 
+                    + headers.join(",") + "\n" 
+                    + rows.map(e => e.join(",")).join("\n");
+
+                var encodedUri = encodeURI(csvContent);
+                var link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "performance_insights.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                this.isExporting = false;
             },
 
             runWhatIfScenario() {
