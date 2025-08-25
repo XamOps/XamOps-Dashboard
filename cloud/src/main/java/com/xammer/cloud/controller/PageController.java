@@ -37,7 +37,7 @@ public class PageController {
     }
 
     // --- THIS IS THE MODIFIED METHOD ---
-    @GetMapping("/")
+@GetMapping("/")
     public String dashboardPage(@RequestParam(required = false) String accountId, Authentication authentication, Model model) {
         // If an accountId is already in the URL, it means we have been redirected or the user is switching.
         // Let the existing logic handle it.
