@@ -47,6 +47,11 @@
             border: 1px solid rgba(229, 231, 235, 0.8);
         }
         
+        .form-select:disabled {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
+        
         .form-input:focus, .form-select:focus {
             background: rgba(255, 255, 255, 1);
             border-color: #667eea;
@@ -365,15 +370,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         init() {
             this.setupEventListeners();
-            this.loadResources(false); // Initial load from cache if available
+            this.loadResources(false);
         },
 
         setupEventListeners() {
             this.dom.searchInput.addEventListener('input', () => this.debounce(this.render, 300)());
             this.dom.regionFilter.addEventListener('change', () => this.render());
-            this.dom.refreshButton.addEventListener('click', () => {
-                this.loadResources(true);
-            });
+            this.dom.refreshButton.addEventListener('click', () => this.loadResources(true));
             window.addEventListener('storage', (e) => {
                 if (e.key === 'selectedAccountId') {
                     this.loadResources(true);
@@ -410,18 +413,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            if (!forceRefresh) {
-                this.dom.listContainer.innerHTML = '';
-                this.dom.listContainer.appendChild(this.dom.loadingState);
-                this.dom.loadingState.style.display = 'block';
-            }
-            
+            // Set loading states
             this.isRefreshing = true;
             this.dom.updateStatus.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Updating...';
             this.dom.refreshButton.disabled = true;
             this.dom.refreshButtonText.textContent = 'Refreshing...';
             this.dom.refreshButtonIcon.classList.add('fa-spin');
-            
+            this.dom.regionFilter.innerHTML = '<option value="">Loading Regions...</option>';
+            this.dom.regionFilter.disabled = true;
+
             if (forceRefresh) {
                 sessionStorage.removeItem(cacheKey); 
             }
@@ -439,6 +439,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Error fetching resources:', error);
                     this.allResources = [];
                     this.dom.updateStatus.textContent = 'Update failed';
+                    this.dom.regionFilter.innerHTML = '<option value="">Error loading regions</option>';
                     this.render();
                 })
                 .finally(() => {
@@ -449,16 +450,64 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         },
 
+        getRegionDisplayName(regionId) {
+            const regionMap = {
+                'us-east1': 'US East (N. Virginia)',
+                'us-east4': 'US East (S. Carolina)',
+                'us-central1': 'US Central (Iowa)',
+                'us-west1': 'US West (Oregon)',
+                'us-west2': 'US West (Los Angeles)',
+                'us-west3': 'US West (Salt Lake City)',
+                'us-west4': 'US West (Las Vegas)',
+                'europe-west1': 'Europe (Belgium)',
+                'europe-west2': 'Europe (London)',
+                'europe-west3': 'Europe (Frankfurt)',
+                'europe-west4': 'Europe (Netherlands)',
+                'europe-west6': 'Europe (Zürich)',
+                'europe-north1': 'Europe (Finland)',
+                'europe-southwest1': 'Europe (Madrid)',
+                'europe-central2': 'Europe (Warsaw)',
+                'asia-east1': 'Asia Pacific (Taiwan)',
+                'asia-east2': 'Asia Pacific (Hong Kong)',
+                'asia-northeast1': 'Asia Pacific (Tokyo)',
+                'asia-northeast2': 'Asia Pacific (Osaka)',
+                'asia-northeast3': 'Asia Pacific (Seoul)',
+                'asia-south1': 'Asia Pacific (Mumbai)',
+                'asia-south2': 'Asia Pacific (Delhi)',
+                'asia-southeast1': 'Asia Pacific (Singapore)',
+                'asia-southeast2': 'Asia Pacific (Jakarta)',
+                'australia-southeast1': 'Australia (Sydney)',
+                'australia-southeast2': 'Australia (Melbourne)',
+                'southamerica-east1': 'South America (São Paulo)',
+                'southamerica-west1': 'South America (Santiago)',
+                'global': 'Global',
+            };
+            return regionMap[regionId] || regionId.charAt(0).toUpperCase() + regionId.slice(1);
+        },
+
         populateRegionFilter() {
             const regions = [...new Set(this.allResources.map(r => r.location).filter(Boolean))];
             regions.sort();
-            this.dom.regionFilter.innerHTML = '<option value="">All Regions</option>';
-            regions.forEach(region => {
-                const option = document.createElement('option');
-                option.value = region;
-                option.textContent = region;
-                this.dom.regionFilter.appendChild(option);
-            });
+            
+            this.dom.regionFilter.innerHTML = ''; // Clear existing options
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'All Regions';
+            this.dom.regionFilter.appendChild(defaultOption);
+
+            if (regions.length > 0) {
+                regions.forEach(regionId => {
+                    const option = document.createElement('option');
+                    option.value = regionId;
+                    option.textContent = this.getRegionDisplayName(regionId);
+                    this.dom.regionFilter.appendChild(option);
+                });
+                this.dom.regionFilter.disabled = false;
+            } else {
+                this.dom.regionFilter.disabled = true;
+                defaultOption.textContent = 'No Regions Found';
+            }
         },
 
         render() {
@@ -541,7 +590,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         createResourceRow(resource) {
-            const hasDetails = false; // GCP resources don't have a details object in the DTO for now
+            const hasDetails = false;
 
             return `
                 <div class="resource-row border-t border-gray-200/50" data-id="${resource.id}">
@@ -558,11 +607,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="col-span-2 flex items-center space-x-2">
                             <i class="fas fa-map-marker-alt text-gray-400 text-xs"></i>
-                            <span class="font-semibold text-gray-600">${resource.location || 'global'}</span>
+                            <span class="font-semibold text-gray-600">${this.getRegionDisplayName(resource.location) || 'Global'}</span>
                         </div>
                         <div class="col-span-2">
-                            <span class="state-badge px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full capitalize ${this.getStateClass(resource.status)}">
-                                ${resource.status || 'Unknown'}
+                            <span class="state-badge px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${this.getStateClass(resource.status)}">
+                                ${this.formatStatusText(resource.status)}
                             </span>
                         </div>
                         <div class="col-span-2 text-right pr-4">
@@ -591,12 +640,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             });
         },
+        
+        formatStatusText(status) {
+            if (!status) return 'Unknown';
+            const lower = status.toLowerCase().replace(/_/g, ' ');
+            return lower.charAt(0).toUpperCase() + lower.slice(1);
+        },
             
         getStateClass(state) {
             const s = (state || '').toLowerCase();
-            if (['running', 'available', 'active', 'in-use', 'ready'].includes(s)) return 'bg-green-100 text-green-800 border-green-200';
-            if (['stopped', 'terminated', 'deleting', 'inactive', 'error'].includes(s)) return 'bg-red-100 text-red-800 border-red-200';
-            if (['pending', 'stopping', 'provisioning'].includes(s)) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+            if (['running', 'available', 'active', 'in-use', 'ready', 'ok'].includes(s)) return 'bg-green-100 text-green-800 border-green-200';
+            if (['stopped', 'terminated', 'deleting', 'inactive', 'error', 'disabled'].includes(s)) return 'bg-red-100 text-red-800 border-red-200';
+            if (['pending', 'stopping', 'provisioning', 'reconciling'].includes(s)) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
             return 'bg-gray-100 text-gray-800 border-gray-200';
         },
 
@@ -612,9 +667,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Load Balancer': 'gcp-load-balancer.png',
                 'Cloud Run': 'gcp-cloud-run.png',
                 'Cloud Functions': 'gcp-cloud-functions.png',
-                'Firewall': 'gcp-firewall.png'
+                'Firewall Rule': 'gcp-firewall.png'
             };
-            return iconMap[serviceType] || 'default-icon.png';
+            return iconMap[serviceType] || 'gcp-icon.png';
         },
     };
     
