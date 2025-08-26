@@ -11,7 +11,10 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.firewall.HttpFirewall;
+import org.springframework.security.web.firewall.StrictHttpFirewall;
 import com.xammer.cloud.repository.UserRepository;
+
 import java.util.ArrayList;
 
 @Configuration
@@ -27,17 +30,14 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // ENABLE CORS to apply the rules from your WebConfig
+            .cors().and()
             .authorizeHttpRequests((requests) -> requests
-                // ADD these lines to permit access to login and static resources
-                .antMatchers("/login", "/css/**", "/js/**", "/images/**", "/icons/**").permitAll()
-                // Allow WebSocket connections
-                .antMatchers("/ws/**").permitAll()
+                .antMatchers("/login", "/css/**", "/js/**", "/images/**", "/icons/**", "/webjars/**").permitAll()
+                .antMatchers("/ws/**").authenticated()
                 .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
-
-                // ✅ ADD THIS LINE to secure your Kubernetes API
                 .antMatchers("/api/k8s/**").authenticated()
-
-                // ✅ CHANGE THIS LINE to secure all other requests by default
+                .antMatchers("/vendor/**", "/ec/vendor/**", "/.php", "/**/.php").denyAll()
                 .anyRequest().authenticated()
             )
             .formLogin((form) -> form
@@ -53,7 +53,10 @@ public class SecurityConfig {
                 .permitAll()
             );
 
-        http.csrf().disable();
+        // ✅ UPDATE THIS LINE to ignore CSRF for the account manager API
+        http.csrf(csrf -> csrf
+            .ignoringAntMatchers("/api/k8s/**", "/api/account-manager/**")
+        );
 
         return http.build();
     }
@@ -70,8 +73,16 @@ public class SecurityConfig {
                         user.getUsername(),
                         user.getPassword(),
                         new ArrayList<>(),
-                        user.getClient().getId() // Pass the client ID here
+                        user.getClient().getId()
                 ))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+    }
+
+    @Bean
+    public HttpFirewall allowSemicolonHttpFirewall() {
+        StrictHttpFirewall firewall = new StrictHttpFirewall();
+        // This is the critical change to allow session IDs in the URL
+        firewall.setAllowSemicolon(true);
+        return firewall;
     }
 }
