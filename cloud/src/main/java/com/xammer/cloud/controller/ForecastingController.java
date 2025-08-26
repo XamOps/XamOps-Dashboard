@@ -1,7 +1,7 @@
 package com.xammer.cloud.controller;
 
-import com.xammer.cloud.dto.HistoricalCostDto;
-import com.xammer.cloud.service.CostService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xammer.cloud.dto.ForecastDto;
 import com.xammer.cloud.service.ForecastingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,12 +11,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.ResourceAccessException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -26,71 +23,32 @@ public class ForecastingController {
     private static final Logger logger = LoggerFactory.getLogger(ForecastingController.class);
 
     private final ForecastingService forecastingService;
-    private final CostService costService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    public ForecastingController(ForecastingService forecastingService, CostService costService) {
+    public ForecastingController(ForecastingService forecastingService) {
         this.forecastingService = forecastingService;
-        this.costService = costService;
     }
 
     @GetMapping("/cost")
     public CompletableFuture<ResponseEntity<String>> getCostForecastData(
             @RequestParam String accountId,
             @RequestParam(defaultValue = "30") int periods,
-            @RequestParam(required = false) String serviceName,
-            @RequestParam(defaultValue = "false") boolean forceRefresh) {
+            @RequestParam(required = false, defaultValue = "ALL") String serviceName) {
 
-        int historicalDays = Math.min(periods * 3, 180);
-
-        return costService.getHistoricalCost(
-                accountId,
-                "ALL".equalsIgnoreCase(serviceName) ? null : serviceName,
-                null,
-                historicalDays,
-                forceRefresh
-        ).thenCompose(historicalCostData -> {
-            if (historicalCostData == null || historicalCostData.getLabels() == null || historicalCostData.getLabels().isEmpty()) {
-                logger.warn("No historical cost data found for account {} to generate a forecast.", accountId);
-                return CompletableFuture.completedFuture(ResponseEntity.status(org.springframework.http.HttpStatus.NO_CONTENT).body("[]"));
-            }
-
-            List<Map<String, Object>> formattedData = new ArrayList<>();
-            for (int i = 0; i < historicalCostData.getLabels().size(); i++) {
-                Map<String, Object> point = new HashMap<>();
-                point.put("ds", historicalCostData.getLabels().get(i));
-                point.put("y", historicalCostData.getCosts().get(i));
-                formattedData.add(point);
-            }
-
-            if (formattedData.isEmpty()) {
-                logger.warn("Formatted data for forecasting is empty for account {}", accountId);
-                return CompletableFuture.completedFuture(ResponseEntity.status(org.springframework.http.HttpStatus.NO_CONTENT).body("[]"));
-            }
-
-            try {
-                return forecastingService.getCostForecast(
-                        accountId,
-                        "ALL".equalsIgnoreCase(serviceName) ? null : serviceName,
-                        periods
-                ).thenApply(result -> {
-                    try {
-                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                        String json = mapper.writeValueAsString(result);
-                        return ResponseEntity.ok(json);
-                    } catch (Exception ex) {
-                        logger.error("Error serializing forecast result to JSON", ex);
-                        return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body("[]");
-                    }
-                });
-            } catch (ResourceAccessException e) {
-                logger.error("Forecasting service is unavailable at the moment. Skipping forecast generation.", e);
-                return CompletableFuture.completedFuture(ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE).body("[]"));
-            }
-
-        }).exceptionally(ex -> {
-            logger.error("Error fetching historical cost data for forecast for account {}", accountId, ex);
-            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body("[]");
-        });
+        return forecastingService.getCostForecast(accountId, serviceName, periods)
+            .thenApply(forecastResult -> {
+                try {
+                    String jsonResult = objectMapper.writeValueAsString(forecastResult);
+                    return ResponseEntity.ok(jsonResult);
+                } catch (Exception e) {
+                    logger.error("Error serializing forecast DTO to JSON for account {}", accountId, e);
+                    return ResponseEntity.status(500).body("[]");
+                }
+            })
+            .exceptionally(ex -> {
+                logger.error("Error generating cost forecast for account {}", accountId, ex);
+                return ResponseEntity.status(500).body("[]");
+            });
     }
 }

@@ -401,14 +401,13 @@
                         </div>
 
                         <div x-show="!isLoading && costData.length > 0" x-cloak class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-<div class="lg:col-span-1">
-    <div class="chart-container chart-hover-effect min-h-96"> <h3 class="text-lg font-semibold text-gray-800 mb-4">Cost Distribution</h3>
-        <div class="h-80">
-            <canvas id="costChart"></canvas>
-        </div>
-    </div>
-</div>
-
+                            <div class="lg:col-span-1">
+                                <div class="chart-container chart-hover-effect min-h-96"> <h3 class="text-lg font-semibold text-gray-800 mb-4">Cost Distribution</h3>
+                                    <div class="h-80">
+                                        <canvas id="costChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="lg:col-span-2">
                                 <div class="table-enhanced">
                                     <div class="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b">
@@ -521,14 +520,13 @@
                         </div>
                         <div class="flex gap-6 mt-4 pl-3">
                             <div class="flex items-center gap-2">
-                                <span class="inline-block w-6 h-3 rounded bg-gradient-to-b from-[#8fd3fe] to-[#bdafff]"></span>
+                                <span class="inline-block w-6 h-1 rounded-full" style="background-color: #6366f1;"></span>
                                 <span class="text-sm text-gray-700">Historical</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="inline-block w-6 h-3 rounded bg-gradient-to-b from-[#faaca8] to-[#ffc371]"></span>
+                                <span class="inline-block w-6 h-1 border-t-2 border-dashed" style="border-color: #f97316;"></span>
                                 <span class="text-sm text-gray-700">Forecast</span>
                             </div>
-
                         </div>
 
                     </div>
@@ -846,27 +844,28 @@
                     });
                 },
 
-                async renderCostForecastChart() {
-                    const container = document.getElementById('costForecastContainer');
-                    const spinner = document.getElementById('forecast-spinner');
-                    const canvas = document.getElementById('costForecastChart');
-                    if (spinner) spinner.style.display = '';
-                    if (canvas) canvas.style.display = 'none';
+// REPLACE ONLY THIS FUNCTION
+async renderCostForecastChart() {
+    const container = document.getElementById('costForecastContainer');
+    const spinner = document.getElementById('forecast-spinner');
+    const canvas = document.getElementById('costForecastChart');
+    if (spinner) spinner.style.display = '';
+    if (canvas) canvas.style.display = 'none';
 
-                    try {
-                        const selectedAccountId = sessionStorage.getItem('selectedAccountId') || '605134457560';
-                        let url = `/api/forecast/cost?accountId=${selectedAccountId}&periods=${this.forecast.periods}`;
-                        if (this.forecast.service !== 'ALL') url += `&serviceName=${encodeURIComponent(this.forecast.service)}`;
-                        const response = await fetch(url);
-                        if (!response.ok) throw new Error('Fetch failed');
-                        const forecastData = await response.json();
+    try {
+        const selectedAccountId = sessionStorage.getItem('selectedAccountId') || '605134457560';
+        let url = `/api/forecast/cost?accountId=${selectedAccountId}&periods=${this.forecast.periods}`;
+        if (this.forecast.service !== 'ALL') url += `&serviceName=${encodeURIComponent(this.forecast.service)}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Fetch failed');
+        const forecastData = await response.json();
 
-                        if (spinner) spinner.style.display = 'none';
-                        if (canvas) canvas.style.display = '';
+        if (spinner) spinner.style.display = 'none';
+        if (canvas) canvas.style.display = '';
 
-                        if (!forecastData || forecastData.length === 0) {
-                            if (this.costForecastChart) this.costForecastChart.destroy();
-                            container.innerHTML = `
+        if (!forecastData || forecastData.length === 0) {
+            if (this.costForecastChart) this.costForecastChart.destroy();
+            container.innerHTML = `
                 <div class="flex items-center justify-center h-full text-center text-gray-500">
                     <div>
                         <i class="fas fa-chart-line text-4xl mb-4 text-gray-300"></i>
@@ -874,107 +873,153 @@
                         <p class="text-sm">More historical data is needed for an accurate prediction.</p>
                     </div>
                 </div>`;
-                            return;
+            return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const labels = forecastData.map(d => d.ds);
+        const barData = forecastData.map(d => ({
+            y: d.yhat,
+            isForecast: new Date(d.ds) >= today
+        }));
+
+        // Prepare historical and forecast datasets for line chart
+        const historicalData = [];
+        const forecastLine = [];
+        for (let i = 0; i < barData.length; i++) {
+            if (barData[i].isForecast) {
+                historicalData.push(null);
+                forecastLine.push(barData[i].y);
+            } else {
+                historicalData.push(barData[i].y);
+                forecastLine.push(null);
+            }
+        }
+
+        const ctx = canvas.getContext('2d');
+        // Historical Gradient
+        const historyGradient = ctx.createLinearGradient(0, 0, 0, 180);
+        historyGradient.addColorStop(0, '#8fd3fe');
+        historyGradient.addColorStop(1, '#bdafff');
+        // Forecast Gradient
+        const forecastGradient = ctx.createLinearGradient(0, 0, 0, 180);
+        forecastGradient.addColorStop(0, 'rgba(250,172,168,0.96)');
+        forecastGradient.addColorStop(1, 'rgba(255,195,113,0.88)');
+
+        if (this.costForecastChart) this.costForecastChart.destroy();
+        this.costForecastChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Historical',
+                        data: historicalData,
+                        borderColor: '#8fd3fe',
+                        backgroundColor: historyGradient,
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#8fd3fe',
+                        segment: {
+                            borderColor: ctx => ctx.p0.parsed.y !== null && ctx.p1.parsed.y !== null ? '#8fd3fe' : 'rgba(0,0,0,0.07)'
+                        },
+                        fill: false,
+                        spanGaps: false,
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Forecast',
+                        data: forecastLine,
+                        borderColor: 'rgba(250,172,168,1)',
+                        backgroundColor: forecastGradient,
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointBackgroundColor: 'rgba(250,172,168,1)',
+                        borderDash: [8, 4],
+                        segment: {
+                            borderColor: ctx => ctx.p0.parsed.y !== null && ctx.p1.parsed.y !== null ? 'rgba(250,172,168,1)' : 'rgba(0,0,0,0.07)'
+                        },
+                        fill: false,
+                        spanGaps: false,
+                        tension: 0.3,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: { size: 12 }
                         }
-                        const now = new Date();
-                        const labels = forecastData.map(d => new Date(d.ds).toLocaleDateString());
-                        const barData = forecastData.map(d => ({
-                            y: d.yhat,
-                            isForecast: new Date(d.ds) >= now
-                        }));
-
-                        const ctx = canvas.getContext('2d');
-                        const historyGradient = ctx.createLinearGradient(0, 0, 0, 180);
-                        historyGradient.addColorStop(0, '#8fd3fe');
-                        historyGradient.addColorStop(1, '#bdafff');
-                        const forecastGradient = ctx.createLinearGradient(0, 0, 0, 180);
-                        forecastGradient.addColorStop(0, 'rgba(250,172,168,0.96)');
-                        forecastGradient.addColorStop(1, 'rgba(255,195,113,0.88)');
-                        const barColors = barData.map(bar => bar.isForecast ? forecastGradient : historyGradient);
-
-                        if (this.costForecastChart) this.costForecastChart.destroy();
-                        this.costForecastChart = new Chart(ctx, {
-                            type: 'bar',
-                            data: {
-                                labels: labels,
-                                datasets: [{
-                                    label: 'Cost',
-                                    data: barData.map(b => b.y),
-                                    backgroundColor: barColors,
-                                    borderRadius: 7,
-                                    barPercentage: 0.72,
-                                    categoryPercentage: 0.90,
-                                    borderSkipped: false,
-                                    hoverBackgroundColor: barData.map(bar => bar.isForecast ? 'rgba(255,213,145,1)' : 'rgba(128,218,255,1)')
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: {
-                                        display: false
-                                    },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: function(context) {
-                                                const isForecast = barData[context.dataIndex]?.isForecast;
-                                                const labelType = isForecast ? "Forecast" : "Historical";
-                                                return `${labelType}: $${context.parsed.y.toFixed(2)}`;
-                                            }
-                                        },
-                                        backgroundColor: '#fff',
-                                        borderColor: '#6842ec',
-                                        borderWidth: 2,
-                                        titleColor: '#232323',
-                                        bodyColor: '#6842ec',
-                                        padding: 12
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Cost Forecast',
-                                        align: 'start',
-                                        font: {
-                                            size: 21,
-                                            weight: 'bold'
-                                        },
-                                        color: '#1e293b',
-                                        padding: {
-                                            bottom: 8
-                                        }
-                                    }
-                                },
-                                scales: {
-                                    x: {
-                                        grid: {
-                                            display: false
-                                        },
-                                        ticks: {
-                                            display: false
-                                        }
-                                    },
-                                    y: {
-                                        beginAtZero: true,
-                                        grid: {
-                                            color: 'rgba(166,180,254,0.09)'
-                                        },
-                                        ticks: {
-                                            color: '#6366F1',
-                                            font: {
-                                                size: 13,
-                                                weight: 'bold'
-                                            },
-                                            callback: v => '$' + v
-                                        }
-                                    }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'Forecast') {
+                                    return `Forecast: $${context.parsed.y.toFixed(2)}`;
+                                } else {
+                                    return `Historical: $${context.parsed.y.toFixed(2)}`;
                                 }
                             }
-                        });
+                        },
+                        backgroundColor: '#fff',
+                        borderColor: '#6842ec',
+                        borderWidth: 2,
+                        titleColor: '#232323',
+                        bodyColor: '#6842ec',
+                        padding: 12
+                    },
+                    title: {
+                        display: true,
+                        text: 'Cost Forecast',
+                        align: 'start',
+                        font: {
+                            size: 21,
+                            weight: 'bold'
+                        },
+                        color: '#1e293b',
+                        padding: {
+                            bottom: 8
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            display: true
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(166,180,254,0.09)'
+                        },
+                        ticks: {
+                            color: '#6366F1',
+                            font: {
+                                size: 13,
+                                weight: 'bold'
+                            },
+                            callback: v => '$' + v
+                        }
+                    }
+                }
+            }
+        });
 
-                    } catch (err) {
-                        if (spinner) spinner.style.display = 'none';
-                        if (canvas) canvas.style.display = '';
-                        container.innerHTML = `
+    } catch (err) {
+        if (spinner) spinner.style.display = 'none';
+        if (canvas) canvas.style.display = '';
+        container.innerHTML = `
             <div class="flex items-center justify-center h-full text-center text-red-500 font-semibold p-4">
                 <div>
                     <i class="fas fa-exclamation-circle text-4xl mb-4 text-red-400"></i>
@@ -982,8 +1027,9 @@
                     <p class="text-sm">Please check application logs for more details.</p>
                 </div>
             </div>`;
-                    }
-                }
+    }
+}
+
 
             }
         }
