@@ -6,14 +6,13 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>2.7.5</version>
-        <relativePath/> <!-- lookup parent from repository -->
-    </parent>
+        <relativePath/> </parent>
     <groupId>com.xammer</groupId>
     <artifactId>cloud-dashboard</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>cloud-dashboard</name>
     <description>Live AWS and GCP Dashboard</description>
-    <packaging>jar</packaging> <!-- Added from the old POM -->
+    <packaging>jar</packaging>
 
     <properties>
         <java.version>17</java.version>
@@ -25,7 +24,6 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- AWS SDK Bill of Materials (BOM) -->
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
@@ -33,7 +31,6 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Google Cloud Libraries Bill of Materials (BOM) -->
             <dependency>
                 <groupId>com.google.cloud</groupId>
                 <artifactId>libraries-bom</artifactId>
@@ -45,7 +42,6 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Spring Boot Starters -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -75,7 +71,6 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Development Tools - Added from the old POM -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -83,20 +78,12 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- H2 Database (for development/testing) - Added from the old POM -->
-        <!-- <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>runtime</scope>
-        </dependency> -->
 
-        <!-- AWS SDK Dependencies (versions managed by BOM) -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>ec2</artifactId>
@@ -201,15 +188,11 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>cloudformation</artifactId>
         </dependency>
-        <!-- AWS KMS dependency - now managed by BOM -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>kms</artifactId>
         </dependency>
 
-        <!-- Removed duplicate/old google-cloud-securitycenter dependency -->
-
-        <!-- Google Cloud Dependencies (versions managed by BOM, expanded from new POM) -->
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
@@ -254,14 +237,12 @@
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-resourcemanager</artifactId>
         </dependency>
-        <!-- google-api-services-sqladmin (explicit version, as in both POMs) -->
         <dependency>
             <groupId>com.google.apis</groupId>
             <artifactId>google-api-services-sqladmin</artifactId>
             <version>v1beta4-rev20250613-2.0.0</version>
         </dependency>
 
-        <!-- Other Libraries -->
         <dependency>
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-client</artifactId>
@@ -281,26 +262,21 @@
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-billingbudgets</artifactId>
         </dependency>
-        <!-- Add Google Cloud Security Center v2 dependency -->
-    <!-- Removed duplicate/old google-cloud-securitycenter dependency -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
-        <!-- Jakarta Servlet API - Added from the old POM -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
             <scope>provided</scope>
         </dependency>
-        <!-- Bucket4j Spring Boot Starter - Added from the old POM -->
         <dependency>
             <groupId>com.giffing.bucket4j.spring.boot.starter</groupId>
             <artifactId>bucket4j-spring-boot-starter</artifactId>
             <version>0.8.1</version>
         </dependency>
-    <!-- Removed duplicate/old google-cloud-securitycenter dependency -->
     </dependencies>
 
     <build>
@@ -315,6 +291,22 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <resources>
+                        <resource>
+                            <directory>src/main/resources</directory>
+                            <filtering>true</filtering>
+                            <excludes>
+                                <exclude>**/.DS_Store</exclude>
+                            </excludes>
+                        </resource>
+                    </resources>
                 </configuration>
             </plugin>
         </plugins>
