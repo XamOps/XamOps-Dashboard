@@ -68,7 +68,7 @@ public class ForecastingService {
 
                     HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-                    String forecastJson = restTemplate.postForObject("http://localhost:5002/forecast/cost", entity, String.class);
+String forecastJson = restTemplate.postForObject("http://forecast:5002/forecast/cost", entity, String.class);
                     
                     List<ForecastDto> forecast = objectMapper.readValue(forecastJson, new TypeReference<>() {});
                     return CompletableFuture.completedFuture(forecast);
