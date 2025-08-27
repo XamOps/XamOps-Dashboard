@@ -67,4 +67,15 @@ public class FinOpsController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+    
+    @DeleteMapping("/budgets")
+    public ResponseEntity<Void> deleteBudget(@RequestParam String accountId, @RequestParam String budgetName) {
+        try {
+            finOpsService.deleteBudget(accountId, budgetName);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("Error deleting budget '{}' for account {}", budgetName, accountId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }

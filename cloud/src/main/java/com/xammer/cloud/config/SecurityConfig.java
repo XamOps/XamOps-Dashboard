@@ -11,8 +11,13 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.firewall.HttpFirewall;
+import org.springframework.security.web.firewall.StrictHttpFirewall;
 import com.xammer.cloud.repository.UserRepository;
+
 import java.util.ArrayList;
+
+import static org.springframework.security.config.Customizer.withDefaults;
 
 @Configuration
 @EnableWebSecurity
@@ -27,17 +32,17 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            .cors(withDefaults()) // Use the WebConfig CORS settings
+            // ✅ Ignore CSRF for all API and WebSocket paths
+            .csrf(csrf -> csrf
+                .ignoringAntMatchers("/api/**", "/ws/**")
+            )
+            // Disable X-Frame-Options which interferes with SockJS fallbacks
+            .headers(headers -> headers.frameOptions().disable())
             .authorizeHttpRequests((requests) -> requests
-                // ADD these lines to permit access to login and static resources
-                .antMatchers("/login", "/css/**", "/js/**", "/images/**", "/icons/**").permitAll()
-                // Allow WebSocket connections
+                // Permit all WebSocket handshake requests
                 .antMatchers("/ws/**").permitAll()
-                .antMatchers("/", "/waste", "/cloudlist", "/account-manager", "/add-account").authenticated()
-
-                // ✅ ADD THIS LINE to secure your Kubernetes API
-                .antMatchers("/api/k8s/**").authenticated()
-
-                // ✅ CHANGE THIS LINE to secure all other requests by default
+                .antMatchers("/login", "/css/**", "/js/**", "/images/**", "/icons/**", "/webjars/**").permitAll()
                 .anyRequest().authenticated()
             )
             .formLogin((form) -> form
@@ -52,8 +57,6 @@ public class SecurityConfig {
                 .deleteCookies("JSESSIONID")
                 .permitAll()
             );
-
-        http.csrf().disable();
 
         return http.build();
     }
@@ -70,8 +73,15 @@ public class SecurityConfig {
                         user.getUsername(),
                         user.getPassword(),
                         new ArrayList<>(),
-                        user.getClient().getId() // Pass the client ID here
+                        user.getClient().getId()
                 ))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+    }
+
+    @Bean
+    public HttpFirewall allowSemicolonHttpFirewall() {
+        StrictHttpFirewall firewall = new StrictHttpFirewall();
+        firewall.setAllowSemicolon(true);
+        return firewall;
     }
 }

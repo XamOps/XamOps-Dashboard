@@ -172,6 +172,27 @@ public class FinOpsService {
         }
     }
 
+    public void deleteBudget(String accountId, String budgetName) {
+        CloudAccount account = getAccount(accountId);
+        BudgetsClient budgetsClient = awsClientProvider.getBudgetsClient(account);
+        logger.info("Deleting budget: {} for account {}", budgetName, accountId);
+        try {
+            DeleteBudgetRequest request = DeleteBudgetRequest.builder()
+                .accountId(accountId)
+                .budgetName(budgetName)
+                .build();
+            budgetsClient.deleteBudget(request);
+        } catch (NotFoundException e) {
+            logger.warn("Budget '{}' not found for account {}. It may have been already deleted.", budgetName, accountId);
+        } catch (Exception e) {
+            logger.error("Failed to delete budget '{}' for account {}", budgetName, accountId, e);
+            throw new RuntimeException("Failed to delete budget", e);
+        } finally {
+            dbCache.evict("budgets-" + accountId);
+            dbCache.evict("finopsReport-" + accountId);
+        }
+    }
+
     @Async("awsTaskExecutor")
     public CompletableFuture<DashboardData.TaggingCompliance> getTaggingCompliance(CloudAccount account, boolean forceRefresh) {
         String cacheKey = "taggingCompliance-" + account.getAwsAccountId();

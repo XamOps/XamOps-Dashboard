@@ -33,11 +33,14 @@ import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.rds.RdsClient;
 
 import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -287,6 +290,7 @@ public class OptimizationService {
                 findOldSnapshots(account, activeRegions), findDeregisteredAmis(account, activeRegions),
                 findIdleRdsInstances(account, activeRegions), findIdleLoadBalancers(account, activeRegions),
                 findUnusedSecurityGroups(account, activeRegions), findIdleEc2Instances(account, activeRegions),
+                findStoppedEc2InstancesForTooLong(account, activeRegions),
                 findUnattachedEnis(account, activeRegions), findIdleEksClusters(account, activeRegions),
                 findIdleEcsClusters(account, activeRegions), findUnderutilizedLambdaFunctions(account, activeRegions),
                 findOldDbSnapshots(account, activeRegions), findUnusedCloudWatchLogGroups(account, activeRegions)
@@ -534,7 +538,7 @@ public class OptimizationService {
     private CompletableFuture<List<DashboardData.WastedResource>> findIdleEc2Instances(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
         return fetchAllRegionalResources(account, activeRegions, regionId -> {
             Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
-            return ec2.describeInstances().reservations().stream()
+            return ec2.describeInstances(r -> r.filters(f -> f.name("instance-state-name").values("running"))).reservations().stream()
                     .flatMap(r -> r.instances().stream())
                     .filter(instance -> isEc2InstanceIdle(account, instance, regionId))
                     .map(instance -> {
@@ -545,14 +549,98 @@ public class OptimizationService {
         }, "Idle EC2 Instances");
     }
 
+    private CompletableFuture<List<DashboardData.WastedResource>> findStoppedEc2InstancesForTooLong(CloudAccount account, List<DashboardData.RegionStatus> activeRegions) {
+        return fetchAllRegionalResources(account, activeRegions, regionId -> {
+            Ec2Client ec2 = awsClientProvider.getEc2Client(account, regionId);
+            Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
+            return ec2.describeInstances(r -> r.filters(f -> f.name("instance-state-name").values("stopped"))).reservations().stream()
+                    .flatMap(r -> r.instances().stream())
+                    .filter(instance -> {
+                        String stateTransitionReason = instance.stateTransitionReason();
+                        if (stateTransitionReason != null && stateTransitionReason.contains("User initiated")) {
+                            // Extract and parse the timestamp
+                            try {
+                                String timestampStr = stateTransitionReason.substring(stateTransitionReason.indexOf('(') + 1, stateTransitionReason.indexOf(')'));
+                                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH);
+                                ZonedDateTime zonedDateTime = ZonedDateTime.parse(timestampStr, formatter);
+                                return zonedDateTime.toInstant().isBefore(thirtyDaysAgo);
+                            } catch (Exception e) {
+                                logger.warn("Could not parse stop time for instance {}", instance.instanceId(), e);
+                                return false;
+                            }
+                        }
+                        return false;
+                    })
+                    .map(instance -> {
+                        // Stopped instances still incur costs for their EBS volumes.
+                        // This is a simplified calculation. A more accurate one would describe the volumes.
+                        double monthlyCost = instance.blockDeviceMappings().size() * 5.0; // Assume ~$5/month per volume
+                        return new DashboardData.WastedResource(instance.instanceId(), getTagName(instance.tags(), instance.instanceId()), "EC2 Instance", regionId, monthlyCost, "Stopped for >30 days");
+                    })
+                    .collect(Collectors.toList());
+        }, "Stopped EC2 Instances");
+    }
+
+
     private boolean isEc2InstanceIdle(CloudAccount account, Instance instance, String regionId) {
         try {
             CloudWatchClient cw = awsClientProvider.getCloudWatchClient(account, regionId);
-            GetMetricDataRequest request = buildMetricDataRequest(instance.instanceId(), "CPUUtilization", "AWS/EC2", "InstanceId");
-            List<MetricDataResult> results = cw.getMetricData(request).metricDataResults();
-            if (!results.isEmpty() && !results.get(0).values().isEmpty()) {
-                return results.get(0).values().stream().mapToDouble(Double::doubleValue).average().orElse(100.0) < 3.0;
+            
+            // Define the time range for the last 30 days
+            Instant endTime = Instant.now();
+            Instant startTime = endTime.minus(30, ChronoUnit.DAYS);
+            
+            // Build queries for multiple metrics
+            MetricDataQuery cpuQuery = MetricDataQuery.builder()
+                    .id("cpu").metricStat(MetricStat.builder()
+                            .metric(Metric.builder().namespace("AWS/EC2").metricName("CPUUtilization")
+                                    .dimensions(Dimension.builder().name("InstanceId").value(instance.instanceId()).build()).build())
+                            .period(86400).stat("Maximum").build()) // Use Maximum statistic
+                    .returnData(true).build();
+
+            MetricDataQuery networkInQuery = MetricDataQuery.builder()
+                    .id("net_in").metricStat(MetricStat.builder()
+                            .metric(Metric.builder().namespace("AWS/EC2").metricName("NetworkIn")
+                                    .dimensions(Dimension.builder().name("InstanceId").value(instance.instanceId()).build()).build())
+                            .period(86400 * 30).stat("Sum").build()) // Sum over the period
+                    .returnData(true).build();
+
+            MetricDataQuery networkOutQuery = MetricDataQuery.builder()
+                    .id("net_out").metricStat(MetricStat.builder()
+                            .metric(Metric.builder().namespace("AWS/EC2").metricName("NetworkOut")
+                                    .dimensions(Dimension.builder().name("InstanceId").value(instance.instanceId()).build()).build())
+                            .period(86400 * 30).stat("Sum").build()) // Sum over the period
+                    .returnData(true).build();
+            
+            GetMetricDataRequest request = GetMetricDataRequest.builder()
+                    .startTime(startTime).endTime(endTime)
+                    .metricDataQueries(cpuQuery, networkInQuery, networkOutQuery)
+                    .build();
+
+            GetMetricDataResponse response = cw.getMetricData(request);
+            
+            // Define thresholds
+            double maxCpuThreshold = 3.0; // %
+            double networkThreshold = 100 * 1024 * 1024; // 100 MB
+
+            // Extract results
+            double maxCpu = 100.0;
+            double networkIn = Double.MAX_VALUE;
+            double networkOut = Double.MAX_VALUE;
+
+            for (MetricDataResult result : response.metricDataResults()) {
+                if (result.id().equals("cpu") && !result.values().isEmpty()) {
+                    maxCpu = result.values().stream().max(Double::compare).orElse(100.0);
+                } else if (result.id().equals("net_in") && !result.values().isEmpty()) {
+                    networkIn = result.values().get(0);
+                } else if (result.id().equals("net_out") && !result.values().isEmpty()) {
+                    networkOut = result.values().get(0);
+                }
             }
+
+            // Return true (idle) only if all conditions are met
+            return maxCpu < maxCpuThreshold && networkIn < networkThreshold && networkOut < networkThreshold;
+            
         } catch (Exception e) {
             logger.error("Could not get metrics for EC2 instance {}: {}", instance.instanceId(), e.getMessage());
         }

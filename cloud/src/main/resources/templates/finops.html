@@ -367,8 +367,10 @@
                             <div class="bg-white/70 backdrop-blur-sm border border-gray-200/50 rounded-xl p-6 hover:shadow-lg transition-all">
                                 <div class="flex items-center justify-between mb-4">
                                     <h4 class="font-bold text-gray-800" x-text="budget.budgetName"></h4>
-                                    <div class="w-8 h-8 bg-gradient-to-br from-green-500 to-teal-600 rounded-lg flex items-center justify-center">
-                                        <i class="fas fa-chart-line text-white text-sm"></i>
+                                    <div>
+                                        <button @click="deleteBudget(budget.budgetName)" class="text-red-500 hover:text-red-700">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="space-y-3">
@@ -390,8 +392,8 @@
                         </template>
                     </div>
                 </div>
-
-                <!-- <div class="glass-card rounded-2xl p-8 fade-in">
+<!-- 
+                <div class="glass-card rounded-2xl p-8 fade-in">
                     <div class="flex items-center space-x-3 mb-6">
                         <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
                             <i class="fas fa-shield-alt text-white"></i>
@@ -900,7 +902,15 @@
                     return;
                 }
                 this.isBudgetCreating = true;
-                fetch('/api/finops/budgets', {
+
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                if (!selectedAccountId) {
+                    alert('Error: No account selected.');
+                    this.isBudgetCreating = false;
+                    return;
+                }
+
+                fetch(`/api/finops/budgets?accountId=${selectedAccountId}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -910,15 +920,43 @@
                     .then(res => {
                         if (!res.ok) throw new Error('Failed to create budget.');
                         this.isBudgetModalOpen = false;
+                        
+                        const newBudgetEntry = { ...this.newBudget, actualSpend: 0, forecastedSpend: 0 };
+                        this.reportData.budgets.push(newBudgetEntry);
+                        
+                        // --- START OF FIX ---
+                        const cacheKey = `finopsReport-${selectedAccountId}`;
+                        sessionStorage.setItem(cacheKey, JSON.stringify(this.reportData));
+                        // --- END OF FIX ---
+
                         this.newBudget = {
                             budgetName: '',
                             budgetLimit: null,
                             budgetUnit: 'USD'
                         };
-                        this.loadReport(true);
                     })
                     .catch(err => alert(err.message))
                     .finally(() => this.isBudgetCreating = false);
+            },
+
+            deleteBudget(budgetName) {
+                if (!confirm(`Are you sure you want to delete the budget "${budgetName}"?`)) {
+                    return;
+                }
+
+                const selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                fetch(`/api/finops/budgets?accountId=${selectedAccountId}&budgetName=${encodeURIComponent(budgetName)}`, {
+                    method: 'DELETE'
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error('Failed to delete budget.');
+                    
+                    this.reportData.budgets = this.reportData.budgets.filter(b => b.budgetName !== budgetName);
+
+                    const cacheKey = `finopsReport-${selectedAccountId}`;
+                    sessionStorage.setItem(cacheKey, JSON.stringify(this.reportData));
+                })
+                .catch(err => alert(err.message));
             }
         }
     }

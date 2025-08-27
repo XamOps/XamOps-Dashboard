@@ -1,13 +1,12 @@
 package com.xammer.cloud.domain;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import javax.persistence.*;
-import java.time.Instant;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.Id;
+import javax.persistence.Lob;
+import java.time.LocalDateTime;
 
 @Entity
-@Data
-@NoArgsConstructor
 public class CachedData {
 
     @Id
@@ -17,9 +16,40 @@ public class CachedData {
     @Column(columnDefinition = "TEXT")
     private String jsonData;
 
-    private Instant lastUpdated;
+    private LocalDateTime lastUpdated;
 
-    // With the @Data annotation, you no longer need to manually write
-    // getCacheKey(), setCacheKey(), getJsonData(), setJsonData(), etc.
-    // Lombok handles it for you.
+    // No-argument constructor for JPA
+    public CachedData() {
+    }
+
+    // Constructor that was missing
+    public CachedData(String cacheKey, String jsonData, LocalDateTime lastUpdated) {
+        this.cacheKey = cacheKey;
+        this.jsonData = jsonData;
+        this.lastUpdated = lastUpdated;
+    }
+
+    public String getCacheKey() {
+        return cacheKey;
+    }
+
+    public void setCacheKey(String cacheKey) {
+        this.cacheKey = cacheKey;
+    }
+
+    public String getJsonData() {
+        return jsonData;
+    }
+
+    public void setJsonData(String jsonData) {
+        this.jsonData = jsonData;
+    }
+
+    public LocalDateTime getLastUpdated() {
+        return lastUpdated;
+    }
+
+    public void setLastUpdated(LocalDateTime lastUpdated) {
+        this.lastUpdated = lastUpdated;
+    }
 }
