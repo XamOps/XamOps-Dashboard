@@ -1,43 +1,56 @@
-name: CI/CD Pipeline for XamOps-Dashboard
+name: CI/CD - GHCR -> EC2 (self-hosted)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]   # change if your default branch is different
 
 jobs:
-  build_and_deploy:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: self-hosted   # your EC2 self-hosted runner
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build Docker image (Dockerfile at cloud/Dockerfile)
         env:
-          ECR_REPOSITORY: xamops
-          IMAGE_TAG: ${{ github.sha }}
-          ECR_URI: 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops
+          IMAGE: ghcr.io/xamops/image
+          TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_URI:$IMAGE_TAG -f cloud/Dockerfile cloud
-          docker push $ECR_URI:$IMAGE_TAG
+          sudo docker build -t $IMAGE:$TAG -t $IMAGE:latest -f cloud/Dockerfile cloud
 
-      - name: Deploy to EC2 via SSM
+      - name: Push Docker image to GHCR
+        env:
+          IMAGE: ghcr.io/xamops/image
+          TAG: ${{ github.sha }}
         run: |
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "i-009aa3aa59a60f17f" \
-            --parameters '{"commands":["echo \"Starting deployment on EC2 instance...\"","sudo systemctl restart docker || true","echo \"Cleaning up old containers and images...\"","sudo docker system prune -af","aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com","echo \"Pulling the new Docker image...\"","sudo docker pull 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Stopping and removing old containers...\"","sudo docker stop xamops-app || true","sudo docker rm -f xamops-app || true","echo \"Running the new container...\"","sudo docker run -d --name xamops-app --restart always -p 8080:8080 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Deployment complete. Listing containers...\"","sudo docker ps"]}' \
-            --timeout-seconds 600
+          sudo docker push $IMAGE:$TAG
+          sudo docker push $IMAGE:latest
+
+  deploy:
+    runs-on: self-hosted   # same EC2 runner
+    needs: build
+    steps:
+      - name: Log in to GHCR (again, safe for separate job)
+        run: echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+      - name: Stop & remove existing container (if any)
+        run: |
+          sudo docker ps -aq --filter "name=^xamops-app$" | xargs -r sudo docker rm -f
+
+      - name: Pull image and run new container
+        env:
+          IMAGE: ghcr.io/xamops/image
+          TAG: ${{ github.sha }}
+        run: |
+          sudo docker pull $IMAGE:$TAG
+          sudo docker run -d \
+            --name xamops-app \
+            --network xamops-uat-net \
+            --restart always \
+            -p 8080:8080 \
+            $IMAGE:$TAG
