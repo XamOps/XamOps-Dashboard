@@ -50,6 +50,7 @@ jobs:
           sudo docker pull $IMAGE:$TAG
           sudo docker run -d \
             --name xamops-app \
+            --network xamops-uat-net \
             --restart always \
             -p 8080:8080 \
             $IMAGE:$TAG
