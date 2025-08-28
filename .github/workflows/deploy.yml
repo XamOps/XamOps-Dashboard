@@ -36,7 +36,7 @@ jobs:
     needs: build
     steps:
       - name: Log in to GHCR (again, safe for separate job)
-        run: echo "${{ secrets.GHCR_PAT }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+        run: echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
       - name: Stop & remove existing container (if any)
         run: |
