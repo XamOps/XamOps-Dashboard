@@ -65,6 +65,20 @@ public class GcpClientProvider {
         }
     }
 
+    public Optional<RecommenderClient> getRecommenderClient(String gcpProjectId) {
+        return getCredentials(gcpProjectId).map(credentials -> {
+            try {
+                RecommenderSettings settings = RecommenderSettings.newBuilder()
+                        .setCredentialsProvider(() -> credentials)
+                        .build();
+                return RecommenderClient.create(settings);
+            } catch (IOException e) {
+                log.error("Failed to create RecommenderClient for project ID: {}", gcpProjectId, e);
+                return null;
+            }
+        });
+    }
+
     public Optional<SecurityCenterClient> getSecurityCenterV2Client(String gcpProjectId) {
         return getCredentials(gcpProjectId).map(credentials -> {
             try {
@@ -109,20 +123,6 @@ public class GcpClientProvider {
                         .setProjectId(gcpProjectId)
                         .build()
                         .getService());
-    }
-
-    public Optional<RecommenderClient> getRecommenderClient(String gcpProjectId) {
-        return getCredentials(gcpProjectId).map(credentials -> {
-            try {
-                RecommenderSettings settings = RecommenderSettings.newBuilder()
-                        .setCredentialsProvider(() -> credentials)
-                        .build();
-                return RecommenderClient.create(settings);
-            } catch (IOException e) {
-                log.error("Failed to create RecommenderClient for project ID: {}", gcpProjectId, e);
-                return null;
-            }
-        });
     }
 
     public Optional<MetricServiceClient> getMetricServiceClient(String gcpProjectId) {

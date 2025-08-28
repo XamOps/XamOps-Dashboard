@@ -33,4 +33,9 @@ public class GcpOptimizationRecommendation {
      * The estimated potential savings per month in USD.
      */
     private double monthlySavings;
+
+    /**
+     * The service the recommendation is for (e.g., "Compute Engine", "Cloud SQL").
+     */
+    private String service;
 }

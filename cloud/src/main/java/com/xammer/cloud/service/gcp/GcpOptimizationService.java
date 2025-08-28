@@ -92,7 +92,6 @@ public class GcpOptimizationService {
             return recommendations;
         });
     }
-    private static final String GLOBAL_LOCATION = "global";
 
     private final GcpClientProvider gcpClientProvider;
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -104,27 +103,99 @@ public class GcpOptimizationService {
     }
 
     public CompletableFuture<List<GcpOptimizationRecommendation>> getRightsizingRecommendations(String gcpProjectId) {
-        // ... existing implementation ...
+        log.info("Fetching rightsizing recommendations for GCP project: {}", gcpProjectId);
+
+        List<String> locations = List.of("global", "us-central1", "us-east1", "us-west1", "europe-west1", "asia-east1"); // Add more regions as needed
+
+        List<CompletableFuture<List<GcpOptimizationRecommendation>>> futures = new ArrayList<>();
+
+        futures.add(getRecommendationsForRecommender(gcpProjectId, "google.compute.instance.MachineTypeRecommender", "global", this::mapToRightsizingDto));
+        
+        for (String location : locations) {
+            if (!location.equals("global")) {
+                futures.add(getRecommendationsForRecommender(gcpProjectId, "google.cloudsql.instance.OverprovisionedRecommender", location, this::mapToSqlRightsizingDto));
+            }
+        }
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenApply(v -> futures.stream()
+                .map(CompletableFuture::join)
+                .flatMap(List::stream)
+                .collect(Collectors.toList()));
+    }
+
+    private CompletableFuture<List<GcpOptimizationRecommendation>> getRecommendationsForRecommender(String gcpProjectId, String recommenderId, String location, java.util.function.Function<Recommendation, GcpOptimizationRecommendation> mapper) {
         return CompletableFuture.supplyAsync(() -> {
             Optional<RecommenderClient> clientOpt = gcpClientProvider.getRecommenderClient(gcpProjectId);
-            if (clientOpt.isEmpty()) return List.of();
+            if (clientOpt.isEmpty()) {
+                log.warn("Recommender client not available for project {}. Skipping recommendations for {}.", gcpProjectId, recommenderId);
+                return List.of();
+            }
 
             try (RecommenderClient client = clientOpt.get()) {
-                String recommenderId = "google.compute.instance.MachineTypeRecommender";
-                RecommenderName recommenderName = RecommenderName.of(gcpProjectId, GLOBAL_LOCATION, recommenderId);
-
-                return StreamSupport.stream(client.listRecommendations(recommenderName).iterateAll().spliterator(), false)
-                        .map(this::mapToRightsizingDto)
-                        .toList();
+                RecommenderName recommenderName = RecommenderName.of(gcpProjectId, location, recommenderId);
+                
+                log.info("Querying recommender '{}' for project {} in location {}", recommenderId, gcpProjectId, location);
+                List<GcpOptimizationRecommendation> recommendations = StreamSupport.stream(client.listRecommendations(recommenderName).iterateAll().spliterator(), false)
+                        .map(mapper)
+                        .collect(Collectors.toList());
+                
+                log.info("Found {} recommendations from {} for project {} in location {}", recommendations.size(), recommenderId, gcpProjectId, location);
+                return recommendations;
             } catch (Exception e) {
-                log.error("Failed to get rightsizing recommendations for project {}", gcpProjectId, e);
+                log.error("Failed to get recommendations from {} for project {} in location {}. This may be due to permissions or the API not being enabled.", recommenderId, gcpProjectId, location, e);
                 return List.of();
             }
         });
     }
 
+    private GcpOptimizationRecommendation mapToRightsizingDto(Recommendation rec) {
+        String resourceName = "N/A";
+        if (rec.getContent().getOverview().getFieldsMap().containsKey("resourceName")) {
+            resourceName = rec.getContent().getOverview().getFieldsMap().get("resourceName").getStringValue();
+        }
+        
+        String currentMachineType = "N/A";
+        String recommendedMachineType = "N/A";
+        if (rec.getDescription().contains(" to ")) {
+            String[] parts = rec.getDescription().split(" to ");
+            currentMachineType = parts[0].replace("Change machine type from ", "");
+            recommendedMachineType = parts[1];
+        }
+
+        double monthlySavings = 0;
+        if (rec.getPrimaryImpact().hasCostProjection()) {
+            monthlySavings = rec.getPrimaryImpact().getCostProjection().getCost().getNanos() / -1_000_000_000.0;
+        }
+        
+        return new GcpOptimizationRecommendation(resourceName, currentMachineType, recommendedMachineType, monthlySavings, "Compute Engine");
+    }
+    
+    private GcpOptimizationRecommendation mapToSqlRightsizingDto(Recommendation rec) {
+        String resourceName = "N/A";
+        if (rec.getContent().getOverview().getFieldsMap().containsKey("resource")) {
+             resourceName = rec.getContent().getOverview().getFieldsMap().get("resource").getStringValue();
+             resourceName = resourceName.substring(resourceName.lastIndexOf('/') + 1);
+        }
+        
+        String currentMachineType = "N/A";
+        String recommendedMachineType = "N/A";
+
+        if (rec.getDescription().toLowerCase().contains("resize instance")) {
+            // Simple parsing, can be improved with more robust logic
+            currentMachineType = "Overprovisioned"; 
+            recommendedMachineType = "Smaller Tier";
+        }
+
+        double monthlySavings = 0;
+        if (rec.getPrimaryImpact().hasCostProjection()) {
+            monthlySavings = rec.getPrimaryImpact().getCostProjection().getCost().getNanos() / -1_000_000_000.0;
+        }
+        
+        return new GcpOptimizationRecommendation(resourceName, currentMachineType, recommendedMachineType, monthlySavings, "Cloud SQL");
+    }
+    
     public CompletableFuture<List<GcpWasteItem>> getWasteReport(String gcpProjectId) {
-        // ... existing implementation ...
         log.info("Starting waste report generation for GCP project: {}", gcpProjectId);
         CompletableFuture<List<GcpWasteItem>> idleDisksFuture = findIdleResources(gcpProjectId, "google.compute.disk.IdleResourceRecommender", "Idle Persistent Disk");
         CompletableFuture<List<GcpWasteItem>> idleAddressesFuture = findIdleResources(gcpProjectId, "google.compute.address.IdleResourceRecommender", "Unused IP Address");
@@ -165,7 +236,6 @@ public class GcpOptimizationService {
     }
 
     private CompletableFuture<List<GcpWasteItem>> findIdleResources(String gcpProjectId, String recommenderId, String wasteType) {
-        // ... existing implementation ...
         return CompletableFuture.supplyAsync(() -> {
             Optional<RecommenderClient> clientOpt = gcpClientProvider.getRecommenderClient(gcpProjectId);
             if (clientOpt.isEmpty()) {
@@ -187,31 +257,7 @@ public class GcpOptimizationService {
         }, executor);
     }
     
-    private GcpOptimizationRecommendation mapToRightsizingDto(Recommendation rec) {
-        // ... existing implementation ...
-        String resourceName = "N/A";
-        if (rec.getContent().getOverview().getFieldsMap().containsKey("resourceName")) {
-            resourceName = rec.getContent().getOverview().getFieldsMap().get("resourceName").getStringValue();
-        }
-        
-        String currentMachineType = "N/A";
-        String recommendedMachineType = "N/A";
-        if (rec.getDescription().contains(" to ")) {
-            String[] parts = rec.getDescription().split(" to ");
-            currentMachineType = parts[0].replace("Change machine type from ", "");
-            recommendedMachineType = parts[1];
-        }
-
-        double monthlySavings = 0;
-        if (rec.getPrimaryImpact().hasCostProjection()) {
-            monthlySavings = rec.getPrimaryImpact().getCostProjection().getCost().getNanos() / -1_000_000_000.0;
-        }
-        
-        return new GcpOptimizationRecommendation(resourceName, currentMachineType, recommendedMachineType, monthlySavings);
-    }
-
     private GcpWasteItem mapToWasteDto(Recommendation rec, String wasteType) {
-        // ... existing implementation ...
         String resourceName = "N/A";
         if (rec.getContent().getOverview().getFieldsMap().containsKey("resource")) {
              resourceName = rec.getContent().getOverview().getFieldsMap().get("resource").getStringValue();

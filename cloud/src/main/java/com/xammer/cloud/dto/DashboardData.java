@@ -83,6 +83,16 @@ public class DashboardData {
         private String recommendationReason; 
         private double currentMonthlyCost;
         private double recommendedMonthlyCost;
+
+        public OptimizationRecommendation(String service, String resourceId, String currentType, String recommendedType, double estimatedMonthlySavings, String recommendationReason, double currentMonthlyCost) {
+            this.service = service;
+            this.resourceId = resourceId;
+            this.currentType = currentType;
+            this.recommendedType = recommendedType;
+            this.estimatedMonthlySavings = estimatedMonthlySavings;
+            this.recommendationReason = recommendationReason;
+            this.currentMonthlyCost = currentMonthlyCost;
+        }
     }
 
     @Data @AllArgsConstructor @NoArgsConstructor public static class RightsizingRecommendation { private String resourceId; private String accountName; private String region; private String service; private String currentType; private String usage; private String recommendedType; private double currentMonthlyCost; private double recommendedMonthlyCost; private double estimatedMonthlySavings; private List<RightsizingOption> recommendationOptions; }

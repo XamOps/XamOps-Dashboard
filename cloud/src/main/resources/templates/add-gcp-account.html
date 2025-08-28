@@ -37,7 +37,7 @@
                         <p class="text-sm text-gray-600">Connect your Google Cloud project</p>
                     </div>
                 </div>
-                <a href="/add-account" class="px-4 py-2 bg-white/70 backdrop-blur-sm text-gray-700 rounded-lg border border-gray-200/50 hover:bg-white transition-all">
+                <a href="/add-account" class="px-4 py-2 bg-white/70 backdrop-filter-sm text-gray-700 rounded-lg border border-gray-200/50 hover:bg-white transition-all">
                     <i class="fas fa-arrow-left mr-2"></i>Back
                 </a>
             </header>
@@ -56,6 +56,20 @@
                         </div>
                         <div>
                             <label for="serviceAccountKey" class="block text-sm font-semibold text-gray-700 mb-2">Service Account Key (JSON)</label>
+                            <div class="text-xs text-gray-500 mb-2">
+                                To generate the key, run the following command in your Google Cloud Shell. It will create a service account with the necessary read-only permissions and output the JSON key.
+                            </div>
+                            <div x-data="{
+                                    command: 'sh <(curl -s https://xamops-gcp-policy-bucket.s3.us-east-1.amazonaws.com/create_serviceaccount.sh)',
+                                    copyText: 'Copy'
+                                }" class="bg-gray-800 text-white rounded-lg p-3 font-mono text-xs flex items-center justify-between mb-2">
+                                <code class="text-gray-300 break-all" x-text="`${command} ${projectId || 'YOUR_PROJECT_ID'}`"></code>
+                                <button type="button" @click="
+                                    navigator.clipboard.writeText(`${command} ${projectId || 'YOUR_PROJECT_ID'}`);
+                                    copyText = 'Copied!';
+                                    setTimeout(() => copyText = 'Copy', 2000);
+                                " class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-1 px-3 rounded-md transition-colors text-xs" x-text="copyText"></button>
+                            </div>
                             <textarea id="serviceAccountKey" x-model="serviceAccountKey" rows="8" class="form-input block w-full px-4 py-3 rounded-xl border-gray-300 shadow-sm font-mono text-xs" placeholder='{ "type": "service_account", ... }' required></textarea>
                         </div>
                         <div class="flex justify-end pt-4">
