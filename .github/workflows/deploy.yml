@@ -1,43 +1,44 @@
-name: CI/CD Pipeline for XamOps-Dashboard
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
-      - main
+      - main   # Change if your default branch is not "main"
 
 jobs:
-  build_and_deploy:
+  build-and-push:
     runs-on: ubuntu-latest
+
     steps:
+      # Checkout repo
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
+      # Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u XamOps --password-stdin
+
+      # Build Docker image
+      - name: Build Docker image
+        run: docker build -t ghcr.io/xamops/image:latest .
+
+      # Push Docker image
+      - name: Push Docker image
+        run: docker push ghcr.io/xamops/image:latest
+
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.10
         with:
-          submodules: true
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build, tag, and push image to Amazon ECR
-        env:
-          ECR_REPOSITORY: xamops
-          IMAGE_TAG: ${{ github.sha }}
-          ECR_URI: 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops
-        run: |
-          docker build -t $ECR_URI:$IMAGE_TAG -f cloud/Dockerfile cloud
-          docker push $ECR_URI:$IMAGE_TAG
-
-      - name: Deploy to EC2 via SSM
-        run: |
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "i-009aa3aa59a60f17f" \
-            --parameters '{"commands":["echo \"Starting deployment on EC2 instance...\"","sudo systemctl restart docker || true","echo \"Cleaning up old containers and images...\"","sudo docker system prune -af","aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com","echo \"Pulling the new Docker image...\"","sudo docker pull 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Stopping and removing old containers...\"","sudo docker stop xamops-app || true","sudo docker rm -f xamops-app || true","echo \"Running the new container...\"","sudo docker run -d --name xamops-app --restart always -p 8080:8080 605134457560.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/xamops:${{ github.sha }}","echo \"Deployment complete. Listing containers...\"","sudo docker ps"]}' \
-            --timeout-seconds 600
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ghcr.io/xamops/image:latest
+            docker stop XamOps-Live || true
+            docker rm XamOps-Live || true
+            docker run -d --name XamOps-Live -p 8080:8080 ghcr.io/xamops/image:latest
