@@ -1,3 +1,4 @@
+
 package com.xammer.cloud.config;
 
 import org.springframework.beans.factory.annotation.Value; // Import Value
