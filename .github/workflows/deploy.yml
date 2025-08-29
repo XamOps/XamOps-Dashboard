@@ -53,4 +53,8 @@ jobs:
             --network xamops-uat-net \
             --restart always \
             -p 8080:8080 \
+            --log-driver=awslogs \
+            --log-opt awslogs-region=ap-south-1 \
+            --log-opt awslogs-group=xamops-app-logs \
+            --log-opt awslogs-stream=xamops-app \
             $IMAGE:$TAG
