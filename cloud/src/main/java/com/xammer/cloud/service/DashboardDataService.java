@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xammer.cloud.domain.CloudAccount;
 import com.xammer.cloud.dto.DashboardData;
+import com.xammer.cloud.dto.gcp.GcpCostDto;
 import com.xammer.cloud.dto.gcp.GcpDashboardData;
 import com.xammer.cloud.dto.ReservationInventoryDto;
 import com.xammer.cloud.repository.CloudAccountRepository;
@@ -20,8 +21,10 @@ import software.amazon.awssdk.services.iam.model.PolicyScopeType;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -74,7 +77,50 @@ public class DashboardDataService {
                 .orElseThrow(() -> new RuntimeException("Account not found in database: " + accountId));
     }
 
-    public DashboardData getDashboardData(String accountId, boolean forceRefresh) throws ExecutionException, InterruptedException, IOException {
+    public DashboardData getDashboardData(List<String> accountIds, boolean forceRefresh) throws ExecutionException, InterruptedException, IOException {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return new DashboardData();
+        }
+
+        if (accountIds.size() == 1) {
+            return getSingleAccountDashboardData(accountIds.get(0), forceRefresh);
+        }
+
+        String cacheKey = "dashboardData-aggregated-" + String.join("-", accountIds);
+        if (!forceRefresh) {
+            Optional<DashboardData> cachedData = dbCache.get(cacheKey, DashboardData.class);
+            if (cachedData.isPresent()) {
+                return cachedData.get();
+            }
+        }
+
+        List<CompletableFuture<DashboardData>> futures = accountIds.stream()
+                .map(accountId -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return getSingleAccountDashboardData(accountId, false); // Use cache for individuals
+                    } catch (Exception e) {
+                        logger.error("Failed to get dashboard data for account {}", accountId, e);
+                        return null;
+                    }
+                }))
+                .collect(Collectors.toList());
+
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+
+        CompletableFuture<DashboardData> aggregatedFuture = allFutures.thenApply(v -> {
+            List<DashboardData> allData = futures.stream()
+                    .map(CompletableFuture::join)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            return aggregateDashboardData(allData);
+        });
+
+        DashboardData aggregatedData = aggregatedFuture.get();
+        dbCache.put(cacheKey, aggregatedData);
+        return aggregatedData;
+    }
+
+    private DashboardData getSingleAccountDashboardData(String accountId, boolean forceRefresh) throws ExecutionException, InterruptedException, IOException {
         String cacheKey = "dashboardData-" + accountId;
 
         if (!forceRefresh) {
@@ -91,7 +137,7 @@ public class DashboardDataService {
             GcpDashboardData gcpData = gcpDataService.getDashboardData(account.getGcpProjectId())
                 .exceptionally(ex -> {
                     logger.error("Failed to get a complete GCP dashboard data object for account {}. Returning partial data.", account.getGcpProjectId(), ex);
-                    return new GcpDashboardData(); // Return empty DTO on failure
+                    return new GcpDashboardData();
                 })
                 .get();
             freshData = mapGcpDataToDashboardData(gcpData, account);
@@ -101,6 +147,120 @@ public class DashboardDataService {
 
         dbCache.put(cacheKey, freshData);
         return freshData;
+    }
+
+    private DashboardData aggregateDashboardData(List<DashboardData> allData) {
+        if (allData.isEmpty()) {
+            return new DashboardData();
+        }
+
+        DashboardData aggregated = new DashboardData();
+        DashboardData.Account aggregatedAccount = new DashboardData.Account();
+        aggregatedAccount.setId("Multiple Accounts");
+        aggregatedAccount.setName(allData.size() + " accounts selected");
+
+        aggregatedAccount.setResourceInventory(new DashboardData.ResourceInventory());
+        aggregatedAccount.setIamResources(new DashboardData.IamResources());
+        aggregatedAccount.setCloudWatchStatus(new DashboardData.CloudWatchStatus());
+        aggregatedAccount.setOptimizationSummary(new DashboardData.OptimizationSummary(0,0));
+        aggregatedAccount.setRegionStatus(new ArrayList<>());
+        aggregatedAccount.setSecurityInsights(new ArrayList<>());
+        aggregatedAccount.setBillingSummary(new ArrayList<>());
+        aggregatedAccount.setEc2Recommendations(new ArrayList<>());
+        aggregatedAccount.setCostAnomalies(new ArrayList<>());
+        aggregatedAccount.setEbsRecommendations(new ArrayList<>());
+        aggregatedAccount.setLambdaRecommendations(new ArrayList<>());
+        aggregatedAccount.setWastedResources(new ArrayList<>());
+        aggregatedAccount.setServiceQuotas(new ArrayList<>());
+        aggregatedAccount.setSavingsSummary(new DashboardData.SavingsSummary(0.0, new ArrayList<>()));
+
+        Map<String, Double> aggregatedCosts = new HashMap<>();
+        Map<String, Boolean> aggregatedAnomalies = new HashMap<>();
+
+        for (DashboardData data : allData) {
+            DashboardData.Account account = data.getSelectedAccount();
+
+            if (account.getResourceInventory() != null) {
+                aggregatedAccount.getResourceInventory().setVpc(aggregatedAccount.getResourceInventory().getVpc() + account.getResourceInventory().getVpc());
+                aggregatedAccount.getResourceInventory().setEcs(aggregatedAccount.getResourceInventory().getEcs() + account.getResourceInventory().getEcs());
+                aggregatedAccount.getResourceInventory().setEc2(aggregatedAccount.getResourceInventory().getEc2() + account.getResourceInventory().getEc2());
+                aggregatedAccount.getResourceInventory().setS3Buckets(aggregatedAccount.getResourceInventory().getS3Buckets() + account.getResourceInventory().getS3Buckets());
+                aggregatedAccount.getResourceInventory().setRdsInstances(aggregatedAccount.getResourceInventory().getRdsInstances() + account.getResourceInventory().getRdsInstances());
+                aggregatedAccount.getResourceInventory().setLoadBalancers(aggregatedAccount.getResourceInventory().getLoadBalancers() + account.getResourceInventory().getLoadBalancers());
+                aggregatedAccount.getResourceInventory().setLambdas(aggregatedAccount.getResourceInventory().getLambdas() + account.getResourceInventory().getLambdas());
+                aggregatedAccount.getResourceInventory().setEbsVolumes(aggregatedAccount.getResourceInventory().getEbsVolumes() + account.getResourceInventory().getEbsVolumes());
+            }
+
+            if (account.getIamResources() != null) {
+                aggregatedAccount.getIamResources().setUsers(aggregatedAccount.getIamResources().getUsers() + account.getIamResources().getUsers());
+                aggregatedAccount.getIamResources().setGroups(aggregatedAccount.getIamResources().getGroups() + account.getIamResources().getGroups());
+                aggregatedAccount.getIamResources().setRoles(aggregatedAccount.getIamResources().getRoles() + account.getIamResources().getRoles());
+                aggregatedAccount.getIamResources().setCustomerManagedPolicies(aggregatedAccount.getIamResources().getCustomerManagedPolicies() + account.getIamResources().getCustomerManagedPolicies());
+            }
+            
+            if (account.getRegionStatus() != null) aggregatedAccount.getRegionStatus().addAll(account.getRegionStatus());
+            if (account.getSecurityInsights() != null) aggregatedAccount.getSecurityInsights().addAll(account.getSecurityInsights());
+            if (account.getEc2Recommendations() != null) aggregatedAccount.getEc2Recommendations().addAll(account.getEc2Recommendations());
+            if (account.getEbsRecommendations() != null) aggregatedAccount.getEbsRecommendations().addAll(account.getEbsRecommendations());
+            if (account.getLambdaRecommendations() != null) aggregatedAccount.getLambdaRecommendations().addAll(account.getLambdaRecommendations());
+            if (account.getWastedResources() != null) aggregatedAccount.getWastedResources().addAll(account.getWastedResources());
+            if (account.getCostAnomalies() != null) aggregatedAccount.getCostAnomalies().addAll(account.getCostAnomalies());
+            
+            if (account.getBillingSummary() != null) {
+                account.getBillingSummary().forEach(summaryItem -> {
+                    aggregatedAccount.getBillingSummary().stream()
+                        .filter(s -> s.getServiceName().equals(summaryItem.getServiceName()))
+                        .findFirst()
+                        .ifPresentOrElse(
+                            existing -> existing.setMonthToDateCost(existing.getMonthToDateCost() + summaryItem.getMonthToDateCost()),
+                            () -> aggregatedAccount.getBillingSummary().add(new DashboardData.BillingSummary(summaryItem.getServiceName(), summaryItem.getMonthToDateCost()))
+                        );
+                });
+            }
+
+            if (account.getCostHistory() != null && account.getCostHistory().getLabels() != null) {
+                for (int i = 0; i < account.getCostHistory().getLabels().size(); i++) {
+                    String label = account.getCostHistory().getLabels().get(i);
+                    double cost = account.getCostHistory().getCosts().get(i);
+                    boolean anomaly = account.getCostHistory().getAnomalies().get(i);
+                    aggregatedCosts.put(label, aggregatedCosts.getOrDefault(label, 0.0) + cost);
+                    if (anomaly) {
+                        aggregatedAnomalies.put(label, true);
+                    }
+                }
+            }
+
+            if(account.getOptimizationSummary() != null) {
+                aggregatedAccount.getOptimizationSummary().setTotalPotentialSavings(aggregatedAccount.getOptimizationSummary().getTotalPotentialSavings() + account.getOptimizationSummary().getTotalPotentialSavings());
+                aggregatedAccount.getOptimizationSummary().setCriticalAlertsCount(aggregatedAccount.getOptimizationSummary().getCriticalAlertsCount() + account.getOptimizationSummary().getCriticalAlertsCount());
+            }
+
+            if(account.getSavingsSummary() != null) {
+                aggregatedAccount.getSavingsSummary().setPotential(aggregatedAccount.getSavingsSummary().getPotential() + account.getSavingsSummary().getPotential());
+            }
+        }
+        
+        List<String> sortedLabels = aggregatedCosts.keySet().stream().sorted().collect(Collectors.toList());
+        List<Double> finalCosts = sortedLabels.stream().map(aggregatedCosts::get).collect(Collectors.toList());
+        List<Boolean> finalAnomalies = sortedLabels.stream().map(l -> aggregatedAnomalies.getOrDefault(l, false)).collect(Collectors.toList());
+        aggregatedAccount.setCostHistory(new DashboardData.CostHistory(sortedLabels, finalCosts, finalAnomalies));
+
+        double totalMtdSpend = allData.stream().mapToDouble(d -> d.getSelectedAccount().getMonthToDateSpend()).sum();
+        double totalForecastedSpend = allData.stream().mapToDouble(d -> d.getSelectedAccount().getForecastedSpend()).sum();
+        double totalLastMonthSpend = allData.stream().mapToDouble(d -> d.getSelectedAccount().getLastMonthSpend()).sum();
+
+        aggregatedAccount.setMonthToDateSpend(totalMtdSpend);
+        aggregatedAccount.setForecastedSpend(totalForecastedSpend);
+        aggregatedAccount.setLastMonthSpend(totalLastMonthSpend);
+
+        aggregatedAccount.setSecurityScore((int) allData.stream().mapToInt(d -> d.getSelectedAccount().getSecurityScore()).average().orElse(0));
+
+        aggregated.setSelectedAccount(aggregatedAccount);
+        if(!allData.isEmpty()){
+            aggregated.setAvailableAccounts(allData.get(0).getAvailableAccounts());
+        }
+
+        return aggregated;
     }
 
     private DashboardData mapGcpDataToDashboardData(GcpDashboardData gcpData, CloudAccount account) {
@@ -121,9 +281,9 @@ public class DashboardDataService {
         mainAccount.setOptimizationSummary(gcpData.getOptimizationSummary());
         mainAccount.setRegionStatus(gcpData.getRegionStatus());
         
-        List<String> costLabels = gcpData.getCostHistory().stream().map(c -> c.getName()).collect(Collectors.toList());
-        List<Double> costValues = gcpData.getCostHistory().stream().map(c -> c.getAmount()).collect(Collectors.toList());
-        List<Boolean> costAnomalies = gcpData.getCostHistory().stream().map(c -> c.isAnomaly()).collect(Collectors.toList());
+        List<String> costLabels = gcpData.getCostHistory().stream().map(GcpCostDto::getName).collect(Collectors.toList());
+        List<Double> costValues = gcpData.getCostHistory().stream().map(GcpCostDto::getAmount).collect(Collectors.toList());
+        List<Boolean> costAnomalies = gcpData.getCostHistory().stream().map(GcpCostDto::isAnomaly).collect(Collectors.toList());
         mainAccount.setCostHistory(new DashboardData.CostHistory(costLabels, costValues, costAnomalies));
         List<DashboardData.BillingSummary> billingSummary = gcpData.getBillingSummary().stream()
             .map(b -> new DashboardData.BillingSummary(b.getName(), b.getAmount()))
@@ -202,6 +362,8 @@ public class DashboardDataService {
         List<DashboardData.OptimizationRecommendation> lambdaRecs = lambdaRecsFuture.get();
         List<DashboardData.CostAnomaly> anomalies = anomaliesFuture.get();
         List<DashboardData.SecurityFinding> securityFindings = securityFindingsFuture.get();
+        List<DashboardData.BillingSummary> billingSummary = billingFuture.get();
+        DashboardData.CostHistory costHistory = costHistoryFuture.get();
 
         List<DashboardData.SecurityInsight> securityInsights = securityFindings.stream()
             .collect(Collectors.groupingBy(DashboardData.SecurityFinding::getCategory, Collectors.groupingBy(DashboardData.SecurityFinding::getSeverity, Collectors.counting())))
@@ -220,14 +382,19 @@ public class DashboardDataService {
         int securityScore = calculateSecurityScore(securityFindings);
 
         DashboardData data = new DashboardData();
+        double mtdSpend = billingSummary.stream().mapToDouble(DashboardData.BillingSummary::getMonthToDateCost).sum();
+        double lastMonthSpend = costHistory.getCosts().size() > 1 ? costHistory.getCosts().get(costHistory.getCosts().size() - 2) : 0;
+        double forecastedSpend = (java.time.LocalDate.now().getDayOfMonth() > 0) ?
+                (mtdSpend / java.time.LocalDate.now().getDayOfMonth()) * java.time.YearMonth.now().lengthOfMonth() : 0;
+        
         DashboardData.Account mainAccount = new DashboardData.Account(
             account.getAwsAccountId(), account.getAccountName(),
             activeRegions, inventoryFuture.get(), cwStatusFuture.get(), securityInsights,
-            costHistoryFuture.get(), billingFuture.get(), iamFuture.get(), savingsFuture.get(),
+            costHistory, billingSummary, iamFuture.get(), savingsFuture.get(),
             ec2Recs, anomalies, ebsRecs, lambdaRecs,
             reservationFuture.get(), reservationPurchaseFuture.get(),
             optimizationSummary, wastedResources, Collections.emptyList(),
-            securityScore, 0.0, 0.0, 0.0
+            securityScore, mtdSpend, forecastedSpend, lastMonthSpend
         );
 
         data.setSelectedAccount(mainAccount);

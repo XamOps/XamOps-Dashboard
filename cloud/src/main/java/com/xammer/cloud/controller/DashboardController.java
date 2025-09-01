@@ -30,7 +30,6 @@ public class DashboardController {
     private static final Logger logger = LoggerFactory.getLogger(DashboardController.class);
 
     private final DashboardDataService dashboardDataService;
-    // Removed unused OptimizationService field
     private final OptimizationService optimizationService;
     private final CloudListService cloudListService;
     private final AwsAccountService awsAccountService;
@@ -38,7 +37,6 @@ public class DashboardController {
     private final DashboardLayoutRepository dashboardLayoutRepository;
 
     public DashboardController(DashboardDataService dashboardDataService,
-                               // Removed OptimizationService from constructor
                                OptimizationService optimizationService,
                                CloudListService cloudListService,
                                AwsAccountService awsAccountService,
@@ -55,25 +53,23 @@ public class DashboardController {
     @GetMapping("/dashboard")
     public ResponseEntity<DashboardData> getDashboardData(
             @RequestParam(required = false) boolean force,
-            @RequestParam String accountId) throws ExecutionException, InterruptedException, java.io.IOException {
+            @RequestParam List<String> accountIds) throws ExecutionException, InterruptedException, java.io.IOException {
 
         if (force) {
-            // Use the new dedicated service to clear caches
             awsAccountService.clearAllCaches();
         }
 
-        DashboardData data = dashboardDataService.getDashboardData(accountId, force);
+        DashboardData data = dashboardDataService.getDashboardData(accountIds, force);
         return ResponseEntity.ok(data);
     }
 
     @GetMapping("/waste")
     public CompletableFuture<ResponseEntity<List<DashboardData.WastedResource>>> getWastedResources(
             @RequestParam String accountId,
-            @RequestParam(defaultValue = "false") boolean forceRefresh) { // <-- ADD forceRefresh parameter
+            @RequestParam(defaultValue = "false") boolean forceRefresh) {
         CloudAccount account = cloudAccountRepository.findByAwsAccountId(accountId)
                 .orElseThrow(() -> new RuntimeException("Account not found: " + accountId));
 
-        // Pass the forceRefresh parameter down to the service calls
         return cloudListService.getRegionStatusForAccount(account, forceRefresh)
             .thenCompose(activeRegions -> optimizationService.getWastedResources(account, activeRegions, forceRefresh))
                 .thenApply(ResponseEntity::ok)
@@ -89,7 +85,7 @@ public class DashboardController {
         String username = authentication.getName();
         return dashboardLayoutRepository.findById(username)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.ok(new DashboardLayout(username, "[]"))); // Default to empty layout
+                .orElseGet(() -> ResponseEntity.ok(new DashboardLayout(username, "[]")));
     }
 
     @PostMapping("/dashboard/layout")

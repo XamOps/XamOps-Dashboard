@@ -583,34 +583,36 @@
     </button>
 
 
-    <script>
+  <script>
     function dashboardApp() {
         return {
             isLoading: true,
-            isRefreshing: false, // New state for background refresh
+            isRefreshing: false,
             stompClient: null,
             layoutChanged: false,
             showQuickActions: false,
             
             init() {
                 window.addEventListener('storage', (event) => {
-                    if (event.key === 'selectedAccountId') {
+                    if (event.key === 'selectedAccountIds') {
                         window.location.reload();
                     }
                 });
                 this.fetchDashboardData(false);
             },
 
-            connectWebSocket() {
-                const accountId = sessionStorage.getItem('selectedAccountId');
-                if (!accountId) return; 
+             connectWebSocket() {
+                const accountIds = JSON.parse(sessionStorage.getItem('selectedAccountIds') || '[]');
+                if (accountIds.length === 0) return; 
 
                 const socket = new SockJS('/ws');
                 this.stompClient = Stomp.over(socket);
                 this.stompClient.debug = null;
                 this.stompClient.connect({}, (frame) => {
-                    this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
-                        this.populateResourceInventory(JSON.parse(message.body));
+                    accountIds.forEach(accountId => {
+                        this.stompClient.subscribe(`/topic/dashboard/${accountId}/inventory`, (message) => {
+                            this.populateResourceInventory(JSON.parse(message.body));
+                        });
                     });
                 });
             },
@@ -649,16 +651,17 @@
 
 fetchDashboardData(forceRefresh = false) {
                 const urlParams = new URLSearchParams(window.location.search);
-                let selectedAccountId = urlParams.get('accountId');
-                
-                // If accountId is in the URL, set it in sessionStorage to sync the UI
-                if (selectedAccountId) {
-                    sessionStorage.setItem('selectedAccountId', selectedAccountId);
+                const accountIdsParam = urlParams.get('accountIds'); // Correct: Reads plural 'accountIds'
+
+                let selectedAccountIds = [];
+                if (accountIdsParam) {
+                    selectedAccountIds = accountIdsParam.split(','); // Creates an array
+                    sessionStorage.setItem('selectedAccountIds', JSON.stringify(selectedAccountIds)); // Stores array
                 } else {
-                    selectedAccountId = sessionStorage.getItem('selectedAccountId');
+                    selectedAccountIds = JSON.parse(sessionStorage.getItem('selectedAccountIds') || '[]');
                 }
 
-                if (!selectedAccountId) {
+                if (selectedAccountIds.length === 0) {
                     this.isLoading = false;
                     document.getElementById('dashboardContent').classList.add('hidden');
                     return;
@@ -667,19 +670,16 @@ fetchDashboardData(forceRefresh = false) {
                 this.connectWebSocket();
                 this.initializeDashboardLayout();
 
-                const cacheKey = `dashboardData-${selectedAccountId}`;
+                const cacheKey = `dashboardData-${selectedAccountIds.join('-')}`;
                 const cachedData = sessionStorage.getItem(cacheKey);
 
-                // Initial load from cache
                 if (cachedData && !forceRefresh) {
                     this.isLoading = false;
                     document.getElementById('dashboardContent').classList.remove('hidden');
-                    document.getElementById('dashboardSkeleton').classList.add('hidden');
                     this.populatePage(JSON.parse(cachedData));
                     return;
                 }
                 
-                // Show skeleton only on initial load, not on refresh
                 if (!cachedData) {
                     this.isLoading = true;
                 }
@@ -689,8 +689,15 @@ fetchDashboardData(forceRefresh = false) {
                     this.showNotification('loading', 'Updating dashboard...');
                     sessionStorage.removeItem(cacheKey); 
                 }
+                
+                // Correct: Builds the URL with a comma-separated list of IDs
+                let endpoint = `/api/dashboard?accountIds=${selectedAccountIds.join(',')}`;
 
-                fetch(`/api/dashboard?accountId=${selectedAccountId}&force=${forceRefresh}`)
+                if (forceRefresh) {
+                    endpoint += '&force=true';
+                }
+
+                fetch(endpoint)
                     .then(res => res.json())
                     .then(data => {
                         if (!data) return;
@@ -706,11 +713,12 @@ fetchDashboardData(forceRefresh = false) {
                         document.getElementById('errorState').classList.remove('hidden');
                     })
                     .finally(() => {
-                        this.isLoading = false; // Hide skeleton after first load
-                        this.isRefreshing = false; // Stop refresh indicator
+                        this.isLoading = false;
+                        this.isRefreshing = false;
                         document.getElementById('dashboardContent').classList.remove('hidden');
                     });
             },
+            
             
             showNotification(type, message) {
                 const notification = document.getElementById(type + 'Notification');

@@ -179,155 +179,153 @@
     <div x-data="{
         open: false,
         accounts: [],
-        selectedAccount: {},
+        selectedAccountIds: [],
         searchTerm: '',
         isLoading: true,
         init() {
+            const selectedIds = JSON.parse(sessionStorage.getItem('selectedAccountIds') || '[]');
+            this.selectedAccountIds = selectedIds;
             this.fetchAccounts();
-            window.addEventListener('account-changed', () => {
-                this.fetchAccounts();
-            });
+            window.addEventListener('account-changed', () => this.fetchAccounts());
         },
         fetchAccounts() {
             this.isLoading = true;
             fetch('/api/account-manager/accounts')
-                .then(res => {
-                    if (!res.ok) throw new Error('Network response was not ok');
-                    return res.json();
-                })
+                .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch'))
                 .then(data => {
                     this.accounts = data.filter(acc => acc.status === 'CONNECTED');
-                    const selectedId = sessionStorage.getItem('selectedAccountId');
-                    let foundAccount = null;
-                    if (selectedId) {
-                        foundAccount = this.accounts.find(acc => acc.id == selectedId);
-                    }
-                    
-                    if (foundAccount) {
-                        this.selectedAccount = this.mapAccount(foundAccount);
-                        sessionStorage.setItem('selectedAccountProvider', foundAccount.provider);
-                    } else if (this.accounts.length > 0) {
-                        this.selectAccount(this.mapAccount(this.accounts[0]), false);
-                    } else {
-                        this.selectedAccount = {};
-                        sessionStorage.removeItem('selectedAccountId');
-                        sessionStorage.removeItem('selectedAccountProvider');
-                    }
                 })
                 .catch(err => {
                     console.error('Failed to fetch accounts:', err);
                     this.accounts = [];
-                    this.selectedAccount = {};
                 })
-                .finally(() => {
-                    this.isLoading = false;
-                });
+                .finally(() => this.isLoading = false);
         },
-        mapAccount(account) {
-            return {
-                dbId: account.dbId,
-                id: account.id,
-                name: account.name,
-                provider: account.provider
-            };
-        },
-        selectAccount(account, reload = true) {
-            this.selectedAccount = account;
-            sessionStorage.setItem('selectedAccountId', account.id);
-            sessionStorage.setItem('selectedAccountProvider', account.provider);
+        applySelection() {
+            sessionStorage.setItem('selectedAccountIds', JSON.stringify(this.selectedAccountIds));
             this.open = false;
+            if (this.selectedAccountIds.length > 0) {
+                const targetUrl = `/?accountIds=${this.selectedAccountIds.join(',')}`;
+                window.location.href = targetUrl;
+            } else {
+                sessionStorage.removeItem('selectedAccountIds');
+                window.location.href = '/';
+            }
+        },
+        get selectedAccountDisplay() {
+            if (this.selectedAccountIds.length === 0) {
+                return { name: 'Select Accounts', id: this.accounts.length === 0 && !this.isLoading ? 'No accounts connected' : 'No account selected' };
+            }
+            if (this.selectedAccountIds.length === 1) {
+                const account = this.accounts.find(a => a.id === this.selectedAccountIds[0]);
+                return { name: account?.name || 'Loading...', id: account?.id || '', provider: account?.provider || 'AWS' };
+            }
+            return { name: `${this.selectedAccountIds.length} AWS Accounts Selected`, id: 'Aggregated View', provider: 'AWS' };
+        },
+        toggleAccount(accountId) {
+            const account = this.accounts.find(a => a.id === accountId);
+            if (!account) return;
+
+            const isGcp = account.provider === 'GCP';
+            const index = this.selectedAccountIds.indexOf(accountId);
+
+            if (isGcp) {
+                if (index > -1) {
+                    this.selectedAccountIds = []; // Deselect if already selected
+                } else {
+                    this.selectedAccountIds = [accountId]; // Select only this GCP account
+                }
+            } else { // AWS Account
+                const gcpSelected = this.selectedAccountIds.some(id => this.accounts.find(a => a.id === id)?.provider === 'GCP');
+                if (gcpSelected) {
+                    this.selectedAccountIds = [accountId]; // If a GCP account was selected, switch to this AWS account
+                } else {
+                    if (index > -1) {
+                        this.selectedAccountIds.splice(index, 1); // Deselect
+                    } else {
+                        this.selectedAccountIds.push(accountId); // Select
+                    }
+                }
+            }
+        },
+        isSelectionDisabled(accountProvider) {
+            if (this.selectedAccountIds.length === 0) return false;
+            const isGcpSelected = this.selectedAccountIds.some(id => this.accounts.find(a => a.id === id)?.provider === 'GCP');
             
-            if (reload) {
-                window.dispatchEvent(new CustomEvent('account-changed', { detail: account }));
-                const targetUrl = `/?accountId=${account.id}`;
-                setTimeout(() => window.location.href = targetUrl, 100);
+            if (isGcpSelected) {
+                return true; // Disable all if a GCP account is selected
+            } else { // Multiple AWS accounts are selected
+                return accountProvider === 'GCP'; // Disable only GCP accounts
             }
         },
         get filteredAccounts() {
-            if (this.searchTerm === '') return this.accounts.map(this.mapAccount);
-            return this.accounts.map(this.mapAccount).filter(account => {
-                const term = this.searchTerm.toLowerCase();
-                return account.name.toLowerCase().includes(term) ||
-                       (account.id && account.id.toLowerCase().includes(term));
-            });
+            if (this.searchTerm === '') return this.accounts;
+            const term = this.searchTerm.toLowerCase();
+            return this.accounts.filter(account => 
+                account.name.toLowerCase().includes(term) || (account.id && account.id.toLowerCase().includes(term))
+            );
+        },
+        getProviderIcon(provider) {
+             if (provider === 'GCP') return '/icons/gcp-icon.png';
+             return '/icons/default-icon.png';
         }
     }" class="p-4 border-b bg-gradient-to-r from-gray-50 to-white flex-shrink-0">
         
         <div class="relative">
-            <div @click="open = !open" 
-                 class="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-300 cursor-pointer transition-all duration-200 hover:shadow-md">
+            <div @click="open = !open" class="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-200 hover:border-indigo-300 cursor-pointer transition-all duration-200 hover:shadow-md">
                 <div class="flex items-center min-w-0">
                     <div class="relative flex-shrink-0">
-                         <div class="w-10 h-10 account-avatar rounded-full flex items-center justify-center text-white font-bold text-sm mr-3" 
-                              x-show="!selectedAccount.id"
-                              x-text="'X'"></div>
-                         <img :src="selectedAccount.provider === 'GCP' ? '/icons/gcp-icon.png' : '/icons/default-icon.png'" 
-                             class="w-10 h-10 rounded-full mr-3 object-cover" 
-                             x-show="selectedAccount.id">
-                        <div class="connection-indicator" x-show="selectedAccount.id"></div>
+                         <div class="w-10 h-10 account-avatar rounded-full flex items-center justify-center text-white font-bold text-sm mr-3" x-show="selectedAccountIds.length === 0" x-text="'X'"></div>
+                         <div class="w-10 h-10 account-avatar rounded-full flex items-center justify-center text-white font-bold text-lg mr-3" x-show="selectedAccountIds.length > 1" x-text="selectedAccountIds.length"></div>
+                         <img :src="getProviderIcon(selectedAccountDisplay.provider)" class="w-10 h-10 rounded-full mr-3 object-cover" x-show="selectedAccountIds.length === 1">
+                        <div class="connection-indicator" x-show="selectedAccountIds.length > 0"></div>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center space-x-2">
-                            <span class="account-status" x-show="selectedAccount.id"></span>
-                            <span class="text-sm font-semibold text-gray-800 truncate" 
-                                  x-text="selectedAccount.name || 'Select Account'"></span>
+                            <span class="account-status" x-show="selectedAccountIds.length > 0"></span>
+                            <span class="text-sm font-semibold text-gray-800 truncate" x-text="selectedAccountDisplay.name"></span>
                         </div>
-                        <p class="text-xs text-gray-500 truncate" 
-                           x-text="selectedAccount.id || (accounts.length === 0 && !isLoading ? 'No accounts connected' : 'No account selected')"></p>
+                        <p class="text-xs text-gray-500 truncate" x-text="selectedAccountDisplay.id"></p>
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
                     <div x-show="isLoading" class="w-4 h-4 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                    <i class="fas fa-chevron-down text-gray-400 text-xs transition-transform duration-200 submenu-indicator" 
-                       :class="{ 'rotate-180': open }"></i>
+                    <i class="fas fa-chevron-down text-gray-400 text-xs transition-transform duration-200 submenu-indicator" :class="{ 'rotate-180': open }"></i>
                 </div>
             </div>
             
-            <div x-show="open" 
-                 x-transition
-                 @click.outside="open = false" 
-                 x-cloak
-                 class="absolute left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden dropdown-animation">
-                <div class="p-3 border-b bg-gray-50">
-                    <div class="search-container">
-                        <i class="fas fa-search search-icon"></i>
-                        <input type="text" 
-                               x-model="searchTerm" 
-                               placeholder="Search accounts..." 
-                               class="search-input w-full px-3 py-2 text-sm rounded-lg focus:outline-none">
-                    </div>
-                </div>
+            <div x-show="open" x-transition @click.outside="open = false" x-cloak class="absolute left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden dropdown-animation">
+                <div class="p-3 border-b bg-gray-50"><div class="search-container"><i class="fas fa-search search-icon"></i><input type="text" x-model="searchTerm" placeholder="Search accounts..." class="search-input w-full px-3 py-2 text-sm rounded-lg focus:outline-none"></div></div>
                 <div class="py-1 max-h-60 overflow-y-auto sidebar-scroll">
                     <template x-for="account in filteredAccounts" :key="account.dbId">
-                        <div @click.stop="selectAccount(account)"
-                             class="flex items-center px-4 py-3 text-sm hover:bg-indigo-50 cursor-pointer transition-colors duration-200 border-l-4 border-transparent hover:border-indigo-500">
-                            <img :src="account.provider === 'GCP' ? '/icons/gcp-icon.png' : '/icons/default-icon.png'" 
-                                 class="w-8 h-8 rounded-full mr-3 flex-shrink-0 object-cover">
-                            <div class="flex-1 min-w-0">
-                                <div class="font-medium text-gray-900 truncate" x-text="account.name"></div>
-                                <div class="text-xs text-gray-500 truncate" x-text="account.id"></div>
-                            </div>
+                        <div @click="toggleAccount(account.id)" class="flex items-center px-4 py-3 text-sm hover:bg-indigo-50 cursor-pointer transition-colors duration-200 border-l-4" :class="{ 'border-indigo-500 bg-indigo-50': selectedAccountIds.includes(account.id), 'border-transparent': !selectedAccountIds.includes(account.id), 'opacity-50 cursor-not-allowed': isSelectionDisabled(account.provider) && !selectedAccountIds.includes(account.id) }">
+                            <input type="checkbox" :checked="selectedAccountIds.includes(account.id)" @change="toggleAccount(account.id)" class="mr-3 rounded text-indigo-600 focus:ring-indigo-500" :disabled="isSelectionDisabled(account.provider) && !selectedAccountIds.includes(account.id)">
+                            <img :src="getProviderIcon(account.provider)" class="w-8 h-8 rounded-full mr-3 flex-shrink-0 object-cover">
+                            <div class="flex-1 min-w-0"><div class="font-medium text-gray-900 truncate" x-text="account.name"></div><div class="text-xs text-gray-500 truncate" x-text="account.id"></div></div>
                         </div>
                     </template>
-                    <div x-show="filteredAccounts.length === 0 && !isLoading" class="px-4 py-3 text-sm text-gray-500 text-center">
-                        <p class="mb-2">No connected accounts found.</p>
-                        <a href="/account-manager" class="text-indigo-600 hover:underline font-semibold">Add an Account</a>
-                    </div>
+                    <div x-show="filteredAccounts.length === 0 && !isLoading" class="px-4 py-3 text-sm text-gray-500 text-center"><p class="mb-2">No connected accounts found.</p><a href="/account-manager" class="text-indigo-600 hover:underline font-semibold">Add an Account</a></div>
+                </div>
+                <div class="p-3 bg-gray-50 border-t">
+                    <button @click="applySelection()" class="w-full bg-indigo-600 text-white font-semibold py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">Apply Selection</button>
                 </div>
             </div>
         </div>
     </div>
 
     <nav x-data="{
-            accountId: sessionStorage.getItem('selectedAccountId'),
+            selectedIds: JSON.parse(sessionStorage.getItem('selectedAccountIds') || '[]'),
             isActive(path) {
                 const currentPath = window.location.pathname;
                 if (path === '/') return currentPath === '/' || currentPath.startsWith('/gcp_');
                 return currentPath.startsWith(path);
             },
             getLink(path) {
-                if (!this.accountId) return '#';
-                return `${path}?accountId=${this.accountId}`;
+                if (this.selectedIds.length === 0) return '#';
+                const accountParam = this.selectedIds.join(',');
+                const url = new URL(window.location.origin + path);
+                url.searchParams.append('accountIds', accountParam);
+                return url.toString();
             }
         }" class="flex-1 px-3 py-4 space-y-2 text-sm overflow-y-auto sidebar-scroll">
 
